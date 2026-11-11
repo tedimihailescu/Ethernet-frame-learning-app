@@ -7,10 +7,12 @@ if (location.protocol !== "file:") {
 
 async function boot() {
   const [{ auth, db, ROOT, lang }, authMod, fs] = await Promise.all([
-    import("./firebase.js"),
+    import("./firebase.js?v=3"),
     import("https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js"),
     import("https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js")
   ]);
+  // firebase.js is already forwarding .web.app visitors to firebaseapp.com; don't race it.
+  if (location.hostname.endsWith(".web.app")) return;
   const { onAuthStateChanged, signOut } = authMod;
   const { doc, setDoc, addDoc, collection, serverTimestamp } = fs;
   const L = (ro, en) => (lang() === "en" ? en : ro);
@@ -22,6 +24,10 @@ async function boot() {
     }
     document.documentElement.classList.remove("auth-wait");
     userMenu(user);
+    // Links like lesson/index.html#quiz: the quiz is drawn by script, so scroll once it exists.
+    if (location.hash.length > 1) {
+      setTimeout(() => { try { const el = document.querySelector(location.hash); if (el) el.scrollIntoView(); } catch (e) {} }, 60);
+    }
     try {
       await setDoc(doc(db, "users", user.uid), {
         name: user.displayName || (user.email || "").split("@")[0],
@@ -61,7 +67,7 @@ async function boot() {
     const wrap = document.createElement("div");
     wrap.id = "user-menu";
     wrap.className = "user-menu";
-    wrap.innerHTML = `<a class="um-link" href="${ROOT}rezultate/index.html" title="${L("Rezultatele mele", "My results")}">★ <span class="um-name"></span></a><button type="button" class="icon-btn um-out" title="${L("Ieșire", "Sign out")}" aria-label="${L("Ieșire", "Sign out")}">⎋</button>`;
+    wrap.innerHTML = `<a class="um-link um-tests" href="${ROOT}teste/index.html">✎ <span class="um-name">${L("Teste", "Quizzes")}</span></a><a class="um-link" href="${ROOT}rezultate/index.html" title="${L("Rezultatele mele", "My results")}">★ <span class="um-name"></span></a><button type="button" class="icon-btn um-out" title="${L("Ieșire", "Sign out")}" aria-label="${L("Ieșire", "Sign out")}">⎋</button>`;
     wrap.querySelector(".um-name").textContent = name;
     wrap.querySelector(".um-out").onclick = () => signOut(auth);
     tools.prepend(wrap);

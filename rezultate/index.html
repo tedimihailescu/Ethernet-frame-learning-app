@@ -33,8 +33,14 @@ td.n{font-variant-numeric:tabular-nums;white-space:nowrap}
 .pill{display:inline-block;font:600 .72rem var(--mono);padding:1px 7px;border-radius:999px;border:1px solid var(--border)}
 .good{color:var(--ok)} .mid{color:var(--chgfg)} .low{color:var(--bad)}
 .empty{color:var(--muted);font-style:italic}
-details.admin-help{font-size:.86rem;color:var(--muted)}
-details.admin-help code{user-select:all}
+.setup{border:2px dashed var(--text)}
+.setup ol{margin:10px 0 14px;padding-left:22px;line-height:1.6}
+.setup li{margin-bottom:4px}
+.setup code,.uid-row code{font:600 .86rem var(--mono);background:var(--surface2);padding:2px 6px;border-radius:5px;word-break:break-all}
+.uid-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.uid-row code{user-select:all;padding:6px 10px;font-size:.95rem}
+.go-btn{display:inline-flex;padding:9px 14px;border-radius:8px;background:var(--accent);color:var(--accent-text);font:700 .9rem var(--sans);text-decoration:none}
+.top-actions{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px}
 .btn-sm{border:1px solid var(--border);background:var(--surface2);color:var(--text);border-radius:7px;padding:6px 10px;font:600 .82rem var(--sans);cursor:pointer}
 @media (max-width:720px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
 [hidden]{display:none!important}
@@ -50,6 +56,7 @@ details.admin-help code{user-select:all}
 <main class="page">
   <h1 data-t="title"></h1>
   <p class="lead" data-t="lead"></p>
+  <div class="top-actions"><a class="go-btn" href="../teste/index.html" data-t="toTests"></a></div>
 
   <section class="block" id="mine">
     <h2 data-t="mineT"></h2>
@@ -63,12 +70,18 @@ details.admin-help code{user-select:all}
     <section class="block"><div class="row"><h2 data-t="allT"></h2><input id="filter" type="search" autocomplete="off"></div><div class="scroll" id="all"></div></section>
   </div>
 
-  <details class="admin-help" id="help"><summary data-t="helpT"></summary><p id="helpBody"></p></details>
+  <section class="block setup" id="help" hidden>
+    <h2 data-t="helpT"></h2>
+    <p class="lead" data-t="helpLead"></p>
+    <div class="uid-row"><code id="uid"></code><button type="button" class="btn-sm" id="copy" data-t="copy"></button></div>
+    <ol id="steps"></ol>
+    <p><a class="go-btn" id="console" target="_blank" rel="noopener" data-t="openConsole"></a> <button type="button" class="btn-sm" id="recheck" data-t="recheck"></button></p>
+  </section>
 </main>
 
-<script type="module" src="../assets/auth.js"></script>
+<script type="module" src="../assets/auth.js?v=3"></script>
 <script type="module">
-import { auth, db } from "../assets/firebase.js";
+import { app, auth, db } from "../assets/firebase.js?v=3";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import { collection, query, where, getDocs, getDoc, doc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
@@ -83,8 +96,12 @@ const UI={
   name:["Nume","Name"],email:["E-mail","Email"],avg:["Medie","Average"],lessonsDone:["Lecții","Lessons"],participants:["Participanți","Participants"],
   kPeople:["participanți","participants"],kAttempts:["teste terminate","quizzes finished"],kAvg:["scor mediu","average score"],kLessons:["lecții încercate","lessons attempted"],
   filter:["Caută după nume, e-mail sau lecție","Search by name, email or lesson"],csv:["Descarcă CSV","Download CSV"],
-  helpT:["Ești administratorul site-ului?","Are you the site administrator?"],
-  help:["Ca să vezi rezultatele tuturor, adaugă în Firestore (consola Firebase → Firestore Database) un document în colecția admins, cu ID-ul de mai jos (orice câmp, de ex. role = \"admin\"). Reîncarcă apoi pagina. ID-ul tău:","To see everyone's results, add a document in Firestore (Firebase console → Firestore Database) to the admins collection, with the ID below (any field, e.g. role = \"admin\"). Then reload this page. Your ID:"],
+  helpT:["Ești administratorul site-ului? Activează vederea de administrator","Are you the site administrator? Turn on the admin view"],
+  helpLead:["Acum vezi doar rezultatele tale. Ca să vezi rezultatele tuturor participanților, adaugă o singură dată ID-ul tău în lista de administratori din consola Firebase. ID-ul tău de utilizator:","Right now you only see your own results. To see every participant's results, add your ID to the admin list in the Firebase console, once. Your user ID:"],
+  steps:[["Apasă <b>Copiază ID-ul</b> de mai sus.","Deschide consola Firestore cu butonul de mai jos (sau: meniul din stânga → <b>Databases &amp; Storage → Firestore</b>).","Apasă <b>+ Start collection</b>. La <b>Collection ID</b> scrie <code>admins</code> → <b>Next</b>.","La <b>Document ID</b> lipește ID-ul copiat.","Adaugă un câmp: <b>Field</b> <code>role</code>, <b>Type</b> string, <b>Value</b> <code>admin</code> → <b>Save</b>.","Revino aici și apasă <b>Verifică din nou</b>. Apar participanții, mediile pe lecții, toate încercările și exportul CSV."],
+         ["Click <b>Copy ID</b> above.","Open the Firestore console with the button below (or: left menu → <b>Databases &amp; Storage → Firestore</b>).","Click <b>+ Start collection</b>. For <b>Collection ID</b> type <code>admins</code> → <b>Next</b>.","For <b>Document ID</b> paste the copied ID.","Add one field: <b>Field</b> <code>role</code>, <b>Type</b> string, <b>Value</b> <code>admin</code> → <b>Save</b>.","Come back here and click <b>Check again</b>. Participants, lesson averages, every attempt and the CSV export appear."]],
+  copy:["Copiază ID-ul","Copy ID"],copied:["Copiat ✓","Copied ✓"],openConsole:["Deschide consola Firestore ↗","Open the Firestore console ↗"],recheck:["Verifică din nou","Check again"],
+  toTests:["✎ Mergi la teste","✎ Go to the quizzes"],
   err:["Rezultatele nu au putut fi încărcate.","The results couldn't be loaded."]
 };
 const T=k=>UI[k][lang==="en"?1:0];
@@ -101,7 +118,8 @@ function render(){
   document.querySelectorAll("[data-t]").forEach(e=>{const k=e.dataset.t;if(UI[k])e.textContent=T(k)});
   $("#filter").placeholder=T("filter");
   document.querySelectorAll("[data-lang]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.lang===lang?"true":"false"));
-  if(me){$("#helpBody").innerHTML=esc(T("help"))+` <code>${esc(me.uid)}</code>`}
+  if(me){$("#uid").textContent=me.uid}
+  $("#steps").innerHTML=UI.steps[lang==="en"?1:0].map(s=>`<li>${s}</li>`).join("");
   renderMine();if(all)renderAdmin();
 }
 function renderMine(){
@@ -139,17 +157,24 @@ $("#csv").onclick=()=>{const head=["date","name","email","lesson","title","score
   const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["﻿"+lines.join("\n")],{type:"text/csv"}));a.download="rezultate-teste.csv";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000)};
 
 const norm=d=>{const x=d.data();return {...x,d:x.ts&&x.ts.toDate?x.ts.toDate():null}};
+$("#console").href=`https://console.firebase.google.com/project/${encodeURIComponent(app.options.projectId)}/firestore/databases/-default-/data`;
+$("#copy").onclick=async()=>{if(!me)return;try{await navigator.clipboard.writeText(me.uid)}catch(e){const r=document.createRange();r.selectNodeContents($("#uid"));const s=getSelection();s.removeAllRanges();s.addRange(r);try{document.execCommand("copy")}catch(_){}}
+  $("#copy").textContent=T("copied");setTimeout(()=>{$("#copy").textContent=T("copy")},2000)};
+async function checkAdmin(){
+  const adm=await getDoc(doc(db,"admins",me.uid));
+  if(adm.exists()){
+    const s2=await getDocs(collection(db,"results"));
+    all=s2.docs.map(norm).sort((a,b)=>(b.d||0)-(a.d||0));
+    $("#admin").hidden=false;$("#help").hidden=true;renderAdmin();
+  }else{$("#help").hidden=false}
+}
+$("#recheck").onclick=()=>{if(me)checkAdmin().catch(e=>console.error(e))};
 onAuthStateChanged(auth,async user=>{
   if(!user)return;me=user;render();
   try{
     const snap=await getDocs(query(collection(db,"results"),where("uid","==",user.uid)));
     mine=snap.docs.map(norm).sort((a,b)=>(b.d||0)-(a.d||0));renderMine();
-    const adm=await getDoc(doc(db,"admins",user.uid));
-    if(adm.exists()){
-      const s2=await getDocs(collection(db,"results"));
-      all=s2.docs.map(norm).sort((a,b)=>(b.d||0)-(a.d||0));
-      $("#admin").hidden=false;$("#help").hidden=true;renderAdmin();
-    }
+    await checkAdmin();
   }catch(e){console.error(e);$("#mineBody").innerHTML=`<p class="empty">${T("err")}</p>`}
 });
 document.querySelectorAll("[data-lang]").forEach(b=>b.onclick=()=>{lang=b.dataset.lang;store.set("cadru-lang",lang);render()});

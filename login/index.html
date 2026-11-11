@@ -64,8 +64,8 @@ input:focus-visible,.gbtn:focus-visible,.tabs button:focus-visible,.linkbtn:focu
 </main>
 
 <script type="module">
-import { auth, ROOT } from "../assets/firebase.js";
-import { GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, sendPasswordResetEmail, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import { auth, ROOT } from "../assets/firebase.js?v=3";
+import { GoogleAuthProvider, signInWithPopup, signInWithRedirect, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, sendPasswordResetEmail, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
 let lang=store.get("cadru-lang")==="en"?"en":"ro";
@@ -93,11 +93,11 @@ function render(){
 }
 function setMode(m){mode=m;$("#tab-in").setAttribute("aria-selected",m==="in");$("#tab-up").setAttribute("aria-selected",m==="up");$("#name-row").hidden=m!=="up";$("#pass").autocomplete=m==="up"?"new-password":"current-password";$("#reset").hidden=m==="up";msg("");render()}
 function msg(t,ok){const m=$("#msg");m.textContent=t;m.className="msg "+(ok?"ok":"err")}
-function errMsg(e){const x=UI.errs[e&&e.code];return x?x[lang==="en"?1:0]:T("generic")}
-const next=()=>{const n=new URLSearchParams(location.search).get("next");try{const u=new URL(n,location.href);if(u.origin===location.origin)return u.href}catch(e){}return ROOT+"index.html"};
+function errMsg(e){console.error(e);const x=UI.errs[e&&e.code];return x?x[lang==="en"?1:0]:T("generic")+(e&&e.code?" ("+e.code+")":"")}
+const next=()=>{const n=new URLSearchParams(location.search).get("next");try{const u=new URL(n,location.href);if(u.hostname.endsWith(".web.app")&&u.hostname.split(".")[0]===location.hostname.split(".")[0]){u.protocol=location.protocol;u.host=location.host}if(u.origin===location.origin)return u.href}catch(e){}return ROOT+"index.html"};
 
 onAuthStateChanged(auth,u=>{if(u)location.replace(next())});
-$("#google").onclick=async()=>{msg("");try{await signInWithPopup(auth,new GoogleAuthProvider())}catch(e){msg(errMsg(e))}};
+$("#google").onclick=async()=>{msg("");const p=new GoogleAuthProvider();p.setCustomParameters({prompt:"select_account"});try{await signInWithPopup(auth,p)}catch(e){if(e&&["auth/popup-blocked","auth/operation-not-supported-in-this-environment","auth/web-storage-unsupported"].includes(e.code)){try{await signInWithRedirect(auth,p);return}catch(e2){msg(errMsg(e2));return}}msg(errMsg(e))}};
 $("#tab-in").onclick=()=>setMode("in");$("#tab-up").onclick=()=>setMode("up");
 $("#form").onsubmit=async e=>{e.preventDefault();msg("");const email=$("#email").value.trim(),pass=$("#pass").value,name=$("#name").value.trim();
   if(!email){msg(T("needEmail"));return}if(mode==="up"&&!name){msg(T("needName"));return}

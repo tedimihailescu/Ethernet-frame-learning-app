@@ -7,13 +7,16 @@
       "firestore.rules",
       "README.md",
       "**/.*",
+      ".git/**",
+      "**/.*/**",
+      "firebase-debug.log",
       "**/node_modules/**"
     ],
     "cleanUrls": false,
     "headers": [
       {
         "source": "**/*.@(css|js)",
-        "headers": [{ "key": "Cache-Control", "value": "public, max-age=3600" }]
+        "headers": [{ "key": "Cache-Control", "value": "public, max-age=300" }]
       },
       {
         "source": "**/*.html",
