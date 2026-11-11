@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NAT pas cu pas</title>
+<meta name="description" content="Lecție interactivă: cum ies mai multe calculatoare pe internet cu un singur IP public: NAT, PAT, tabela de traducere, port forwarding, CGNAT și IPv6. / Interactive lesson on NAT and PAT.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<script>
+(function(){
+const P="198.51.100.7",W="203.0.113.80",FR="203.0.113.99";
+const L1={srcIp:"192.168.1.10",dstIp:W,proto:"TCP",srcPort:"51000",dstPort:"443",flags:"SYN"};
+const L2={...L1,srcIp:P+" (public)",srcPort:"40001",rule:{ro:"SNAT/PAT: 192.168.1.10:51000 → "+P+":40001",en:"SNAT/PAT: 192.168.1.10:51000 → "+P+":40001"}};
+const PH1={srcIp:"192.168.1.20",dstIp:W,proto:"TCP",srcPort:"51000",dstPort:"443",flags:"SYN"};
+const PH2={...PH1,srcIp:P+" (public)",srcPort:"40002",rule:{ro:"același port intern 51000 → alt port public: 40002",en:"same inner port 51000 → a different public port: 40002"}};
+const RP1={srcIp:W,dstIp:P,proto:"TCP",srcPort:"443",dstPort:"40001",flags:"SYN, ACK"};
+const RP2={...RP1,dstIp:"192.168.1.10",dstPort:"51000",rule:{ro:"găsit în tabelă: 40001 → 192.168.1.10:51000",en:"found in the table: 40001 → 192.168.1.10:51000"}};
+const IN1={srcIp:FR,dstIp:P,proto:"TCP",srcPort:"60500",dstPort:"8443",flags:"SYN",rule:{ro:"nicio intrare pentru portul 8443 → aruncat",en:"no entry for port 8443 → dropped"}};
+const IN2={...IN1,dstIp:"192.168.1.30",dstPort:"443",rule:{ro:"port forwarding: "+P+":8443 → 192.168.1.30:443",en:"port forwarding: "+P+":8443 → 192.168.1.30:443"}};
+
+window.LESSON={
+docTitle:{ro:"NAT pas cu pas",en:"NAT Step by Step"},
+eyebrow:{ro:"Lecție interactivă · Rețele",en:"Interactive lesson · Networking"},
+title:{ro:"NAT: mai multe calculatoare, un singur IP public",en:"NAT: many computers, one public IP"},
+sub:{ro:"Cum ies pe internet laptopul, telefonul și televizorul de acasă cu o singură adresă publică: adrese private, traducerea sursei (SNAT/PAT), tabela NAT, răspunsurile, port forwarding pentru intrare, CGNAT la furnizor și de ce IPv6 nu mai are nevoie de NAT.",en:"How your laptop, phone and TV get online with a single public address: private addresses, source translation (SNAT/PAT), the NAT table, replies, port forwarding for inbound traffic, CGNAT at the provider, and why IPv6 doesn't need NAT."},
+meta:[{ro:"≈ 20 minute",en:"≈ 20 minutes"},{ro:"12 pași",en:"12 steps"},{ro:"8 întrebări",en:"8 questions"},{ro:"Începător+",en:"Beginner+"}],
+goals:[{ro:"De ce există adrese private și NAT",en:"Why private addresses and NAT exist"},{ro:"Cum folosește PAT porturile ca să deosebească conexiunile",en:"How PAT uses ports to tell connections apart"},{ro:"Cum ajung răspunsurile înapoi la calculatorul potrivit",en:"How replies get back to the right computer"},{ro:"Port forwarding, CGNAT și IPv6",en:"Port forwarding, CGNAT and IPv6"}],
+foot:{ro:"Adresele 192.168.x.x sunt private; 198.51.100.x și 203.0.113.x sunt rezervate pentru exemple.",en:"192.168.x.x addresses are private; 198.51.100.x and 203.0.113.x are reserved for examples."},
+ui:{refT:{ro:"Tipuri de NAT și comenzi",en:"Kinds of NAT, and commands"},refLead:{ro:"Intervalele private, felurile de NAT și cum le vezi pe un router Linux.",en:"The private ranges, the kinds of NAT, and how to see them on a Linux router."}},
+tryT:{ro:"Încearcă pe calculatorul tău",en:"Try it on your computer"},
+legend:[["lg-ip","IP",{ro:"pachet cu adrese private",en:"packet with private addresses"}],["lg-arp","NAT",{ro:"pachet după traducere",en:"packet after translation"}],["lg-tcp","IP",{ro:"răspuns",en:"reply"}]],
+
+nodes:{
+  lap:{type:"host",name:"Laptop",lines:["192.168.1.10"]},
+  ph:{type:"host",name:{ro:"Telefon",en:"Phone"},lines:["192.168.1.20"]},
+  nas:{type:"server",name:{ro:"NAS / cameră",en:"NAS / camera"},lines:["192.168.1.30"]},
+  rtr:{type:"router",name:{ro:"Routerul de acasă",en:"Home router"},lines:[{ro:"intern 192.168.1.1",en:"inside 192.168.1.1"},{ro:"public "+P,en:"public "+P}]},
+  net:{type:"globe",name:"Internet",lines:[]},
+  web:{type:"server",name:{ro:"Server web",en:"Web server"},lines:[W+":443"]},
+  fr:{type:"user",name:{ro:"Un prieten",en:"A friend"},lines:[FR]}
+},
+links:[["lap","rtr"],["ph","rtr"],["nas","rtr"],["rtr","net"],["net","web"],["net","fr"]],
+layouts:{
+  wide:{vb:[0,0,1000,500],n:{lap:[90,100],ph:[90,250],nas:[90,400],rtr:[330,250],net:[600,250],web:[870,130],fr:[870,380]},
+    zones:[{x:10,y:30,w:410,h:440,top:true,l:{ro:"Acasă · 192.168.1.0/24 (privat)",en:"Home · 192.168.1.0/24 (private)"}},{x:440,y:30,w:550,h:440,top:true,cls:"virt",l:{ro:"Internet (adrese publice)",en:"Internet (public addresses)"}}]},
+  narrow:{vb:[0,0,360,720],n:{lap:[60,60],ph:[60,150],nas:[60,240],rtr:[180,370],net:[180,500],web:[60,630],fr:[270,630]},
+    side:{lap:"right",ph:"right",nas:"right",rtr:"right",net:"right",web:"right"},
+    zones:[{x:4,y:10,w:352,h:420,top:true,l:{ro:"Acasă (privat)",en:"Home (private)"}}]}
+},
+groups:[
+  {id:"ip",color:"l3",fields:["srcIp","dstIp"],name:{ro:"Antet IP",en:"IP header"},short:"IP",grow:3},
+  {id:"l4",color:"l4",fields:["proto","srcPort","dstPort","flags"],name:{ro:"Antet TCP",en:"TCP header"},short:"TCP",grow:3},
+  {id:"nat",color:"arp",fields:["rule"],name:{ro:"Ce face routerul (nu e în pachet)",en:"What the router does (not in the packet)"},short:"NAT",grow:3}
+],
+fieldLabels:{srcIp:{ro:"IP sursă",en:"Source IP"},dstIp:{ro:"IP destinație",en:"Destination IP"},proto:"Protocol",srcPort:{ro:"Port sursă",en:"Source port"},dstPort:{ro:"Port destinație",en:"Destination port"},flags:"Flags",rule:{ro:"Traducere",en:"Translation"}},
+pdu:f=>/ACK/.test(f.flags||"")?{badge:{ro:"Răspuns",en:"Reply"},tok:["IP","k-tcp"]}:f.rule?{badge:{ro:"Pachet tradus (NAT)",en:"Translated packet (NAT)"},tok:["NAT","k-arp"]}:{badge:{ro:"Pachet IP",en:"IP packet"},tok:["IP","k-ip"]},
+
+init:{natT:[]},
+tables:{
+  priv:{title:{ro:"Intervale private (RFC 1918)",en:"Private ranges (RFC 1918)"},cols:[{ro:"Interval",en:"Range"},{ro:"Adrese",en:"Addresses"},{ro:"Folosit de obicei",en:"Usually used"}],
+    rows:()=>[["10.0.0.0/8","16 777 216",{ro:"firme, cloud, Kubernetes",en:"companies, cloud, Kubernetes"}],["172.16.0.0/12","1 048 576",{ro:"firme, Docker",en:"companies, Docker"}],["192.168.0.0/16","65 536",{ro:"acasă, birouri mici",en:"homes, small offices"}],["100.64.0.0/10",{ro:"(shared)",en:"(shared)"},{ro:"CGNAT la furnizori",en:"CGNAT at providers"}]]},
+  natT:{title:{ro:"Tabela NAT a routerului",en:"The router's NAT table"},cols:[{ro:"Intern",en:"Inside"},{ro:"Public",en:"Public"},{ro:"Destinație",en:"Destination"},{ro:"Expiră în",en:"Expires in"}]},
+  fwd:{title:{ro:"Port forwarding (setat manual)",en:"Port forwarding (set manually)"},cols:[{ro:"Port public",en:"Public port"},{ro:"Merge la",en:"Goes to"},{ro:"Protocol",en:"Protocol"}],rows:()=>[["8443","192.168.1.30:443","TCP"]]},
+  to:{title:{ro:"Cât trăiește o intrare NAT (tipic)",en:"How long a NAT entry lives (typical)"},cols:[{ro:"Tip",en:"Kind"},{ro:"Timeout",en:"Timeout"}],
+    rows:()=>[[{ro:"TCP, conexiune stabilită",en:"TCP, established"},{ro:"ore (de ex. 2 h – 5 zile)",en:"hours (e.g. 2 h – 5 days)"}],[{ro:"TCP, închisă (FIN)",en:"TCP, closed (FIN)"},{ro:"zeci de secunde",en:"tens of seconds"}],["UDP",{ro:"30 – 180 s",en:"30 – 180 s"}],[{ro:"ICMP (ping)",en:"ICMP (ping)"},"30 s"]]}
+},
+log:{title:{ro:"Jurnalul pachetelor",en:"Packet log"},lead:{ro:"Albastru = sursa (schimbată de SNAT). Galben = destinația (schimbată la răspuns sau la port forwarding).",en:"Blue = source (changed by SNAT). Yellow = destination (changed on replies or port forwarding)."},first:{ro:"Unde",en:"Where"},minWidth:560,
+  cols:[{h:{ro:"Sursă",en:"Source"},v:f=>f.srcIp+":"+f.srcPort,cls:"ip"},{h:{ro:"Destinație",en:"Destination"},v:f=>f.dstIp+":"+f.dstPort,cls:"mac"},{h:"Flags",v:f=>f.flags}]},
+
+steps:[
+{at:["lap","ph","nas","rtr"],frame:null,kind:"none",tables:["priv"],
+ title:{ro:"Scenariul: o casă, un singur IP public",en:"The scenario: one home, one public IP"},
+ body:{ro:`<p>IPv4 are doar ~4,3 miliarde de adrese, mult mai puține decât dispozitivele conectate. De aceea, în rețelele locale se folosesc <strong>adrese private</strong> (tabelul din dreapta), care <strong>nu sunt rutate pe internet</strong>: mii de case pot folosi în același timp <code>192.168.1.10</code>.</p>
+<p>Acasă, laptopul, telefonul și NAS-ul au adrese private. Furnizorul îi dă routerului <strong>o singură adresă publică</strong>: <code>${P}</code>. Cum ies toate pe internet prin ea? Prin <strong>NAT</strong> (Network Address Translation).</p>`,
+ en:`<p>IPv4 has only ~4.3 billion addresses, far fewer than connected devices. That's why local networks use <strong>private addresses</strong> (the table on the right), which <strong>aren't routed on the internet</strong>: thousands of homes can use <code>192.168.1.10</code> at the same time.</p>
+<p>At home, the laptop, phone and NAS have private addresses. The provider gives the router <strong>a single public address</strong>: <code>${P}</code>. How do they all get online through it? Through <strong>NAT</strong> (Network Address Translation).</p>`},
+ try:[{cmd:"ipconfig",d:{ro:"IP-ul tău privat (de obicei 192.168.x.x).",en:"Your private IP (usually 192.168.x.x)."}},{cmd:"curl ifconfig.me",d:{ro:"IP-ul public cu care te vede internetul (al routerului).",en:"The public IP the internet sees you as (your router's)."}}]},
+
+{at:"lap",frame:L1,kind:"a",move:[[["lap","rtr"]]],log:{ro:"laptop → router",en:"laptop → router"},who:"Laptop",
+ title:{ro:"Laptopul trimite cu IP-ul lui privat",en:"The laptop sends with its private IP"},
+ body:{ro:`<p>Laptopul deschide un site: trimite un SYN de la <code>192.168.1.10:51000</code> la <code>${W}:443</code>. Destinația nu e în rețeaua locală, deci pachetul merge la gateway: routerul.</p>
+<p>Dacă ar pleca așa pe internet, serverul ar încerca să răspundă la <code>192.168.1.10</code>, o adresă privată pe care niciun router de pe internet nu știe unde s-o ducă. Răspunsul s-ar pierde.</p>`,
+ en:`<p>The laptop opens a site: it sends a SYN from <code>192.168.1.10:51000</code> to <code>${W}:443</code>. The destination isn't on the local network, so the packet goes to the gateway: the router.</p>
+<p>If it left like this, the server would try to reply to <code>192.168.1.10</code>, a private address no internet router knows how to reach. The reply would be lost.</p>`}},
+
+{at:"rtr",frame:L2,kind:"a",move:[[["rtr","net"]],[["net","web"]]],fx:[["natT","192.168.1.10:51000",P+":40001",W+":443",{ro:"activă",en:"active"}]],tables:["natT"],log:{ro:"după SNAT/PAT",en:"after SNAT/PAT"},who:{ro:"Routerul (NAT)",en:"The router (NAT)"},
+ title:{ro:"Routerul schimbă sursa: SNAT cu porturi (PAT)",en:"The router changes the source: SNAT with ports (PAT)"},
+ body:{ro:`<p>Înainte să trimită pachetul afară, routerul înlocuiește <strong>sursa</strong>:</p>
+<ul><li>IP-ul privat <code>192.168.1.10</code> → IP-ul public <code>${P}</code>;</li>
+<li>portul <code>51000</code> → un port ales de router, <code>40001</code>.</li></ul>
+<p>Și scrie traducerea în <strong>tabela NAT</strong>, ca să știe ce să facă la răspuns. Asta se numește <strong>PAT</strong> (Port Address Translation) sau NAPT: multe adrese interne „ascunse” în spatele unui singur IP, deosebite după <strong>port</strong>.</p>
+<p>Serverul web vede o conexiune de la <code>${P}:40001</code>. Nu are de unde să știe că în spate e un laptop.</p>`,
+ en:`<p>Before sending the packet out, the router replaces the <strong>source</strong>:</p>
+<ul><li>the private IP <code>192.168.1.10</code> → the public IP <code>${P}</code>;</li>
+<li>port <code>51000</code> → a port the router picks, <code>40001</code>.</li></ul>
+<p>And it writes the translation into the <strong>NAT table</strong> so it knows what to do with the reply. This is called <strong>PAT</strong> (Port Address Translation) or NAPT: many inside addresses "hidden" behind one IP, told apart by <strong>port</strong>.</p>
+<p>The web server sees a connection from <code>${P}:40001</code>. It has no way to know there's a laptop behind it.</p>`},
+ more:{ro:`<p>Pe Linux, asta e o singură regulă: <code>iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE</code>, exact regula pe care o folosește și kube-proxy (vezi <a href="../k8s-intrare/index.html">lecția despre pachetul în Kubernetes</a>). Tabela NAT e de fapt tabela <strong>conntrack</strong>.</p>`,
+  en:`<p>On Linux this is a single rule: <code>iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE</code>, the same rule kube-proxy uses (see the <a href="../k8s-intrare/index.html">Kubernetes packet lesson</a>). The NAT table is really the <strong>conntrack</strong> table.</p>`}},
+
+{at:"ph",frame:PH2,kind:"b",move:[[["ph","rtr"]],[["rtr","net"]],[["net","web"]]],fx:[["natT","192.168.1.20:51000",P+":40002",W+":443",{ro:"activă",en:"active"}]],tables:["natT"],log:{ro:"telefon, după PAT",en:"phone, after PAT"},who:{ro:"Telefonul",en:"The phone"},
+ title:{ro:"Telefonul, la același server, cu același port",en:"The phone, to the same server, with the same port"},
+ body:{ro:`<p>În același timp, telefonul deschide același site și, întâmplător, alege tot portul sursă <code>51000</code>. Dacă routerul i-ar pune tot <code>${P}:40001</code>, serverul n-ar putea deosebi cele două conexiuni, iar routerul n-ar ști cui să dea răspunsurile.</p>
+<p>Așa că routerul îi alege un <strong>alt port public</strong>: <code>40002</code>. Tabela NAT are acum două rânduri, cu același IP public, dar porturi diferite.</p>
+<p class="key">Porturile fac posibil totul: un IP public are ~64.000 de porturi, deci zeci de mii de conexiuni simultane.</p>`,
+ en:`<p>Meanwhile the phone opens the same site and, by chance, also picks source port <code>51000</code>. If the router gave it <code>${P}:40001</code> too, the server couldn't tell the two connections apart, and the router wouldn't know whose replies are whose.</p>
+<p>So the router picks <strong>another public port</strong>: <code>40002</code>. The NAT table now has two rows, with the same public IP but different ports.</p>
+<p class="key">Ports make it all work: a public IP has ~64,000 ports, so tens of thousands of simultaneous connections.</p>`}},
+
+{at:"web",frame:RP1,kind:"r",move:[[["web","net"]],[["net","rtr"]]],log:{ro:"răspuns spre IP-ul public",en:"reply to the public IP"},who:{ro:"Serverul web",en:"The web server"},
+ title:{ro:"Răspunsul vine la IP-ul public",en:"The reply comes to the public IP"},
+ body:{ro:`<p>Serverul răspunde cu SYN-ACK la cine i-a scris: <code>${P}:40001</code>. Pachetul traversează internetul și ajunge la routerul de acasă.</p>`,
+ en:`<p>The server replies with a SYN-ACK to whoever wrote to it: <code>${P}:40001</code>. The packet crosses the internet and reaches the home router.</p>`}},
+
+{at:"rtr",frame:RP2,kind:"r",move:[[["rtr","lap"]]],tables:["natT"],hl:{natT:"192.168.1.10:51000"},log:{ro:"după traducerea inversă",en:"after the reverse translation"},who:{ro:"Routerul (NAT)",en:"The router (NAT)"},
+ title:{ro:"Traducerea inversă: înapoi la laptop",en:"The reverse translation: back to the laptop"},
+ body:{ro:`<p>Routerul caută portul destinație <code>40001</code> în tabela NAT: rândul spune <code>192.168.1.10:51000</code>. Rescrie <strong>destinația</strong> și trimite pachetul în rețeaua de acasă.</p>
+<p>Laptopul primește răspunsul de la <code>${W}:443</code>, exact serverul căruia i-a scris, pe portul lui <code>51000</code>. Nu observă nimic din traducere.</p>`,
+ en:`<p>The router looks up destination port <code>40001</code> in the NAT table: the row says <code>192.168.1.10:51000</code>. It rewrites the <strong>destination</strong> and sends the packet into the home network.</p>
+<p>The laptop receives the reply from <code>${W}:443</code>, exactly the server it wrote to, on its own port <code>51000</code>. It notices nothing of the translation.</p>`}},
+
+{at:"rtr",frame:null,kind:"none",tables:["to"],who:{ro:"Tabela NAT",en:"The NAT table"},
+ title:{ro:"Cât ține minte routerul",en:"How long the router remembers"},
+ body:{ro:`<p>Intrările din tabela NAT nu rămân pentru totdeauna: expiră după un timp fără trafic (tabelul din dreapta). Pentru TCP, routerul vede și închiderea conexiunii (FIN) și șterge intrarea repede.</p>
+<p>Consecință practică: o conexiune inactivă mult timp (de ex. un SSH lăsat deschis) poate „muri” fără mesaj, pentru că routerul a uitat-o. De aceea aplicațiile trimit <strong>keepalive</strong>-uri.</p>`,
+ en:`<p>NAT table entries don't last forever: they expire after a while without traffic (the table on the right). For TCP, the router also sees the connection close (FIN) and removes the entry quickly.</p>
+<p>A practical consequence: a long-idle connection (e.g. an SSH session left open) can "die" silently because the router forgot it. That's why apps send <strong>keepalives</strong>.</p>`}},
+
+{at:"fr",frame:IN1,kind:"in",move:[[["fr","net"]],[["net","rtr"]]],rest:["rtr"],marks:{rtr:{k:"drop",t:{ro:"✗ aruncat",en:"✗ dropped"}}},log:{ro:"prieten → IP public (fără regulă)",en:"friend → public IP (no rule)"},who:{ro:"Un prieten",en:"A friend"},
+ title:{ro:"Din afară spre interior: nu merge implicit",en:"From outside in: doesn't work by default"},
+ body:{ro:`<p>Un prieten vrea să vadă pozele de pe NAS-ul tău. Știe doar IP-ul public <code>${P}</code> și încearcă portul <code>8443</code>.</p>
+<p>Routerul caută în tabela NAT: <strong>nicio intrare</strong> pentru acest port, pentru că nimeni din casă n-a început o conexiune. Nu știe căruia dintre dispozitive să-i dea pachetul, deci îl <strong>aruncă</strong>.</p>
+<p class="key">Efect secundar util: NAT-ul blochează de la sine conexiunile nesolicitate din internet. Nu e un firewall adevărat, dar ajută.</p>`,
+ en:`<p>A friend wants to see the photos on your NAS. They only know the public IP <code>${P}</code> and try port <code>8443</code>.</p>
+<p>The router checks the NAT table: <strong>no entry</strong> for this port, because nobody at home started a connection. It doesn't know which device to give the packet to, so it <strong>drops</strong> it.</p>
+<p class="key">A useful side effect: NAT blocks unsolicited internet connections by itself. It isn't a real firewall, but it helps.</p>`}},
+
+{at:"rtr",frame:IN2,kind:"in",move:[[["fr","net"]],[["net","rtr"]],[["rtr","nas"]]],tables:["fwd"],hl:{fwd:"8443"},log:{ro:"port forwarding → NAS",en:"port forwarding → NAS"},who:{ro:"Routerul (DNAT)",en:"The router (DNAT)"},
+ title:{ro:"Port forwarding: o regulă fixă spre interior (DNAT)",en:"Port forwarding: a fixed inbound rule (DNAT)"},
+ body:{ro:`<p>În setările routerului adaugi o regulă de <strong>port forwarding</strong>: „ce vine pe portul public <code>8443</code> trimite la <code>192.168.1.30:443</code>”.</p>
+<p>Acum routerul rescrie <strong>destinația</strong> pachetului (<strong>DNAT</strong>) și îl duce la NAS. Răspunsul NAS-ului iese apoi prin aceeași traducere, inversată.</p>
+<p>Atenție: tot ce deschizi așa e accesibil oricui de pe internet. Deschide doar ce trebuie, cu parolă bună, sau folosește un VPN.</p>`,
+ en:`<p>In the router settings you add a <strong>port forwarding</strong> rule: "send whatever arrives on public port <code>8443</code> to <code>192.168.1.30:443</code>".</p>
+<p>Now the router rewrites the packet's <strong>destination</strong> (<strong>DNAT</strong>) and delivers it to the NAS. The NAS's reply then leaves through the same translation, reversed.</p>
+<p>Careful: anything you open like this is reachable by anyone on the internet. Open only what you need, with a strong password, or use a VPN.</p>`},
+ more:{ro:`<p>Jocurile și aplicațiile de apel video au aceeași problemă, dar nu cer port forwarding manual. Folosesc <strong>UPnP</strong> (cer singure routerului o regulă), <strong>STUN</strong> (află IP-ul și portul public) și <strong>hole punching</strong> (ambele părți trimit în același timp, ca să creeze intrări NAT). Când nimic nu merge, traficul trece printr-un server intermediar (<strong>TURN</strong>).</p>`,
+  en:`<p>Games and video-call apps have the same problem but don't ask for manual port forwarding. They use <strong>UPnP</strong> (asking the router for a rule themselves), <strong>STUN</strong> (learning their public IP and port) and <strong>hole punching</strong> (both sides send at once to create NAT entries). When nothing works, traffic goes through a relay server (<strong>TURN</strong>).</p>`}},
+
+{at:["rtr","net"],frame:null,kind:"none",who:"CGNAT",
+ title:{ro:"CGNAT: și furnizorul face NAT",en:"CGNAT: the provider does NAT too"},
+ body:{ro:`<p>Multe rețele mobile și unii furnizori nu mai au destule adrese publice nici pentru routerele clienților. Atunci routerul tău primește o adresă din <code>100.64.0.0/10</code>, iar <strong>furnizorul</strong> face încă un NAT, pentru mii de clienți deodată: <strong>CGNAT</strong> (Carrier-Grade NAT).</p>
+<ul><li>Pachetul trece prin <strong>două</strong> traduceri (acasă și la furnizor).</li>
+<li><strong>Port forwarding-ul nu mai merge</strong>: regula de acasă nu ajută dacă furnizorul nu știe nimic de ea.</li>
+<li>Semn că ești în spatele CGNAT: IP-ul „WAN” din router diferă de cel arătat de <code>curl ifconfig.me</code>.</li></ul>`,
+ en:`<p>Many mobile networks and some providers no longer have enough public addresses even for customers' routers. Then your router gets an address from <code>100.64.0.0/10</code> and the <strong>provider</strong> does another NAT, for thousands of customers at once: <strong>CGNAT</strong> (Carrier-Grade NAT).</p>
+<ul><li>The packet goes through <strong>two</strong> translations (at home and at the provider).</li>
+<li><strong>Port forwarding stops working</strong>: the home rule doesn't help if the provider knows nothing about it.</li>
+<li>A sign you're behind CGNAT: the router's "WAN" IP differs from the one shown by <code>curl ifconfig.me</code>.</li></ul>`}},
+
+{at:["lap","web"],frame:null,kind:"none",who:"IPv6",
+ title:{ro:"Și IPv6? Fără NAT",en:"And IPv6? No NAT"},
+ body:{ro:`<p><strong>IPv6</strong> are adrese de 128 de biți: destule pentru ca fiecare dispozitiv să aibă propria adresă publică (de ex. <code>2001:db8:4:1::10</code>). Nu mai e nevoie de NAT: pachetele merg direct, cu adresele reale.</p>
+<p>Asta nu înseamnă că totul e deschis: routerul are un <strong>firewall</strong> care, ca și NAT-ul, lasă să intre doar răspunsuri la conexiuni pornite din casă. Diferența e că, dacă vrei, poți permite conexiuni spre un dispozitiv anume fără să traduci nimic.</p>`,
+ en:`<p><strong>IPv6</strong> has 128-bit addresses: enough for every device to have its own public address (e.g. <code>2001:db8:4:1::10</code>). NAT is no longer needed: packets travel directly, with the real addresses.</p>
+<p>That doesn't mean everything is open: the router has a <strong>firewall</strong> which, like NAT, only lets in replies to connections started from home. The difference is that, if you want, you can allow connections to a specific device without translating anything.</p>`},
+ try:[{cmd:"ipconfig | findstr IPv6",d:{ro:"Vezi dacă ai și adrese IPv6.",en:"See whether you have IPv6 addresses too."}}]},
+
+{at:["lap","ph","rtr"],frame:null,kind:"none",summary:true,
+ title:{ro:"Recapitulare",en:"Recap"},
+ body:{ro:`<div class="flow"><span>192.168.1.10:51000</span><i>SNAT/PAT →</i><span>${P}:40001</span><i>…răspuns…</i><span>${P}:40001</span><i>→</i><span>192.168.1.10:51000</span></div>
+<ul><li><strong>Adresele private</strong> nu circulă pe internet; routerul are o singură adresă publică.</li>
+<li><strong>SNAT/PAT</strong>: la ieșire se schimbă IP-ul și portul sursă; traducerea se scrie în <strong>tabela NAT</strong>.</li>
+<li>Porturile diferite deosebesc conexiunile dispozitivelor din spatele aceluiași IP.</li>
+<li>Răspunsul e tradus <strong>înapoi</strong> după tabelă; intrările expiră.</li>
+<li>Din afară nu se poate intra fără <strong>port forwarding</strong> (DNAT); cu CGNAT, nici așa.</li>
+<li><strong>IPv6</strong> nu are nevoie de NAT, dar folosește tot un firewall.</li></ul>
+<p><button type="button" class="btn primary" data-goto="quiz">Mergi la test ↓</button></p>`,
+ en:`<div class="flow"><span>192.168.1.10:51000</span><i>SNAT/PAT →</i><span>${P}:40001</span><i>…reply…</i><span>${P}:40001</span><i>→</i><span>192.168.1.10:51000</span></div>
+<ul><li><strong>Private addresses</strong> don't travel on the internet; the router has a single public address.</li>
+<li><strong>SNAT/PAT</strong>: on the way out the source IP and port change; the translation goes into the <strong>NAT table</strong>.</li>
+<li>Different ports tell apart the connections of devices behind the same IP.</li>
+<li>The reply is translated <strong>back</strong> from the table; entries expire.</li>
+<li>You can't get in from outside without <strong>port forwarding</strong> (DNAT); with CGNAT, not even then.</li>
+<li><strong>IPv6</strong> doesn't need NAT, but still uses a firewall.</li></ul>
+<p><button type="button" class="btn primary" data-goto="quiz">Go to the quiz ↓</button></p>`}}
+],
+
+reference:(T,lang)=>{
+  const ro=lang==="ro";
+  const kinds=[
+    [{ro:"NAT static (1:1)",en:"Static NAT (1:1)"},{ro:"o adresă privată ↔ o adresă publică, mereu aceeași",en:"one private address ↔ one public address, always the same"},{ro:"servere care trebuie să aibă IP public fix",en:"servers needing a fixed public IP"}],
+    [{ro:"NAT dinamic",en:"Dynamic NAT"},{ro:"adrese private ↔ un grup de adrese publice, alocate la cerere",en:"private addresses ↔ a pool of public ones, assigned on demand"},{ro:"rar azi",en:"rare today"}],
+    ["PAT / NAPT / MASQUERADE",{ro:"multe adrese private ↔ un IP public, deosebite după port",en:"many private addresses ↔ one public IP, told apart by port"},{ro:"acasă, birouri, Kubernetes",en:"homes, offices, Kubernetes"}],
+    [{ro:"DNAT / port forwarding",en:"DNAT / port forwarding"},{ro:"schimbă destinația pachetelor care intră",en:"changes the destination of incoming packets"},{ro:"servere în spatele NAT, Service-uri K8s",en:"servers behind NAT, K8s Services"}],
+    ["CGNAT",{ro:"NAT făcut de furnizor pentru mulți clienți",en:"NAT done by the provider for many customers"},{ro:"rețele mobile, unii furnizori",en:"mobile networks, some providers"}]
+  ];
+  let h=`<div class="ref-grid"><section class="card refcard"><h2>${ro?"Felurile de NAT":"Kinds of NAT"}</h2><div class="scroll"><table class="cmp" style="min-width:460px"><thead><tr><th>${ro?"Tip":"Kind"}</th><th>${ro?"Ce face":"What it does"}</th><th>${ro?"Unde îl găsești":"Where you find it"}</th></tr></thead><tbody>`;
+  kinds.forEach(r=>{h+=`<tr><td><b>${T(r[0])}</b></td><td>${T(r[1])}</td><td>${T(r[2])}</td></tr>`});
+  h+=`</tbody></table></div></section>`;
+  h+=`<section class="card refcard"><h2>${ro?"Pe un router Linux":"On a Linux router"}</h2>
+<pre class="yaml"><span class="c"># ${ro?"permite rutarea":"allow routing"}</span>
+sysctl -w net.ipv4.ip_forward=1
+<span class="c"># ${ro?"PAT: tot ce iese pe eth0 primește IP-ul lui eth0":"PAT: everything leaving eth0 gets eth0's IP"}</span>
+iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+<span class="c"># ${ro?"port forwarding: 8443 → NAS":"port forwarding: 8443 → NAS"}</span>
+iptables -t nat -A PREROUTING -i eth0 -p tcp --dport 8443 \\
+  -j DNAT --to-destination 192.168.1.30:443
+<span class="c"># ${ro?"vezi traducerile active":"see active translations"}</span>
+conntrack -L -n</pre></section></div>`;
+  return h;
+},
+
+gloss:[
+ ["NAT","Network Address Translation",{ro:"Rescrierea adreselor IP (și porturilor) dintr-un pachet de către router.",en:"A router rewriting a packet's IP addresses (and ports)."}],
+ ["PAT / NAPT","Port Address Translation",{ro:"NAT care folosește porturile ca să pună multe adrese private în spatele unui singur IP.",en:"NAT that uses ports to put many private addresses behind one IP."}],
+ ["SNAT / DNAT",null,{ro:"SNAT schimbă sursa (la ieșire); DNAT schimbă destinația (la intrare).",en:"SNAT changes the source (going out); DNAT changes the destination (coming in)."}],
+ ["MASQUERADE",null,{ro:"SNAT pe Linux cu IP-ul interfeței de ieșire, util când IP-ul public se schimbă.",en:"Linux SNAT using the outgoing interface's IP, handy when the public IP changes."}],
+ [{ro:"Adresă privată",en:"Private address"},"RFC 1918",{ro:"Adresă din 10/8, 172.16/12 sau 192.168/16, nerutată pe internet.",en:"An address in 10/8, 172.16/12 or 192.168/16, not routed on the internet."}],
+ [{ro:"Adresă publică",en:"Public address"},null,{ro:"Adresă unică pe internet, primită de la furnizor.",en:"An address unique on the internet, assigned by the provider."}],
+ [{ro:"Tabela NAT",en:"NAT table"},null,{ro:"Lista traducerilor active: intern ↔ public, cu timp de expirare.",en:"The list of active translations: inside ↔ public, with an expiry time."}],
+ ["Port forwarding",null,{ro:"Regulă fixă care trimite un port public spre un dispozitiv din rețeaua locală.",en:"A fixed rule sending a public port to a device on the local network."}],
+ ["CGNAT","Carrier-Grade NAT",{ro:"NAT făcut de furnizor; clientul primește o adresă din 100.64.0.0/10.",en:"NAT done by the provider; the customer gets an address in 100.64.0.0/10."}],
+ ["UPnP","Universal Plug and Play",{ro:"Permite aplicațiilor să ceară singure routerului reguli de port forwarding.",en:"Lets apps ask the router for port-forwarding rules themselves."}],
+ ["STUN / TURN",null,{ro:"STUN: află IP-ul și portul public. TURN: server intermediar când conexiunea directă nu merge.",en:"STUN: learns the public IP and port. TURN: a relay server when direct connection fails."}],
+ ["Keepalive",null,{ro:"Mesaj trimis periodic ca o conexiune să nu fie uitată de NAT.",en:"A message sent periodically so NAT doesn't forget a connection."}],
+ ["IPv6",null,{ro:"Versiunea nouă a IP, cu adrese de 128 de biți; nu are nevoie de NAT.",en:"The newer IP version, with 128-bit addresses; it doesn't need NAT."}]
+],
+glossEx:{
+ "NAT":{ro:"192.168.1.10:51000 iese pe internet ca 198.51.100.7:40001.",en:"192.168.1.10:51000 goes out to the internet as 198.51.100.7:40001."},
+ "PAT / NAPT":{ro:"laptopul pe portul public 40001, telefonul pe 40002, același IP public.",en:"the laptop on public port 40001, the phone on 40002, the same public IP."},
+ "SNAT / DNAT":{ro:"SNAT: sursa 192.168.1.10 → 198.51.100.7. DNAT: destinația 198.51.100.7:8443 → 192.168.1.30:443.",en:"SNAT: source 192.168.1.10 → 198.51.100.7. DNAT: destination 198.51.100.7:8443 → 192.168.1.30:443."},
+ "MASQUERADE":{ro:"iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE",en:"iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE"},
+ "Private address":{ro:"192.168.1.10 e folosită în același timp în milioane de case.",en:"192.168.1.10 is in use in millions of homes at the same time."},
+ "Public address":{ro:"curl ifconfig.me arată IP-ul public al routerului tău.",en:"curl ifconfig.me shows your router's public IP."},
+ "NAT table":{ro:"„192.168.1.10:51000 ↔ 198.51.100.7:40001 → 203.0.113.80:443, expiră în 2 h”.",en:"\"192.168.1.10:51000 ↔ 198.51.100.7:40001 → 203.0.113.80:443, expires in 2 h\"."},
+ "Port forwarding":{ro:"portul public 8443 → NAS-ul 192.168.1.30:443.",en:"public port 8443 → the NAS at 192.168.1.30:443."},
+ "CGNAT":{ro:"routerul arată WAN 100.72.15.3, dar internetul te vede ca 198.51.100.200.",en:"the router shows WAN 100.72.15.3, but the internet sees you as 198.51.100.200."},
+ "UPnP":{ro:"consola de jocuri își deschide singură portul 3074 în router.",en:"a games console opens port 3074 on the router by itself."},
+ "STUN / TURN":{ro:"apelurile video din browser (WebRTC) folosesc STUN, iar dacă nu merge, TURN.",en:"browser video calls (WebRTC) use STUN, and TURN if that fails."},
+ "Keepalive":{ro:"ServerAliveInterval 60 în configurația SSH trimite un semn de viață la fiecare minut.",en:"ServerAliveInterval 60 in the SSH config sends a sign of life every minute."},
+ "IPv6":{ro:"2001:db8:4:1::10 poate fi adresa publică directă a laptopului.",en:"2001:db8:4:1::10 can be the laptop's direct public address."}
+},
+
+quiz:[
+ {q:{ro:"De ce nu poate pleca pe internet un pachet cu sursa 192.168.1.10?",en:"Why can't a packet with source 192.168.1.10 go out on the internet as is?"},o:[{ro:"Pentru că e prea lung",en:"Because it's too long"},{ro:"Pentru că e o adresă privată, iar răspunsul nu ar avea cum să se întoarcă",en:"Because it's a private address and the reply couldn't come back"},{ro:"Pentru că e IPv6",en:"Because it's IPv6"},{ro:"Poate, fără probleme",en:"It can, no problem"}],a:1,e:{ro:"Adresele private nu sunt rutate pe internet; mii de rețele le folosesc simultan.",en:"Private addresses aren't routed on the internet; thousands of networks use them at once."}},
+ {q:{ro:"Ce schimbă routerul la un pachet care iese (PAT)?",en:"What does the router change on an outgoing packet (PAT)?"},o:[{ro:"IP-ul și portul destinație",en:"The destination IP and port"},{ro:"IP-ul și portul sursă",en:"The source IP and port"},{ro:"Doar MAC-ul",en:"Only the MAC"},{ro:"Conținutul",en:"The content"}],a:1,e:{ro:"Sursa privată devine IP-ul public + un port ales de router.",en:"The private source becomes the public IP + a port the router picks."}},
+ {q:{ro:"Laptopul și telefonul folosesc amândouă portul sursă 51000 spre același server. Ce face routerul?",en:"The laptop and phone both use source port 51000 to the same server. What does the router do?"},o:[{ro:"Blochează telefonul",en:"Blocks the phone"},{ro:"Le dă porturi publice diferite (40001, 40002)",en:"Gives them different public ports (40001, 40002)"},{ro:"Le amestecă traficul",en:"Mixes their traffic"},{ro:"Cere alt IP public",en:"Requests another public IP"}],a:1,e:{ro:"Portul public diferit deosebește conexiunile.",en:"The different public port tells the connections apart."}},
+ {q:{ro:"Cum știe routerul cui să dea răspunsul serverului?",en:"How does the router know who to give the server's reply to?"},o:[{ro:"Din DNS",en:"From DNS"},{ro:"Din tabela NAT, după portul destinație",en:"From the NAT table, by the destination port"},{ro:"Îl trimite la toți",en:"It sends it to everyone"},{ro:"Din MAC-ul serverului",en:"From the server's MAC"}],a:1,e:{ro:"Portul 40001 duce la 192.168.1.10:51000.",en:"Port 40001 leads to 192.168.1.10:51000."}},
+ {q:{ro:"Un prieten încearcă să se conecteze la IP-ul tău public, fără nicio regulă setată. Ce se întâmplă?",en:"A friend tries to connect to your public IP with no rule set. What happens?"},o:[{ro:"Ajunge la laptop",en:"It reaches the laptop"},{ro:"Pachetul e aruncat: nu există o intrare NAT pentru el",en:"The packet is dropped: there's no NAT entry for it"},{ro:"Ajunge la toate dispozitivele",en:"It reaches every device"},{ro:"Ajunge la NAS",en:"It reaches the NAS"}],a:1,e:{ro:"Fără port forwarding, routerul nu știe la cine să-l trimită.",en:"Without port forwarding, the router doesn't know where to send it."}},
+ {q:{ro:"Ce e port forwarding-ul?",en:"What is port forwarding?"},o:[{ro:"O regulă fixă de DNAT: un port public → un dispozitiv intern",en:"A fixed DNAT rule: a public port → an internal device"},{ro:"Un tip de cablu",en:"A kind of cable"},{ro:"Criptarea porturilor",en:"Port encryption"},{ro:"Un VLAN",en:"A VLAN"}],a:0,e:{ro:"De ex. 8443 → 192.168.1.30:443.",en:"E.g. 8443 → 192.168.1.30:443."}},
+ {q:{ro:"De ce nu merge port forwarding-ul în spatele CGNAT?",en:"Why doesn't port forwarding work behind CGNAT?"},o:[{ro:"Pentru că routerul tău nu are IP public: mai e un NAT la furnizor care nu știe de regula ta",en:"Because your router has no public IP: there's another NAT at the provider that doesn't know your rule"},{ro:"Pentru că CGNAT e IPv6",en:"Because CGNAT is IPv6"},{ro:"Merge",en:"It does work"},{ro:"Pentru că e criptat",en:"Because it's encrypted"}],a:0,e:{ro:"Adresa din 100.64.0.0/10 e și ea privată, a furnizorului.",en:"The 100.64.0.0/10 address is private too, the provider's."}},
+ {q:{ro:"De ce nu are IPv6 nevoie de NAT?",en:"Why doesn't IPv6 need NAT?"},o:[{ro:"Are destule adrese pentru ca fiecare dispozitiv să aibă una publică",en:"It has enough addresses for every device to have a public one"},{ro:"Pentru că e criptat",en:"Because it's encrypted"},{ro:"Pentru că nu are porturi",en:"Because it has no ports"},{ro:"Are nevoie",en:"It does need it"}],a:0,e:{ro:"Securitatea o asigură în continuare un firewall.",en:"Security is still provided by a firewall."}}
+]
+};
+})();
+</script>
+<script src="../assets/engine.js"></script>
+</body>
+</html>

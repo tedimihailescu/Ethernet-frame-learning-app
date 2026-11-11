@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ingress în Kubernetes</title>
+<meta name="description" content="Lecție interactivă: cum rutează un Ingress cererile HTTP în Kubernetes după domeniu și cale: controller, reguli, TLS, backend-uri, default backend, adnotări și Gateway API. / Interactive lesson on Kubernetes Ingress.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<script>
+(function(){
+const R1={from:"203.0.113.25",to:"198.51.100.20:443 (LB)",scheme:"HTTPS",sni:"shop.example.com",host:"shop.example.com",path:"/api/products"};
+const R2={...R1,to:"ingress-nginx · 10.244.2.15:443",tls:{ro:"terminat aici · certificat din Secret shop-tls",en:"terminated here · certificate from Secret shop-tls"}};
+const R3={...R2,rule:{ro:"host shop.example.com + Prefix /api → svc/api:80",en:"host shop.example.com + Prefix /api → svc/api:80"}};
+const R4={from:"ingress-nginx · 10.244.2.15",to:"api · 10.244.1.9:8080",scheme:"HTTP",host:"shop.example.com",path:"/api/products",xff:"X-Forwarded-For: 203.0.113.25 · X-Forwarded-Proto: https",reqId:"X-Request-ID: 5d2c…e91",rule:{ro:"endpoint ales direct (fără ClusterIP)",en:"endpoint picked directly (no ClusterIP)"}};
+const C1={from:"ingress-nginx · 10.244.2.15",to:"shop · 10.244.2.21:3000",scheme:"HTTP",host:"shop.example.com",path:"/cart",rule:{ro:"nicio regulă /cart → se potrivește Prefix / → svc/shop",en:"no /cart rule → Prefix / matches → svc/shop"}};
+const D1={from:"203.0.113.25",to:"ingress-nginx",scheme:"HTTPS",host:"necunoscut.example.com",path:"/",rule:{ro:"niciun host potrivit → default backend → 404",en:"no matching host → default backend → 404"},status:"404 Not Found"};
+
+window.LESSON={
+docTitle:{ro:"Ingress în Kubernetes",en:"Kubernetes Ingress"},
+eyebrow:{ro:"Lecție interactivă · Kubernetes",en:"Interactive lesson · Kubernetes"},
+title:{ro:"Ingress: un singur IP, multe aplicații",en:"Ingress: one IP, many apps"},
+sub:{ro:"Cum ajung cererile HTTP la aplicația potrivită din cluster după domeniu și cale: obiectul Ingress, controller-ul (ingress-nginx), terminarea TLS cu certificate din Secret-uri, potrivirea host + path, backend-urile, default backend-ul, adnotările și Gateway API, succesorul lui Ingress.",en:"How HTTP requests reach the right app in the cluster by domain and path: the Ingress object, the controller (ingress-nginx), TLS termination with certificates from Secrets, host + path matching, backends, the default backend, annotations and Gateway API, Ingress's successor."},
+meta:[{ro:"≈ 20 minute",en:"≈ 20 minutes"},{ro:"12 pași",en:"12 steps"},{ro:"8 întrebări",en:"8 questions"},{ro:"Intermediar",en:"Intermediate"}],
+goals:[{ro:"Diferența dintre obiectul Ingress și controller-ul Ingress",en:"The difference between the Ingress object and the Ingress controller"},{ro:"Cum se aleg backend-urile după host și cale",en:"How backends are chosen by host and path"},{ro:"Unde se termină TLS și de unde vine certificatul",en:"Where TLS ends and where the certificate comes from"},{ro:"Ce aduce Gateway API",en:"What Gateway API brings"}],
+foot:{ro:"Exemplu cu ingress-nginx și cert-manager. Numele, adresele și domeniile sunt exemple.",en:"An example with ingress-nginx and cert-manager. Names, addresses and domains are examples."},
+ui:{frameT:{ro:"Cererea (live)",en:"The request (live)"},refT:{ro:"YAML și comenzi",en:"YAML and commands"},refLead:{ro:"Obiectul Ingress complet, echivalentul în Gateway API și comenzile utile.",en:"The full Ingress object, the Gateway API equivalent, and useful commands."}},
+tryT:{ro:"Încearcă într-un cluster",en:"Try it in a cluster"},
+legend:[["lg-ip","HTTPS",{ro:"cerere criptată",en:"encrypted request"}],["lg-app","HTTP",{ro:"cerere spre pod (după TLS)",en:"request to the pod (after TLS)"}]],
+
+nodes:{
+  user:{type:"user",name:"Client",lines:["203.0.113.25"]},
+  lb:{type:"svc",name:"Load balancer",lines:["198.51.100.20"]},
+  ing:{type:"pod",name:"ingress-nginx",lines:["controller"]},
+  sec:{type:"box",name:"Secret shop-tls",lines:["cert-manager"]},
+  sshop:{type:"svc",name:"svc/shop",lines:["10.96.20.5:80"]},
+  sapi:{type:"svc",name:"svc/api",lines:["10.96.30.2:80"]},
+  pshop:{type:"pod",name:"shop",lines:["10.244.2.21:3000"]},
+  papi:{type:"pod",name:"api",lines:["10.244.1.9:8080"]}
+},
+links:[["user","lb"],["lb","ing"],["ing","sec","virt"],["ing","sshop","virt"],["ing","sapi","virt"],["sshop","pshop","virt"],["sapi","papi","virt"]],
+layouts:{
+  wide:{vb:[0,0,1000,500],n:{user:[60,240],lb:[200,240],ing:[400,240],sec:[400,420],sshop:[630,120],sapi:[630,360],pshop:[880,120],papi:[880,360]},hideLinks:["ing-sec"],
+    zones:[{x:290,y:30,w:700,h:450,top:true,l:{ro:"Cluster Kubernetes",en:"Kubernetes cluster"}}]},
+  narrow:{vb:[0,0,360,640],n:{user:[60,50],lb:[60,150],ing:[60,270],sec:[280,270],sshop:[60,400],sapi:[280,400],pshop:[60,540],papi:[280,540]},
+    side:{user:"right",lb:"right",ing:"right",sshop:"right",pshop:"right",sec:"left",sapi:"left",papi:"left"},hideLinks:["ing-sec"],
+    zones:[{x:4,y:215,w:352,h:418,top:true,l:"Cluster"}]}
+},
+groups:[
+  {id:"route",color:"l3",fields:["from","to"],name:{ro:"Cine → cine",en:"Who → whom"},short:{ro:"Drum",en:"Route"},grow:2},
+  {id:"tls",color:"arp",fields:["scheme","sni","tls"],name:"TLS",short:"TLS",grow:2},
+  {id:"http",color:"l7",fields:["host","path","xff","reqId","status"],name:"HTTP",short:"HTTP",grow:3},
+  {id:"rt",color:"l2",fields:["rule"],name:{ro:"Decizia controller-ului",en:"The controller's decision"},short:{ro:"Regulă",en:"Rule"},grow:3}
+],
+fieldLabels:{from:{ro:"De la",en:"From"},to:{ro:"Către",en:"To"},scheme:{ro:"Protocol",en:"Scheme"},sni:"SNI",tls:"TLS",host:{ro:"Antet Host",en:"Host header"},path:{ro:"Cale",en:"Path"},xff:{ro:"Antete adăugate",en:"Added headers"},reqId:"Request ID",status:{ro:"Răspuns",en:"Response"},rule:{ro:"Regulă aplicată",en:"Rule applied"}},
+pdu:f=>f.scheme==="HTTPS"?{badge:{ro:"Cerere HTTPS",en:"HTTPS request"},tok:["HTTPS","k-ip"]}:{badge:{ro:"Cerere HTTP spre pod",en:"HTTP request to the pod"},tok:["HTTP","k-app"]},
+
+tables:{
+  rules:{title:{ro:"Regulile din Ingress „shop”",en:"The rules in the \"shop\" Ingress"},cols:["Host",{ro:"Cale",en:"Path"},"pathType","Backend"],idx:true,
+    rows:()=>[["shop.example.com","/api","Prefix","svc/api:80"],["shop.example.com","/","Prefix","svc/shop:80"],["blog.example.com","/","Prefix","svc/blog:80"],[{ro:"(orice altceva)",en:"(anything else)"},"","","default backend (404)"]]},
+  tlsT:{title:{ro:"TLS în Ingress",en:"TLS in the Ingress"},cols:["Host","Secret",{ro:"Emis de",en:"Issued by"}],
+    rows:()=>[["shop.example.com","shop-tls",{ro:"cert-manager · Let's Encrypt",en:"cert-manager · Let's Encrypt"}],["blog.example.com","blog-tls",{ro:"cert-manager · Let's Encrypt",en:"cert-manager · Let's Encrypt"}]]},
+  eps:{title:{ro:"Endpoint-urile lui svc/api (folosite direct de controller)",en:"svc/api's endpoints (used directly by the controller)"},cols:["Pod","IP:port",{ro:"Gata",en:"Ready"}],
+    rows:()=>[["api-6f9c","10.244.1.9:8080","true"],["api-8k2d","10.244.2.33:8080","true"]]},
+  ann:{title:{ro:"Adnotări ingress-nginx des folosite",en:"Commonly used ingress-nginx annotations"},cols:[{ro:"Adnotare",en:"Annotation"},{ro:"Ce face",en:"What it does"}],
+    rows:()=>[["nginx.ingress.kubernetes.io/rewrite-target",{ro:"rescrie calea înainte de backend (/api/x → /x)",en:"rewrites the path before the backend (/api/x → /x)"}],["…/limit-rps",{ro:"limitează cererile pe secundă per IP",en:"limits requests per second per IP"}],["…/auth-url",{ro:"verifică autentificarea la un serviciu extern",en:"checks authentication with an external service"}],["…/canary-weight",{ro:"trimite un procent din trafic la o versiune nouă",en:"sends a percentage of traffic to a new version"}],["…/proxy-body-size",{ro:"mărimea maximă a cererii (încărcări)",en:"maximum request size (uploads)"}]]}
+},
+log:{title:{ro:"Jurnalul cererilor",en:"Request log"},lead:{ro:"Aceeași adresă publică, backend-uri diferite: decide host-ul și calea.",en:"The same public address, different backends: the host and path decide."},first:{ro:"Moment",en:"Moment"},minWidth:560,
+  cols:[{h:"Host",v:f=>f.host,cls:"ip"},{h:{ro:"Cale",en:"Path"},v:f=>f.path,cls:"ip"},{h:{ro:"Ajunge la",en:"Reaches"},v:f=>f.status||f.to,cls:"mac"}]},
+
+steps:[
+{at:["ing","sshop","sapi"],frame:null,kind:"none",tables:["rules"],
+ title:{ro:"Scenariul: trei aplicații web, un singur IP",en:"The scenario: three web apps, one IP"},
+ body:{ro:`<p>Un cluster rulează un magazin (<code>shop</code>), un API (<code>api</code>) și un blog. Fiecare are un Service de tip ClusterIP (vezi <a href="../kubernetes/index.html">lecția Kubernetes</a>), accesibil doar din interior.</p>
+<p>Le-am putea expune pe fiecare cu câte un Service <strong>LoadBalancer</strong>, dar asta înseamnă câte un IP public și câte un load balancer plătit pentru fiecare aplicație. Și n-am putea trimite <code>shop.example.com/api</code> la altă aplicație decât <code>shop.example.com/</code>.</p>
+<p>Un <strong>Ingress</strong> rezolvă asta: <strong>un singur</strong> punct de intrare HTTP(S), cu reguli după <strong>domeniu</strong> (host) și <strong>cale</strong> (path).</p>`,
+ en:`<p>A cluster runs a shop (<code>shop</code>), an API (<code>api</code>) and a blog. Each has a ClusterIP Service (see the <a href="../kubernetes/index.html">Kubernetes lesson</a>), reachable only from inside.</p>
+<p>We could expose each with its own <strong>LoadBalancer</strong> Service, but that means one public IP and one paid load balancer per app. And we couldn't send <code>shop.example.com/api</code> to a different app than <code>shop.example.com/</code>.</p>
+<p>An <strong>Ingress</strong> solves this: <strong>a single</strong> HTTP(S) entry point, with rules by <strong>domain</strong> (host) and <strong>path</strong>.</p>`}},
+
+{at:"ing",frame:null,kind:"none",tables:["rules"],who:"Ingress controller",
+ title:{ro:"Obiectul Ingress și controller-ul: reguli și cine le aplică",en:"The Ingress object and the controller: rules, and who applies them"},
+ body:{ro:`<p>Două lucruri diferite, des confundate:</p>
+<ul><li><strong>Obiectul Ingress</strong>: un YAML cu reguli („host X, cale Y → Service Z”). Singur, nu face nimic.</li>
+<li><strong>Controller-ul Ingress</strong>: un program care rulează în cluster (aici <strong>ingress-nginx</strong>, un nginx în pod-uri), urmărește obiectele Ingress prin API server, își generează configurația (<code>nginx.conf</code>) și o reîncarcă la fiecare schimbare.</li></ul>
+<p>Controller-ul are la rândul lui un Service de tip <strong>LoadBalancer</strong>: e singurul IP public necesar. Câmpul <code>ingressClassName: nginx</code> spune ce controller răspunde de un Ingress (pot fi mai mulți în același cluster).</p>`,
+ en:`<p>Two different things, often confused:</p>
+<ul><li>The <strong>Ingress object</strong>: a YAML with rules ("host X, path Y → Service Z"). On its own it does nothing.</li>
+<li>The <strong>Ingress controller</strong>: a program running in the cluster (here <strong>ingress-nginx</strong>, an nginx in pods) that watches Ingress objects through the API server, generates its configuration (<code>nginx.conf</code>) and reloads it on every change.</li></ul>
+<p>The controller in turn has a <strong>LoadBalancer</strong> Service: the only public IP needed. The <code>ingressClassName: nginx</code> field says which controller handles an Ingress (a cluster can have several).</p>`},
+ try:[{cmd:"kubectl get ingress -A",d:{ro:"Toate Ingress-urile, cu host-urile și adresa lor.",en:"Every Ingress, with its hosts and address."}},{cmd:"kubectl get ingressclass",d:{ro:"Controller-ele instalate.",en:"The installed controllers."}}]},
+
+{at:"user",frame:R1,kind:"r",move:[[["user","lb"]],[["lb","ing"]]],log:"shop.example.com/api/products",who:"Client",
+ title:{ro:"Cererea ajunge la controller",en:"The request reaches the controller"},
+ body:{ro:`<p>Clientul cere <code>https://shop.example.com/api/products</code>. DNS-ul duce <code>shop.example.com</code> (și <code>blog.example.com</code>) la același IP: <code>198.51.100.20</code>, load balancer-ul controller-ului.</p>
+<p>De la load balancer la podul ingress-nginx, pachetul face exact drumul din <a href="../k8s-intrare/index.html">lecția despre viața unui pachet</a>: NodePort, iptables, DNAT. Aici ne interesează ce face nginx când primește cererea.</p>`,
+ en:`<p>The client requests <code>https://shop.example.com/api/products</code>. DNS points <code>shop.example.com</code> (and <code>blog.example.com</code>) to the same IP: <code>198.51.100.20</code>, the controller's load balancer.</p>
+<p>From the load balancer to the ingress-nginx pod, the packet takes exactly the path from the <a href="../k8s-intrare/index.html">life-of-a-packet lesson</a>: NodePort, iptables, DNAT. Here we care about what nginx does once it receives the request.</p>`}},
+
+{at:"ing",frame:R2,kind:"r",tables:["tlsT"],hl:{tlsT:"shop.example.com"},who:"ingress-nginx",
+ title:{ro:"Terminarea TLS: certificatul vine dintr-un Secret",en:"TLS termination: the certificate comes from a Secret"},
+ body:{ro:`<p>Cererea e criptată. Controller-ul citește <strong>SNI</strong>-ul din ClientHello (<code>shop.example.com</code>, vezi <a href="../https/index.html">lecția HTTPS</a>) și alege certificatul potrivit din secțiunea <code>tls</code> a Ingress-ului: <strong>Secret</strong>-ul <code>shop-tls</code>.</p>
+<p>Certificatul a fost pus acolo automat de <strong>cert-manager</strong>, care l-a obținut de la Let's Encrypt (ACME) și îl reînnoiește înainte să expire.</p>
+<p>După negociere, nginx <strong>decriptează</strong> cererea și vede antetul <code>Host</code> și calea. De aici încolo, spre pod-uri, traficul e de obicei HTTP simplu în rețeaua clusterului.</p>`,
+ en:`<p>The request is encrypted. The controller reads the <strong>SNI</strong> from the ClientHello (<code>shop.example.com</code>, see the <a href="../https/index.html">HTTPS lesson</a>) and picks the matching certificate from the Ingress's <code>tls</code> section: the <code>shop-tls</code> <strong>Secret</strong>.</p>
+<p>The certificate was put there automatically by <strong>cert-manager</strong>, which got it from Let's Encrypt (ACME) and renews it before it expires.</p>
+<p>After the handshake, nginx <strong>decrypts</strong> the request and sees the <code>Host</code> header and the path. From here on, to the pods, traffic is usually plain HTTP on the cluster network.</p>`},
+ try:[{cmd:"kubectl get certificate -A",d:{ro:"Certificatele gestionate de cert-manager și dacă sunt gata.",en:"Certificates managed by cert-manager and whether they're ready."}}]},
+
+{at:"ing",frame:R3,kind:"r",tables:["rules"],hl:{rules:[0]},who:"ingress-nginx",
+ title:{ro:"Potrivirea: host, apoi cea mai lungă cale",en:"Matching: host first, then the longest path"},
+ body:{ro:`<p>nginx caută întâi regulile pentru <strong>host</strong>-ul <code>shop.example.com</code>. Găsește două căi: <code>/api</code> și <code>/</code>, ambele de tip <code>Prefix</code>.</p>
+<p>Calea <code>/api/products</code> se potrivește cu amândouă, dar câștigă <strong>cea mai lungă</strong>: <code>/api</code> → <code>svc/api:80</code>.</p>
+<ul><li><code>Prefix</code> se potrivește pe segmente: <code>/api</code> prinde <code>/api</code> și <code>/api/products</code>, dar nu <code>/apiary</code>.</li>
+<li><code>Exact</code> se potrivește doar cu calea identică.</li></ul>`,
+ en:`<p>nginx first looks for rules for the <strong>host</strong> <code>shop.example.com</code>. It finds two paths: <code>/api</code> and <code>/</code>, both of type <code>Prefix</code>.</p>
+<p>The path <code>/api/products</code> matches both, but <strong>the longest</strong> wins: <code>/api</code> → <code>svc/api:80</code>.</p>
+<ul><li><code>Prefix</code> matches by segment: <code>/api</code> catches <code>/api</code> and <code>/api/products</code>, but not <code>/apiary</code>.</li>
+<li><code>Exact</code> matches only the identical path.</li></ul>`}},
+
+{at:"ing",frame:R4,kind:"r",move:[[["ing","sapi"]],[["sapi","papi"]]],rest:["papi"],tables:["eps"],hl:{eps:"api-6f9c"},log:{ro:"→ pod api",en:"→ api pod"},who:"ingress-nginx",
+ title:{ro:"Spre pod: direct la un endpoint",en:"To the pod: straight to an endpoint"},
+ body:{ro:`<p>Surpriză: ingress-nginx <strong>nu</strong> trimite cererea la ClusterIP-ul <code>10.96.30.2</code>. Citește <strong>endpoint-urile</strong> Service-ului (IP-urile pod-urilor gata) și alege el un pod, aici <code>10.244.1.9:8080</code>. Așa poate face echilibrare pe cereri, nu pe conexiuni, și poate refolosi conexiunile spre pod-uri (keepalive).</p>
+<p>Deschide (sau refolosește) o conexiune HTTP spre pod și adaugă antete: <code>X-Forwarded-For</code> (IP-ul clientului), <code>X-Forwarded-Proto: https</code>, <code>X-Request-ID</code>.</p>`,
+ en:`<p>Surprise: ingress-nginx does <strong>not</strong> send the request to the ClusterIP <code>10.96.30.2</code>. It reads the Service's <strong>endpoints</strong> (the ready pod IPs) and picks a pod itself, here <code>10.244.1.9:8080</code>. That lets it balance per request rather than per connection, and reuse connections to pods (keepalive).</p>
+<p>It opens (or reuses) an HTTP connection to the pod and adds headers: <code>X-Forwarded-For</code> (the client's IP), <code>X-Forwarded-Proto: https</code>, <code>X-Request-ID</code>.</p>`},
+ more:{ro:`<p>De aceea Service-ul unui backend de Ingress nu e folosit „ca Service” de nginx; e folosit ca listă de pod-uri. Alte controller-e (de ex. unele din cloud) trimit totuși la NodePort sau la ClusterIP. Comportamentul depinde de controller.</p>`,
+  en:`<p>That's why an Ingress backend's Service isn't used "as a Service" by nginx; it's used as a list of pods. Other controllers (e.g. some cloud ones) do send to the NodePort or ClusterIP. The behaviour depends on the controller.</p>`}},
+
+{at:"papi",frame:null,kind:"none",who:{ro:"Răspunsul",en:"The response"},
+ title:{ro:"Răspunsul și jurnalul",en:"The response and the log"},
+ body:{ro:`<p>Podul api răspunde <code>200 OK</code> cu JSON. nginx primește răspunsul, îl <strong>criptează</strong> pentru client (TLS) și îl trimite înapoi pe aceeași conexiune.</p>
+<p>În log-ul controller-ului apare o linie cu host-ul, calea, starea, backend-ul ales și durata, utilă la depanare:</p>
+<p class="quote">203.0.113.25 "GET /api/products" 200 upstream=10.244.1.9:8080 0.012s shop-api-80</p>`,
+ en:`<p>The api pod answers <code>200 OK</code> with JSON. nginx receives the response, <strong>encrypts</strong> it for the client (TLS) and sends it back on the same connection.</p>
+<p>The controller's log gets a line with the host, path, status, chosen backend and duration, useful for debugging:</p>
+<p class="quote">203.0.113.25 "GET /api/products" 200 upstream=10.244.1.9:8080 0.012s shop-api-80</p>`},
+ try:[{cmd:"kubectl logs -n ingress-nginx deploy/ingress-nginx-controller --tail=20",d:{ro:"Ultimele cereri văzute de controller.",en:"The latest requests the controller saw."}}]},
+
+{at:"ing",frame:C1,kind:"c",move:[[["user","lb"]],[["lb","ing"]],[["ing","sshop"]],[["sshop","pshop"]]],rest:["pshop"],tables:["rules"],hl:{rules:[1]},log:"shop.example.com/cart",who:"ingress-nginx",
+ title:{ro:"Altă cale, altă aplicație",en:"Another path, another app"},
+ body:{ro:`<p>Clientul deschide <code>https://shop.example.com/cart</code>. Același IP, același controller, același certificat. Dar <code>/cart</code> nu începe cu <code>/api</code>, deci se potrivește doar regula <code>Prefix /</code> → <code>svc/shop</code>.</p>
+<p>Cererea ajunge la podul magazinului (<code>10.244.2.21:3000</code>). O singură adresă publică servește, după cale, două aplicații complet diferite.</p>`,
+ en:`<p>The client opens <code>https://shop.example.com/cart</code>. The same IP, the same controller, the same certificate. But <code>/cart</code> doesn't start with <code>/api</code>, so only the <code>Prefix /</code> rule matches → <code>svc/shop</code>.</p>
+<p>The request reaches the shop pod (<code>10.244.2.21:3000</code>). One public address serves two completely different apps, depending on the path.</p>`}},
+
+{at:"ing",frame:D1,kind:"d",move:[[["user","lb"]],[["lb","ing"]],[["ing","lb"]],[["lb","user"]]],rest:["user"],tables:["rules"],hl:{rules:[3]},marks:{ing:{k:"drop",t:"404"}},log:"necunoscut.example.com",who:"ingress-nginx",
+ title:{ro:"Un host necunoscut: default backend",en:"An unknown host: the default backend"},
+ body:{ro:`<p>Cineva trimite o cerere cu <code>Host: necunoscut.example.com</code> (de ex. un DNS greșit sau un scanner). Nicio regulă nu are acest host.</p>
+<p>Controller-ul trimite cererea la <strong>default backend</strong>, care răspunde <code>404 Not Found</code>. Pe HTTPS, folosește un certificat implicit („Kubernetes Ingress Controller Fake Certificate”), deci browserul ar afișa și un avertisment de certificat.</p>`,
+ en:`<p>Someone sends a request with <code>Host: unknown.example.com</code> (e.g. a wrong DNS entry or a scanner). No rule has this host.</p>
+<p>The controller sends the request to the <strong>default backend</strong>, which answers <code>404 Not Found</code>. Over HTTPS it uses a default certificate ("Kubernetes Ingress Controller Fake Certificate"), so the browser would also show a certificate warning.</p>`}},
+
+{at:"ing",frame:null,kind:"none",tables:["ann"],who:{ro:"Adnotări",en:"Annotations"},
+ title:{ro:"Adnotările: tot ce nu e în standard",en:"Annotations: everything the standard leaves out"},
+ body:{ro:`<p>Standardul Ingress acoperă doar host, cale, backend și TLS. Restul (rescrierea căilor, limitarea traficului, autentificare, lansări canary, mărimea maximă a cererii) se setează prin <strong>adnotări</strong> specifice controller-ului (în dreapta).</p>
+<p>Exemplu de lansare <strong>canary</strong>: un al doilea Ingress pentru <code>api-v2</code> cu <code>canary: "true"</code> și <code>canary-weight: "10"</code> trimite 10% din cereri la versiunea nouă, restul la cea veche.</p>
+<p class="note">Problema: adnotările diferă de la un controller la altul, deci un Ingress scris pentru nginx nu merge la fel pe alt controller. E unul dintre motivele apariției Gateway API.</p>`,
+ en:`<p>The Ingress standard only covers host, path, backend and TLS. Everything else (path rewriting, rate limiting, authentication, canary releases, maximum request size) is set through controller-specific <strong>annotations</strong> (on the right).</p>
+<p>A <strong>canary</strong> release example: a second Ingress for <code>api-v2</code> with <code>canary: "true"</code> and <code>canary-weight: "10"</code> sends 10% of requests to the new version and the rest to the old one.</p>
+<p class="note">The catch: annotations differ between controllers, so an Ingress written for nginx won't behave the same on another controller. That's one reason Gateway API appeared.</p>`}},
+
+{at:["lb","ing"],frame:null,kind:"none",who:"Gateway API",
+ title:{ro:"Gateway API: succesorul lui Ingress",en:"Gateway API: Ingress's successor"},
+ body:{ro:`<p><strong>Gateway API</strong> e noul standard Kubernetes pentru traficul de intrare. Împarte responsabilitățile pe roluri:</p>
+<ul><li><strong>GatewayClass</strong>: ce implementare (nginx, Envoy, cloud) — echipa de platformă;</li>
+<li><strong>Gateway</strong>: punctul de intrare (porturi, certificate) — echipa de operare;</li>
+<li><strong>HTTPRoute</strong>: regulile unei aplicații (host, cale, antete, ponderi) — echipa aplicației.</li></ul>
+<p>Lucruri care la Ingress cereau adnotări (împărțirea traficului pe procente, potrivire după antete, rescrieri) sunt aici <strong>în standard</strong>, deci funcționează la fel pe orice implementare.</p>`,
+ en:`<p><strong>Gateway API</strong> is Kubernetes's newer standard for inbound traffic. It splits responsibilities by role:</p>
+<ul><li><strong>GatewayClass</strong>: which implementation (nginx, Envoy, cloud) — the platform team;</li>
+<li><strong>Gateway</strong>: the entry point (ports, certificates) — the operations team;</li>
+<li><strong>HTTPRoute</strong>: one app's rules (host, path, headers, weights) — the app team.</li></ul>
+<p>Things that needed annotations with Ingress (percentage traffic splits, header matching, rewrites) are <strong>in the standard</strong> here, so they work the same on any implementation.</p>`}},
+
+{at:["ing","sshop","sapi"],frame:null,kind:"none",summary:true,
+ title:{ro:"Recapitulare",en:"Recap"},
+ body:{ro:`<div class="flow"><span>DNS → IP LB</span><i>→</i><span>controller (TLS din Secret)</span><i>→</i><span>host</span><i>→</i><span>cea mai lungă cale</span><i>→</i><span>endpoint pod</span></div>
+<ul><li><strong>Ingress</strong> = reguli; <strong>controller</strong> = programul care le aplică (ingress-nginx).</li>
+<li>Un singur IP public (Service-ul LoadBalancer al controller-ului) pentru toate aplicațiile web.</li>
+<li><strong>TLS</strong> se termină la controller; certificatele stau în <strong>Secret</strong>-uri, puse de cert-manager.</li>
+<li>Se alege întâi <strong>host</strong>-ul, apoi <strong>calea cea mai lungă</strong> (Prefix / Exact).</li>
+<li>ingress-nginx trimite direct la <strong>endpoint-uri</strong> (pod-uri), cu X-Forwarded-*.</li>
+<li>Host necunoscut → <strong>default backend</strong> (404). Extra-uri prin <strong>adnotări</strong>; standardul nou e <strong>Gateway API</strong>.</li></ul>
+<p><button type="button" class="btn primary" data-goto="quiz">Mergi la test ↓</button></p>`,
+ en:`<div class="flow"><span>DNS → LB IP</span><i>→</i><span>controller (TLS from Secret)</span><i>→</i><span>host</span><i>→</i><span>longest path</span><i>→</i><span>pod endpoint</span></div>
+<ul><li><strong>Ingress</strong> = rules; <strong>controller</strong> = the program applying them (ingress-nginx).</li>
+<li>One public IP (the controller's LoadBalancer Service) for every web app.</li>
+<li><strong>TLS</strong> ends at the controller; certificates live in <strong>Secrets</strong>, placed by cert-manager.</li>
+<li>The <strong>host</strong> is chosen first, then the <strong>longest path</strong> (Prefix / Exact).</li>
+<li>ingress-nginx sends straight to <strong>endpoints</strong> (pods), with X-Forwarded-*.</li>
+<li>Unknown host → <strong>default backend</strong> (404). Extras via <strong>annotations</strong>; the new standard is <strong>Gateway API</strong>.</li></ul>
+<p><button type="button" class="btn primary" data-goto="quiz">Go to the quiz ↓</button></p>`}}
+],
+
+reference:(T,lang)=>{
+  const ro=lang==="ro";
+  const cmd=(c,d)=>`<div class="cmdrow"><div class="cmd"><code>${c}</code><button type="button" class="copy" data-cmd="${c.replace(/"/g,"&quot;")}">${ro?"Copiază":"Copy"}</button></div><p>${T(d)}</p></div>`;
+  let h=`<div class="ref-grid"><section class="card refcard"><h2>${ro?"Ingress-ul din lecție":"The lesson's Ingress"}</h2>
+<pre class="yaml">apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: shop
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [shop.example.com]
+      secretName: shop-tls
+  rules:
+    - host: shop.example.com
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service: { name: api, port: { number: 80 } }
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: shop, port: { number: 80 } }</pre></section>
+<section class="card refcard"><h2>${ro?"Același lucru în Gateway API":"The same in Gateway API"}</h2>
+<pre class="yaml">apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: shop
+spec:
+  parentRefs: [ { name: public-gateway } ]
+  hostnames: [shop.example.com]
+  rules:
+    - matches: [ { path: { type: PathPrefix, value: /api } } ]
+      backendRefs: [ { name: api, port: 80 } ]
+    - matches: [ { path: { type: PathPrefix, value: / } } ]
+      backendRefs:
+        - { name: shop,    port: 80, weight: 90 }
+        - { name: shop-v2, port: 80, weight: 10 }  <span class="c"># canary</span></pre></section></div>`;
+  h+=`<div class="ref-stack" style="margin-top:12px"><section class="card refcard"><h2>${ro?"Comenzi utile":"Useful commands"}</h2><div class="try">`;
+  h+=cmd("kubectl describe ingress shop",{ro:"Regulile, backend-urile și evenimentele (de ex. Service inexistent).",en:"The rules, backends and events (e.g. a missing Service)."});
+  h+=cmd("curl -H \"Host: shop.example.com\" http://198.51.100.20/api/products",{ro:"Testează o regulă fără DNS, punând antetul Host manual.",en:"Tests a rule without DNS by setting the Host header manually."});
+  h+=cmd("kubectl exec -n ingress-nginx deploy/ingress-nginx-controller -- cat /etc/nginx/nginx.conf | grep -A3 shop.example.com",{ro:"Configurația nginx generată din Ingress.",en:"The nginx configuration generated from the Ingress."});
+  h+=`</div></section></div>`;
+  return h;
+},
+
+gloss:[
+ ["Ingress",null,{ro:"Obiect Kubernetes cu reguli HTTP: host + cale → Service.",en:"A Kubernetes object with HTTP rules: host + path → Service."}],
+ ["Ingress controller",null,{ro:"Programul care citește Ingress-urile și rutează efectiv traficul (ingress-nginx, Traefik…).",en:"The program that reads Ingresses and actually routes traffic (ingress-nginx, Traefik…)."}],
+ ["IngressClass",null,{ro:"Spune ce controller se ocupă de un Ingress.",en:"Says which controller handles an Ingress."}],
+ ["Host",null,{ro:"Antetul HTTP cu numele domeniului cerut.",en:"The HTTP header with the requested domain name."}],
+ ["pathType",null,{ro:"Felul potrivirii căii: Prefix (pe segmente) sau Exact.",en:"How the path matches: Prefix (by segment) or Exact."}],
+ ["Backend",null,{ro:"Service-ul (și portul) la care ajunge cererea.",en:"The Service (and port) the request goes to."}],
+ [{ro:"Terminare TLS",en:"TLS termination"},null,{ro:"Locul unde se decriptează HTTPS-ul; aici, la controller.",en:"Where HTTPS is decrypted; here, at the controller."}],
+ ["Secret (TLS)",null,{ro:"Obiect Kubernetes care ține certificatul și cheia privată.",en:"A Kubernetes object holding the certificate and private key."}],
+ ["cert-manager",null,{ro:"Program care obține și reînnoiește automat certificate în cluster.",en:"A program that automatically gets and renews certificates in the cluster."}],
+ ["Default backend",null,{ro:"Unde ajung cererile care nu se potrivesc cu nicio regulă (de obicei 404).",en:"Where requests matching no rule go (usually a 404)."}],
+ [{ro:"Adnotare",en:"Annotation"},null,{ro:"Setare suplimentară, specifică controller-ului, pusă în metadata.",en:"An extra, controller-specific setting placed in metadata."}],
+ ["Canary",null,{ro:"Lansare în care doar un procent din trafic merge la versiunea nouă.",en:"A release where only a percentage of traffic goes to the new version."}],
+ ["Gateway API",null,{ro:"Standardul mai nou pentru trafic de intrare: GatewayClass, Gateway, HTTPRoute.",en:"The newer inbound-traffic standard: GatewayClass, Gateway, HTTPRoute."}],
+ ["HTTPRoute",null,{ro:"Regulile unei aplicații în Gateway API.",en:"One app's rules in Gateway API."}]
+],
+glossEx:{
+ "Ingress":{ro:"shop.example.com/api → svc/api, shop.example.com/ → svc/shop.",en:"shop.example.com/api → svc/api, shop.example.com/ → svc/shop."},
+ "Ingress controller":{ro:"pod-urile ingress-nginx-controller din namespace-ul ingress-nginx.",en:"the ingress-nginx-controller pods in the ingress-nginx namespace."},
+ "IngressClass":{ro:"ingressClassName: nginx; alt Ingress ar putea avea ingressClassName: traefik.",en:"ingressClassName: nginx; another Ingress could have ingressClassName: traefik."},
+ "Host":{ro:"Host: shop.example.com și Host: blog.example.com ajung la același IP, dar la aplicații diferite.",en:"Host: shop.example.com and Host: blog.example.com reach the same IP but different apps."},
+ "pathType":{ro:"Prefix /api prinde /api/products; Exact /api prinde doar /api.",en:"Prefix /api catches /api/products; Exact /api catches only /api."},
+ "Backend":{ro:"service: { name: api, port: { number: 80 } }",en:"service: { name: api, port: { number: 80 } }"},
+ "TLS termination":{ro:"clientul → controller pe HTTPS; controller → pod pe HTTP.",en:"client → controller over HTTPS; controller → pod over HTTP."},
+ "Secret (TLS)":{ro:"kubectl get secret shop-tls arată tipul kubernetes.io/tls cu tls.crt și tls.key.",en:"kubectl get secret shop-tls shows type kubernetes.io/tls with tls.crt and tls.key."},
+ "cert-manager":{ro:"adnotarea cert-manager.io/cluster-issuer: letsencrypt pe Ingress îi cere un certificat.",en:"the cert-manager.io/cluster-issuer: letsencrypt annotation on the Ingress requests a certificate."},
+ "Default backend":{ro:"curl -H \"Host: altceva.ro\" la IP-ul controller-ului → 404 Not Found.",en:"curl -H \"Host: something.else\" to the controller's IP → 404 Not Found."},
+ "Annotation":{ro:"nginx.ingress.kubernetes.io/proxy-body-size: \"20m\" pentru încărcări mari.",en:"nginx.ingress.kubernetes.io/proxy-body-size: \"20m\" for large uploads."},
+ "Canary":{ro:"canary-weight: \"10\" → 1 cerere din 10 la api-v2.",en:"canary-weight: \"10\" → 1 request in 10 to api-v2."},
+ "Gateway API":{ro:"kubectl get gateway,httproute -A arată obiectele noi.",en:"kubectl get gateway,httproute -A shows the newer objects."},
+ "HTTPRoute":{ro:"backendRefs cu weight: 90 și weight: 10 împart traficul fără adnotări.",en:"backendRefs with weight: 90 and weight: 10 split traffic without annotations."}
+},
+
+quiz:[
+ {q:{ro:"Care e diferența dintre un Ingress și un Ingress controller?",en:"What's the difference between an Ingress and an Ingress controller?"},o:[{ro:"Nu e nicio diferență",en:"There's none"},{ro:"Ingress-ul e un set de reguli; controller-ul e programul care le aplică",en:"The Ingress is a set of rules; the controller is the program applying them"},{ro:"Controller-ul e un Service ClusterIP",en:"The controller is a ClusterIP Service"},{ro:"Ingress-ul e un pod",en:"The Ingress is a pod"}],a:1,e:{ro:"Fără controller, un obiect Ingress nu face nimic.",en:"Without a controller, an Ingress object does nothing."}},
+ {q:{ro:"Câte IP-uri publice îți trebuie pentru 3 aplicații web cu un Ingress?",en:"How many public IPs do you need for 3 web apps with an Ingress?"},o:[{ro:"3",en:"3"},{ro:"1, al controller-ului",en:"1, the controller's"},{ro:"0",en:"0"},{ro:"6",en:"6"}],a:1,e:{ro:"Toate domeniile duc la același IP; controller-ul decide după host și cale.",en:"All domains point to the same IP; the controller decides by host and path."}},
+ {q:{ro:"Pentru /api/products, regulile Prefix /api și Prefix / se potrivesc amândouă. Care câștigă?",en:"For /api/products, both Prefix /api and Prefix / rules match. Which wins?"},o:[{ro:"/",en:"/"},{ro:"/api, pentru că e mai lungă",en:"/api, because it's longer"},{ro:"Prima scrisă în YAML",en:"The first one in the YAML"},{ro:"Una aleator",en:"One at random"}],a:1,e:{ro:"Se alege cea mai lungă potrivire.",en:"The longest match is chosen."}},
+ {q:{ro:"Unde se decriptează HTTPS-ul într-un Ingress tipic?",en:"Where is HTTPS decrypted in a typical Ingress?"},o:[{ro:"În pod-ul aplicației",en:"In the app pod"},{ro:"La controller-ul Ingress, cu certificatul din Secret",en:"At the Ingress controller, with the certificate from a Secret"},{ro:"În DNS",en:"In DNS"},{ro:"Nu se decriptează",en:"It isn't"}],a:1,e:{ro:"De aceea controller-ul poate citi Host-ul și calea.",en:"That's how the controller can read the Host and path."}},
+ {q:{ro:"Cum alege controller-ul ce certificat să folosească?",en:"How does the controller choose which certificate to use?"},o:[{ro:"După SNI-ul din ClientHello",en:"By the SNI in the ClientHello"},{ro:"După IP-ul clientului",en:"By the client's IP"},{ro:"Aleator",en:"At random"},{ro:"După cale",en:"By the path"}],a:0,e:{ro:"Calea e criptată încă; SNI-ul e trimis în clar la începutul negocierii.",en:"The path is still encrypted; SNI is sent in the clear at the start of the handshake."}},
+ {q:{ro:"Unde trimite ingress-nginx cererea spre o aplicație?",en:"Where does ingress-nginx send a request for an app?"},o:[{ro:"La ClusterIP-ul Service-ului, mereu",en:"Always to the Service's ClusterIP"},{ro:"Direct la un endpoint (IP de pod) al Service-ului",en:"Straight to one of the Service's endpoints (pod IPs)"},{ro:"La load balancer",en:"To the load balancer"},{ro:"La DNS",en:"To DNS"}],a:1,e:{ro:"Așa poate echilibra pe cereri și refolosi conexiunile.",en:"That way it can balance per request and reuse connections."}},
+ {q:{ro:"O cerere vine cu un Host care nu e în nicio regulă. Ce se întâmplă?",en:"A request arrives with a Host no rule mentions. What happens?"},o:[{ro:"Ajunge la prima aplicație",en:"It reaches the first app"},{ro:"Merge la default backend, de obicei 404",en:"It goes to the default backend, usually a 404"},{ro:"Clusterul se oprește",en:"The cluster stops"},{ro:"E trimisă la toate",en:"It's sent to all"}],a:1,e:{ro:"Pe HTTPS, cu un certificat implicit, deci și un avertisment în browser.",en:"Over HTTPS, with a default certificate, so also a browser warning."}},
+ {q:{ro:"Ce avantaj principal aduce Gateway API față de Ingress?",en:"What's Gateway API's main advantage over Ingress?"},o:[{ro:"E mai vechi",en:"It's older"},{ro:"Funcții ca împărțirea traficului pe procente sunt în standard, nu în adnotări specifice controller-ului",en:"Features like percentage traffic splits are in the standard, not controller-specific annotations"},{ro:"Nu mai are nevoie de controller",en:"It no longer needs a controller"},{ro:"Merge doar cu nginx",en:"It only works with nginx"}],a:1,e:{ro:"Și separă rolurile: GatewayClass, Gateway, HTTPRoute.",en:"It also separates roles: GatewayClass, Gateway, HTTPRoute."}}
+]
+};
+})();
+</script>
+<script src="../assets/engine.js"></script>
+</body>
+</html>

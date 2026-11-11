@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>VLAN și 802.1Q</title>
+<meta name="description" content="Lecție interactivă: cum împarte un switch mai multe rețele virtuale (VLAN), ce e eticheta 802.1Q, porturi access și trunk, rutare între VLAN-uri. / Interactive lesson on VLANs and 802.1Q tags.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<script>
+(function(){
+const MAC={f1:"02:F1:00:00:00:11",f2:"02:F2:00:00:00:12",g1:"02:61:00:00:00:21",g2:"02:62:00:00:00:22",r1:"02:01:00:00:00:01",bc:"FF:FF:FF:FF:FF:FF"};
+const IP={f1:"10.10.10.11",f2:"10.10.10.12",g1:"10.20.20.21",g2:"10.20.20.22",gw10:"10.10.10.1",gw20:"10.20.20.1"};
+const F1={dstMac:MAC.f2,srcMac:MAC.f1,etype:"0x0800 (IPv4)",srcIp:IP.f1,dstIp:IP.f2,payload:{ro:"fișier salarii.xlsx (bucată)",en:"salaries.xlsx (chunk)"},port:{ro:"intră pe portul 1 (access, VLAN 10)",en:"enters port 1 (access, VLAN 10)"}};
+const F2={...F1,vidInt:{ro:"10 (doar în memoria switch-ului)",en:"10 (only in the switch's memory)"}};
+const F3={dstMac:MAC.f2,srcMac:MAC.f1,tpid:"0x8100",pcp:"0",vid:"10",etype:"0x0800 (IPv4)",srcIp:IP.f1,dstIp:IP.f2,payload:{ro:"fișier salarii.xlsx (bucată)",en:"salaries.xlsx (chunk)"},port:{ro:"iese pe portul 24 (trunk)",en:"leaves on port 24 (trunk)"}};
+const F4={dstMac:MAC.f2,srcMac:MAC.f1,etype:"0x0800 (IPv4)",srcIp:IP.f1,dstIp:IP.f2,payload:{ro:"fișier salarii.xlsx (bucată)",en:"salaries.xlsx (chunk)"},port:{ro:"iese pe portul 3 al SW2 (access, VLAN 10), fără etichetă",en:"leaves SW2 port 3 (access, VLAN 10), untagged"}};
+const B1={dstMac:MAC.bc,srcMac:MAC.g1,tpid:"0x8100",pcp:"0",vid:"20",etype:"0x0806 (ARP)",payload:{ro:"ARP: cine are 10.20.20.22?",en:"ARP: who has 10.20.20.22?"},port:{ro:"inundat doar pe porturile VLAN 20 + trunk",en:"flooded only on VLAN 20 ports + trunk"}};
+const R1={dstMac:MAC.r1,srcMac:MAC.f1,tpid:"0x8100",pcp:"0",vid:"10",etype:"0x0800 (IPv4)",srcIp:IP.f1,dstIp:IP.g1,ttl:"64",payload:{ro:"ping 10.20.20.21",en:"ping 10.20.20.21"},port:{ro:"pe trunk spre R1, subinterfața Gi0/0.10",en:"on the trunk to R1, subinterface Gi0/0.10"}};
+const R2={dstMac:MAC.g1,srcMac:MAC.r1,tpid:"0x8100",pcp:"0",vid:"20",etype:"0x0800 (IPv4)",srcIp:IP.f1,dstIp:IP.g1,ttl:"63",payload:{ro:"ping 10.20.20.21",en:"ping 10.20.20.21"},port:{ro:"R1 îl trimite înapoi pe Gi0/0.20, același cablu",en:"R1 sends it back on Gi0/0.20, the same cable"}};
+
+window.LESSON={
+docTitle:{ro:"VLAN și 802.1Q",en:"VLANs and 802.1Q"},
+eyebrow:{ro:"Lecție interactivă · Rețele",en:"Interactive lesson · Networking"},
+title:{ro:"VLAN: mai multe rețele pe același switch",en:"VLANs: several networks on one switch"},
+sub:{ro:"Cum împart switch-urile un birou în rețele separate fără cabluri noi: porturi access și trunk, eticheta 802.1Q de 4 octeți, tabele MAC pe VLAN, izolarea broadcast-urilor și rutarea între VLAN-uri cu un router „on a stick”.",en:"How switches split an office into separate networks without new cables: access and trunk ports, the 4-byte 802.1Q tag, per-VLAN MAC tables, broadcast isolation and routing between VLANs with a router \"on a stick\"."},
+meta:[{ro:"≈ 20 minute",en:"≈ 20 minutes"},{ro:"11 pași",en:"11 steps"},{ro:"8 întrebări",en:"8 questions"},{ro:"Începător+",en:"Beginner+"}],
+goals:[{ro:"Ce e un VLAN și de ce separă traficul",en:"What a VLAN is and why it separates traffic"},{ro:"Diferența dintre un port access și un port trunk",en:"The difference between an access port and a trunk port"},{ro:"Unde se pune eticheta 802.1Q și ce conține",en:"Where the 802.1Q tag goes and what it holds"},{ro:"Cum comunică două VLAN-uri prin router",en:"How two VLANs talk through a router"}],
+foot:{ro:"Adrese și nume de porturi ilustrative (stil Cisco). Lecția continuă lecția Ethernet.",en:"Illustrative addresses and port names (Cisco style). This lesson follows on from the Ethernet lesson."},
+ui:{frameT:{ro:"Cadrul (live)",en:"The frame (live)"},refT:{ro:"Configurare și bune practici",en:"Configuration and good practice"},refLead:{ro:"Cum arată configurația pe un switch, eticheta octet cu octet și greșelile de securitate frecvente.",en:"What the switch configuration looks like, the tag byte by byte, and common security mistakes."}},
+tryT:{ro:"Încearcă (pe un switch Cisco sau în Packet Tracer)",en:"Try it (on a Cisco switch or in Packet Tracer)"},
+legend:[["lg-eth","ETH",{ro:"cadru fără etichetă",en:"untagged frame"}],["lg-arp","VLAN 10/20",{ro:"cadru cu etichetă 802.1Q",en:"802.1Q-tagged frame"}]],
+
+nodes:{
+  f1:{type:"host",name:"PC-F1",lines:[{ro:"Finanțe · VLAN 10",en:"Finance · VLAN 10"},IP.f1]},
+  g1:{type:"host",name:"PC-G1",lines:[{ro:"Oaspeți · VLAN 20",en:"Guests · VLAN 20"},IP.g1]},
+  sw1:{type:"switch",name:"SW1",lines:[{ro:"etaj 1",en:"floor 1"}]},
+  r1:{type:"router",name:"R1",lines:[".10 → 10.10.10.1",".20 → 10.20.20.1"]},
+  sw2:{type:"switch",name:"SW2",lines:[{ro:"etaj 2",en:"floor 2"}]},
+  f2:{type:"host",name:"PC-F2",lines:[{ro:"Finanțe · VLAN 10",en:"Finance · VLAN 10"},IP.f2]},
+  g2:{type:"host",name:"PC-G2",lines:[{ro:"Oaspeți · VLAN 20",en:"Guests · VLAN 20"},IP.g2]}
+},
+links:[["f1","sw1"],["g1","sw1"],["sw1","sw2"],["sw1","r1"],["sw2","f2"],["sw2","g2"]],
+ports:[["sw1","f1","p1"],["sw1","g1","p2"],["sw1","sw2","p24"],["sw1","r1","p23"],["sw2","f2","p3"],["sw2","g2","p4"]],
+layouts:{
+  wide:{vb:[0,0,1000,500],n:{f1:[80,120],g1:[80,340],sw1:[300,230],r1:[520,430],sw2:[700,230],f2:[900,120],g2:[900,340]},
+    zones:[{x:10,y:20,w:370,h:400,top:true,l:{ro:"Etaj 1",en:"Floor 1"}},{x:620,y:20,w:370,h:400,top:true,l:{ro:"Etaj 2",en:"Floor 2"}}],
+    texts:[{x:500,y:215,t:{ro:"trunk: VLAN 10 + 20 pe un cablu",en:"trunk: VLAN 10 + 20 on one cable"}}]},
+  narrow:{vb:[0,0,360,700],n:{f1:[60,60],g1:[250,60],sw1:[150,200],r1:[300,320],sw2:[150,470],f2:[60,610],g2:[250,610]},
+    side:{f1:"right",sw1:"right",sw2:"right",f2:"right",r1:"left"}}
+},
+groups:[
+  {id:"eth",color:"l2",fields:["dstMac","srcMac"],name:{ro:"Antet Ethernet",en:"Ethernet header"},short:"MAC",grow:3},
+  {id:"tag",color:"arp",fields:["tpid","pcp","vid"],name:{ro:"Eticheta 802.1Q (4 octeți)",en:"802.1Q tag (4 bytes)"},short:"802.1Q",grow:2},
+  {id:"type",color:"l2",fields:["etype"],name:"EtherType",short:"Type",grow:1},
+  {id:"ip",color:"l3",fields:["srcIp","dstIp","ttl"],name:{ro:"Antet IP",en:"IP header"},short:"IP",grow:2},
+  {id:"data",color:"l7",fields:["payload"],name:{ro:"Date",en:"Data"},short:{ro:"Date",en:"Data"},grow:2},
+  {id:"sw",color:"l4",fields:["port","vidInt"],name:{ro:"Ce știe switch-ul (nu e în cadru)",en:"What the switch knows (not in the frame)"},short:"Switch",grow:2}
+],
+fieldLabels:{dstMac:{ro:"MAC destinație",en:"Destination MAC"},srcMac:{ro:"MAC sursă",en:"Source MAC"},tpid:"TPID",pcp:{ro:"Prioritate (PCP)",en:"Priority (PCP)"},vid:"VLAN ID",etype:"EtherType",srcIp:{ro:"IP sursă",en:"Source IP"},dstIp:{ro:"IP destinație",en:"Destination IP"},ttl:"TTL",payload:{ro:"Conținut",en:"Payload"},port:"Port",vidInt:{ro:"VLAN intern",en:"Internal VLAN"}},
+pdu:f=>f.vid?{badge:{ro:"Cadru etichetat 802.1Q",en:"802.1Q-tagged frame"},tok:["VLAN "+f.vid,"k-arp"]}:{badge:{ro:"Cadru Ethernet (fără etichetă)",en:"Ethernet frame (untagged)"},tok:["ETH","k-data"]},
+
+init:{mac:[]},
+tables:{
+  ports:{title:{ro:"Configurația porturilor SW1",en:"SW1 port configuration"},cols:["Port",{ro:"Mod",en:"Mode"},"VLAN"],
+    rows:()=>[["p1 (PC-F1)","access","10"],["p2 (PC-G1)","access","20"],["p23 (R1)","trunk","10, 20"],["p24 (SW2)","trunk","10, 20"]]},
+  mac:{title:{ro:"Tabela MAC a SW1 (pe VLAN-uri)",en:"SW1's MAC table (per VLAN)"},cols:["VLAN","MAC","Port"]},
+  r1sub:{title:{ro:"Subinterfețele lui R1",en:"R1's subinterfaces"},cols:[{ro:"Subinterfață",en:"Subinterface"},"dot1Q","IP"],
+    rows:()=>[["Gi0/0.10","10",IP.gw10+"/24"],["Gi0/0.20","20",IP.gw20+"/24"]]},
+  trunk:{title:{ro:"show interfaces trunk (SW1)",en:"show interfaces trunk (SW1)"},cols:["Port",{ro:"VLAN-uri permise",en:"Allowed VLANs"},"Native"],
+    rows:()=>[["Gi0/23","10,20","999"],["Gi0/24","10,20","999"]]}
+},
+log:{title:{ro:"Jurnalul cadrelor",en:"Frame log"},lead:{ro:"Eticheta apare doar pe trunk-uri; pe porturile access cadrul e normal.",en:"The tag only appears on trunks; on access ports the frame is ordinary."},first:{ro:"Unde",en:"Where"},minWidth:520,
+  cols:[{h:{ro:"MAC sursă",en:"Source MAC"},v:f=>f.srcMac,cls:"ip"},{h:{ro:"MAC destinație",en:"Destination MAC"},v:f=>f.dstMac,cls:"ip"},{h:"VLAN",v:f=>f.vid||{ro:"(fără etichetă)",en:"(untagged)"},cls:"mac"}]},
+
+steps:[
+{at:["sw1","sw2"],frame:null,kind:"none",tables:["ports"],
+ title:{ro:"Scenariul: două departamente, aceleași switch-uri",en:"The scenario: two departments, the same switches"},
+ body:{ro:`<p>Un birou pe două etaje are calculatoare de la <strong>Finanțe</strong> și o rețea pentru <strong>oaspeți</strong>. Toate sunt conectate la aceleași două switch-uri, SW1 și SW2.</p>
+<p>Fără nimic special, totul ar fi <strong>o singură rețea locală</strong>: un oaspete ar primi broadcast-urile Finanțelor, ar putea încerca să le acceseze calculatoarele, iar orice ARP sau broadcast ar ajunge la toți.</p>
+<p>Un <strong>VLAN</strong> (Virtual LAN) împarte <strong>logic</strong> un switch în mai multe switch-uri separate: Finanțe în VLAN 10, oaspeți în VLAN 20. Fizic aceleași cabluri; logic, două rețele care nu se văd.</p>`,
+ en:`<p>A two-floor office has <strong>Finance</strong> computers and a <strong>guest</strong> network. All of them plug into the same two switches, SW1 and SW2.</p>
+<p>With nothing special, everything would be <strong>one local network</strong>: a guest would receive Finance's broadcasts, could try to reach their computers, and every ARP or broadcast would reach everyone.</p>
+<p>A <strong>VLAN</strong> (Virtual LAN) splits a switch <strong>logically</strong> into several separate switches: Finance in VLAN 10, guests in VLAN 20. Physically the same cables; logically, two networks that can't see each other.</p>`},
+ more:{ro:`<p>Fiecare VLAN e un <strong>domeniu de broadcast</strong> separat și, de obicei, un <strong>subnet IP</strong> separat: VLAN 10 = 10.10.10.0/24, VLAN 20 = 10.20.20.0/24. Numerele de VLAN merg de la 1 la 4094.</p>`,
+  en:`<p>Each VLAN is a separate <strong>broadcast domain</strong> and usually a separate <strong>IP subnet</strong>: VLAN 10 = 10.10.10.0/24, VLAN 20 = 10.20.20.0/24. VLAN numbers range from 1 to 4094.</p>`}},
+
+{at:"f1",frame:F1,kind:"f",move:[[["f1","sw1"]]],log:{ro:"PC-F1 → SW1 (access)",en:"PC-F1 → SW1 (access)"},tables:["ports"],hl:{ports:"p1 (PC-F1)"},who:"PC-F1",
+ title:{ro:"Port access: calculatorul nu știe nimic de VLAN",en:"Access port: the computer knows nothing about VLANs"},
+ body:{ro:`<p>PC-F1 trimite date lui PC-F2 (de la etajul 2). Construiește un cadru Ethernet <strong>obișnuit</strong>, exact ca în <a href="../ethernet/index.html">lecția Ethernet</a>: fără nicio mențiune despre VLAN.</p>
+<p>Portul 1 al SW1 e un port <strong>access</strong>, setat pe VLAN 10. Pentru un port access, VLAN-ul e o setare a <strong>portului</strong>, nu a calculatorului: orice intră pe portul 1 aparține de VLAN 10.</p>`,
+ en:`<p>PC-F1 sends data to PC-F2 (on floor 2). It builds an <strong>ordinary</strong> Ethernet frame, exactly as in the <a href="../ethernet/index.html">Ethernet lesson</a>: no mention of any VLAN.</p>
+<p>SW1's port 1 is an <strong>access</strong> port set to VLAN 10. For an access port, the VLAN is a setting of the <strong>port</strong>, not of the computer: anything entering port 1 belongs to VLAN 10.</p>`}},
+
+{at:"sw1",frame:F2,kind:"f",fx:[["mac","10",MAC.f1,"p1"],["mac","10 ",MAC.f2,"p24"]],tables:["mac"],hl:{mac:"10 "},who:"SW1",
+ title:{ro:"SW1 învață și caută doar în VLAN 10",en:"SW1 learns and looks up only in VLAN 10"},
+ body:{ro:`<p>SW1 notează cadrul intern ca aparținând de <strong>VLAN 10</strong> și lucrează ca un switch obișnuit, dar <strong>separat pe fiecare VLAN</strong>:</p>
+<ul><li><strong>Învață</strong>: în VLAN 10, MAC-ul lui PC-F1 e pe portul 1.</li>
+<li><strong>Caută</strong> MAC-ul destinației doar în tabela VLAN 10: PC-F2 a fost văzut venind de pe portul 24 (trunk-ul spre SW2).</li>
+<li>Dacă nu l-ar ști, ar inunda cadrul doar pe porturile din VLAN 10, niciodată pe portul unui oaspete.</li></ul>`,
+ en:`<p>SW1 internally marks the frame as belonging to <strong>VLAN 10</strong> and works like an ordinary switch, but <strong>separately for each VLAN</strong>:</p>
+<ul><li>It <strong>learns</strong>: in VLAN 10, PC-F1's MAC is on port 1.</li>
+<li>It <strong>looks up</strong> the destination MAC only in the VLAN 10 table: PC-F2 was seen arriving from port 24 (the trunk to SW2).</li>
+<li>If it didn't know it, it would flood the frame only to VLAN 10 ports, never to a guest's port.</li></ul>`},
+ try:[{cmd:"show mac address-table vlan 10",d:{ro:"Tabela MAC doar pentru VLAN 10.",en:"The MAC table for VLAN 10 only."}}]},
+
+{at:"sw1",frame:F3,kind:"f",move:[[["sw1","sw2"]]],log:{ro:"pe trunk SW1 → SW2",en:"on the trunk SW1 → SW2"},tables:["trunk"],hl:{trunk:"Gi0/24"},who:"SW1 → trunk",
+ title:{ro:"Pe trunk: se adaugă eticheta 802.1Q",en:"On the trunk: the 802.1Q tag is added"},
+ body:{ro:`<p>Cablul dintre SW1 și SW2 duce trafic din <strong>ambele</strong> VLAN-uri. E un port <strong>trunk</strong>. Ca SW2 să știe din ce VLAN e fiecare cadru, SW1 <strong>inserează o etichetă de 4 octeți</strong>, între MAC-ul sursă și EtherType:</p>
+<div class="flow"><span>MAC dest 6</span><span>MAC src 6</span><span><b>802.1Q 4</b></span><span>EtherType 2</span><span>${"date"}</span><span>FCS 4</span></div>
+<ul><li><strong>TPID</strong> <code>0x8100</code>: „urmează o etichetă VLAN”;</li>
+<li><strong>PCP</strong> (3 biți): prioritatea (0–7), pentru QoS, de ex. telefonie;</li>
+<li><strong>VID</strong> (12 biți): numărul VLAN-ului, aici <code>10</code>.</li></ul>
+<p>Pentru că s-a schimbat conținutul, SW1 recalculează și <strong>FCS</strong>-ul. Un cadru etichetat poate avea până la 1522 de octeți.</p>`,
+ en:`<p>The cable between SW1 and SW2 carries traffic from <strong>both</strong> VLANs. It's a <strong>trunk</strong> port. So that SW2 knows which VLAN each frame is from, SW1 <strong>inserts a 4-byte tag</strong> between the source MAC and the EtherType:</p>
+<div class="flow"><span>dst MAC 6</span><span>src MAC 6</span><span><b>802.1Q 4</b></span><span>EtherType 2</span><span>data</span><span>FCS 4</span></div>
+<ul><li><strong>TPID</strong> <code>0x8100</code>: "a VLAN tag follows";</li>
+<li><strong>PCP</strong> (3 bits): the priority (0–7), for QoS, e.g. telephony;</li>
+<li><strong>VID</strong> (12 bits): the VLAN number, here <code>10</code>.</li></ul>
+<p>Because the content changed, SW1 also recalculates the <strong>FCS</strong>. A tagged frame can be up to 1522 bytes.</p>`},
+ more:{ro:`<p>12 biți pentru VID înseamnă 4096 de valori; 0 și 4095 sunt rezervate, deci 1–4094. Pentru mai multe rețele (de ex. la furnizori), se pun <strong>două</strong> etichete (QinQ, 802.1ad) sau se folosește VXLAN (vezi <a href="../gke-retea/index.html">lecția GKE</a>).</p>`,
+  en:`<p>12 bits for the VID means 4096 values; 0 and 4095 are reserved, so 1–4094. For more networks (e.g. at providers), <strong>two</strong> tags are stacked (QinQ, 802.1ad) or VXLAN is used (see the <a href="../gke-retea/index.html">GKE lesson</a>).</p>`},
+ try:[{cmd:"show interfaces trunk",d:{ro:"Porturile trunk, VLAN-urile permise și VLAN-ul nativ.",en:"Trunk ports, allowed VLANs and the native VLAN."}}]},
+
+{at:"sw2",frame:F4,kind:"f",move:[[["sw2","f2"]]],log:{ro:"SW2 → PC-F2 (access)",en:"SW2 → PC-F2 (access)"},who:"SW2",
+ title:{ro:"SW2 citește eticheta și o scoate",en:"SW2 reads the tag and removes it"},
+ body:{ro:`<p>SW2 primește cadrul pe trunk, citește <code>VID = 10</code> și caută MAC-ul lui PC-F2 <strong>în tabela VLAN 10</strong>: portul 3.</p>
+<p>Portul 3 e un port access, iar calculatoarele nu înțeleg de obicei etichete. Așa că SW2 <strong>scoate eticheta</strong> (și recalculează FCS-ul) și trimite un cadru obișnuit. PC-F2 primește exact ce a trimis PC-F1.</p>
+<p class="key">Regula simplă: <strong>eticheta există doar pe trunk-uri</strong>. Calculatoarele nu o văd niciodată.</p>`,
+ en:`<p>SW2 receives the frame on the trunk, reads <code>VID = 10</code> and looks up PC-F2's MAC <strong>in the VLAN 10 table</strong>: port 3.</p>
+<p>Port 3 is an access port, and computers usually don't understand tags. So SW2 <strong>removes the tag</strong> (and recalculates the FCS) and sends an ordinary frame. PC-F2 receives exactly what PC-F1 sent.</p>
+<p class="key">The simple rule: <strong>tags only exist on trunks</strong>. Computers never see them.</p>`}},
+
+{at:"g1",frame:B1,kind:"b",move:[[["g1","sw1"]],[["sw1","sw2"],["sw1","r1"]],[["sw2","g2"]]],rest:["g2","r1"],marks:{f1:{k:"ok",t:{ro:"nu-l vede",en:"never sees it"}},f2:{k:"ok",t:{ro:"nu-l vede",en:"never sees it"}}},log:{ro:"broadcast în VLAN 20",en:"broadcast in VLAN 20"},who:"PC-G1",
+ title:{ro:"Broadcast-urile rămân în VLAN-ul lor",en:"Broadcasts stay inside their VLAN"},
+ body:{ro:`<p>PC-G1 (oaspete) trimite un <strong>broadcast</strong> ARP: „cine are 10.20.20.22?”. Un broadcast se trimite pe toate porturile, dar <strong>doar ale VLAN-ului lui</strong>:</p>
+<ul><li>SW1 îl trimite pe trunk-uri, etichetat cu <code>VLAN 20</code> (spre SW2 și spre R1, care are o interfață în VLAN 20).</li>
+<li>SW2 îl trimite doar pe portul 4 (PC-G2).</li>
+<li>Calculatoarele Finanțelor (porturile 1 și 3) <strong>nu îl primesc deloc</strong>.</li></ul>
+<p>Asta e și securitate (oaspeții nu văd traficul Finanțelor) și performanță (mai puține broadcast-uri pentru fiecare).</p>`,
+ en:`<p>PC-G1 (a guest) sends an ARP <strong>broadcast</strong>: "who has 10.20.20.22?". A broadcast goes out every port, but <strong>only those of its VLAN</strong>:</p>
+<ul><li>SW1 sends it on the trunks, tagged <code>VLAN 20</code> (to SW2 and to R1, which has an interface in VLAN 20).</li>
+<li>SW2 sends it only on port 4 (PC-G2).</li>
+<li>Finance's computers (ports 1 and 3) <strong>never receive it</strong>.</li></ul>
+<p>That's both security (guests don't see Finance traffic) and performance (fewer broadcasts for everyone).</p>`}},
+
+{at:"f1",frame:R1,kind:"r",move:[[["f1","sw1"]],[["sw1","r1"]]],log:{ro:"PC-F1 → R1 (VLAN 10)",en:"PC-F1 → R1 (VLAN 10)"},tables:["r1sub"],hl:{r1sub:"Gi0/0.10"},who:"PC-F1",
+ title:{ro:"Între VLAN-uri: doar prin router",en:"Between VLANs: only through a router"},
+ body:{ro:`<p>Contabilul vrea să dea ping imprimantei din rețeaua de oaspeți, PC-G1 (<code>10.20.20.21</code>). E <strong>alt subnet</strong>, deci, ca în lecția Ethernet, PC-F1 trimite cadrul la <strong>gateway</strong>: <code>10.10.10.1</code>.</p>
+<p>Gateway-ul e R1, legat la SW1 printr-un singur cablu trunk. R1 are câte o <strong>subinterfață</strong> pe fiecare VLAN: <code>Gi0/0.10</code> (VLAN 10) și <code>Gi0/0.20</code> (VLAN 20). Cadrul ajunge la R1 etichetat cu VLAN 10.</p>`,
+ en:`<p>The accountant wants to ping the printer on the guest network, PC-G1 (<code>10.20.20.21</code>). It's <strong>another subnet</strong>, so, as in the Ethernet lesson, PC-F1 sends the frame to the <strong>gateway</strong>: <code>10.10.10.1</code>.</p>
+<p>The gateway is R1, connected to SW1 by a single trunk cable. R1 has a <strong>subinterface</strong> per VLAN: <code>Gi0/0.10</code> (VLAN 10) and <code>Gi0/0.20</code> (VLAN 20). The frame reaches R1 tagged VLAN 10.</p>`}},
+
+{at:"r1",frame:R2,kind:"r",move:[[["r1","sw1"]],[["sw1","g1"]]],log:{ro:"R1 → PC-G1 (VLAN 20)",en:"R1 → PC-G1 (VLAN 20)"},tables:["r1sub"],hl:{r1sub:"Gi0/0.20"},who:"R1",
+ title:{ro:"Router „on a stick”: intră pe VLAN 10, iese pe VLAN 20",en:"Router \"on a stick\": in on VLAN 10, out on VLAN 20"},
+ body:{ro:`<p>R1 face exact ce face un router (vezi lecția Ethernet): scoate antetul Ethernet, citește IP-ul destinație, scade TTL-ul, caută ruta (<code>10.20.20.0/24</code> e direct conectată pe <code>Gi0/0.20</code>) și construiește un <strong>cadru nou</strong>.</p>
+<p>Diferența: cadrul nou iese pe <strong>același cablu</strong> pe care a intrat, dar cu eticheta <strong>VLAN 20</strong>, MAC-ul sursă al lui R1 și MAC-ul destinație al lui PC-G1. SW1 îl duce pe portul 2, fără etichetă.</p>
+<p>Configurația se numește „<strong>router on a stick</strong>” pentru că routerul atârnă de rețea printr-un singur cablu.</p>`,
+ en:`<p>R1 does exactly what a router does (see the Ethernet lesson): it removes the Ethernet header, reads the destination IP, decrements the TTL, looks up the route (<code>10.20.20.0/24</code> is directly connected on <code>Gi0/0.20</code>) and builds a <strong>new frame</strong>.</p>
+<p>The difference: the new frame leaves on <strong>the same cable</strong> it came in on, but tagged <strong>VLAN 20</strong>, with R1's source MAC and PC-G1's destination MAC. SW1 delivers it on port 2, untagged.</p>
+<p>The setup is called "<strong>router on a stick</strong>" because the router hangs off the network by a single cable.</p>`},
+ more:{ro:`<p>Aici se pun și regulile: o listă de acces (ACL) pe R1 poate permite Finanțelor să tipărească la imprimantă, dar poate interzice oaspeților să inițieze conexiuni spre Finanțe.</p><p>Azi, de multe ori, chiar switch-ul face rutarea: un <strong>switch de nivel 3</strong> are interfețe virtuale (SVI) <code>interface Vlan10</code>, <code>interface Vlan20</code>, cu IP-urile de gateway, și rutează între ele în hardware, fără cablul suplimentar.</p>`,
+  en:`<p>This is also where rules go: an access list (ACL) on R1 can let Finance print to the printer but forbid guests from opening connections to Finance.</p><p>Today the switch itself often does the routing: a <strong>layer-3 switch</strong> has virtual interfaces (SVIs) <code>interface Vlan10</code>, <code>interface Vlan20</code> with the gateway IPs and routes between them in hardware, with no extra cable.</p>`}},
+
+{at:["sw1","sw2"],frame:null,kind:"none",tables:["trunk"],who:{ro:"Securitate",en:"Security"},
+ title:{ro:"VLAN-ul nativ și atacurile de tip „VLAN hopping”",en:"The native VLAN and \"VLAN hopping\" attacks"},
+ body:{ro:`<p>Pe un trunk, cadrele <strong>fără etichetă</strong> sunt considerate parte din <strong>VLAN-ul nativ</strong> (implicit VLAN 1). Asta deschide două probleme:</p>
+<ul><li><strong>Double tagging</strong>: un atacator dintr-un VLAN egal cu VLAN-ul nativ trimite un cadru cu <em>două</em> etichete. Primul switch o scoate pe prima (cea nativă), al doilea vede a doua și trimite cadrul într-un VLAN în care atacatorul n-ar avea voie.</li>
+<li><strong>Switch spoofing</strong>: dacă un port negociază automat trunk-ul (DTP), un calculator se poate da drept switch și primi toate VLAN-urile.</li></ul>
+<p>Bune practici: VLAN nativ nefolosit (aici <code>999</code>), trunk-uri configurate manual (<code>switchport nonegotiate</code>), porturile neutilizate oprite sau puse într-un VLAN „mort”, nimic important în VLAN 1.</p>`,
+ en:`<p>On a trunk, <strong>untagged</strong> frames are treated as part of the <strong>native VLAN</strong> (VLAN 1 by default). That opens two problems:</p>
+<ul><li><strong>Double tagging</strong>: an attacker in a VLAN equal to the native VLAN sends a frame with <em>two</em> tags. The first switch strips the first (native) one, the second sees the other and forwards the frame into a VLAN the attacker shouldn't reach.</li>
+<li><strong>Switch spoofing</strong>: if a port negotiates trunking automatically (DTP), a computer can pose as a switch and receive every VLAN.</li></ul>
+<p>Good practice: an unused native VLAN (here <code>999</code>), manually configured trunks (<code>switchport nonegotiate</code>), unused ports shut down or put in a "dead" VLAN, nothing important in VLAN 1.</p>`}},
+
+{at:["f1","g1"],frame:null,kind:"none",who:{ro:"Unde mai întâlnești VLAN-uri",en:"Where else you meet VLANs"},
+ title:{ro:"VLAN-uri peste tot: Wi-Fi, telefoane, servere",en:"VLANs everywhere: Wi-Fi, phones, servers"},
+ body:{ro:`<ul><li><strong>Wi-Fi</strong>: un access point emite mai multe rețele (SSID-uri), de ex. „Birou” și „Oaspeți”; fiecare SSID e legat de un VLAN, iar cablul AP-ului spre switch e un trunk.</li>
+<li><strong>Telefoane IP</strong>: un port poate avea un VLAN de date și un <strong>VLAN de voce</strong>; telefonul își etichetează singur traficul, iar PCP-ul dă prioritate vocii.</li>
+<li><strong>Servere și virtualizare</strong>: un server cu mașini virtuale primește un trunk, iar fiecare VM e pusă într-un VLAN (de ex. în VMware sau Proxmox).</li>
+<li><strong>Linux</strong>: poți crea o interfață pe un VLAN: <code>ip link add link eth0 name eth0.10 type vlan id 10</code>.</li></ul>`,
+ en:`<ul><li><strong>Wi-Fi</strong>: an access point broadcasts several networks (SSIDs), e.g. "Office" and "Guests"; each SSID maps to a VLAN, and the AP's cable to the switch is a trunk.</li>
+<li><strong>IP phones</strong>: a port can have a data VLAN and a <strong>voice VLAN</strong>; the phone tags its own traffic, and PCP gives voice priority.</li>
+<li><strong>Servers and virtualisation</strong>: a server with virtual machines gets a trunk, and each VM is placed in a VLAN (e.g. in VMware or Proxmox).</li>
+<li><strong>Linux</strong>: you can create an interface on a VLAN: <code>ip link add link eth0 name eth0.10 type vlan id 10</code>.</li></ul>`}},
+
+{at:["sw1","sw2","r1"],frame:null,kind:"none",summary:true,
+ title:{ro:"Recapitulare",en:"Recap"},
+ body:{ro:`<ul><li>Un <strong>VLAN</strong> e o rețea locală virtuală: un domeniu de broadcast separat pe același hardware.</li>
+<li>Port <strong>access</strong>: aparține unui singur VLAN, cadre fără etichetă. Port <strong>trunk</strong>: duce mai multe VLAN-uri, cadre cu etichetă.</li>
+<li>Eticheta <strong>802.1Q</strong> are 4 octeți (TPID 0x8100, PCP, VID) și stă între MAC-ul sursă și EtherType.</li>
+<li>Switch-urile învață și caută MAC-uri <strong>separat pe fiecare VLAN</strong>; broadcast-urile nu trec dintr-un VLAN în altul.</li>
+<li>Între VLAN-uri se trece doar printr-un <strong>router</strong> (sau un switch de nivel 3), unde se pot pune reguli.</li>
+<li>Securitate: VLAN nativ nefolosit, trunk-uri fixe, nimic în VLAN 1.</li></ul>
+<p><button type="button" class="btn primary" data-goto="quiz">Mergi la test ↓</button></p>`,
+ en:`<ul><li>A <strong>VLAN</strong> is a virtual local network: a separate broadcast domain on the same hardware.</li>
+<li><strong>Access</strong> port: belongs to one VLAN, untagged frames. <strong>Trunk</strong> port: carries several VLANs, tagged frames.</li>
+<li>The <strong>802.1Q</strong> tag is 4 bytes (TPID 0x8100, PCP, VID) and sits between the source MAC and the EtherType.</li>
+<li>Switches learn and look up MACs <strong>separately per VLAN</strong>; broadcasts don't cross from one VLAN to another.</li>
+<li>Between VLANs you go only through a <strong>router</strong> (or a layer-3 switch), where rules can be applied.</li>
+<li>Security: an unused native VLAN, fixed trunks, nothing in VLAN 1.</li></ul>
+<p><button type="button" class="btn primary" data-goto="quiz">Go to the quiz ↓</button></p>`}}
+],
+
+reference:(T,lang)=>{
+  const ro=lang==="ro";
+  return `<div class="ref-grid"><section class="card refcard"><h2>${ro?"Configurația pe SW1 (Cisco IOS)":"Configuration on SW1 (Cisco IOS)"}</h2>
+<pre class="yaml">vlan 10
+ name FINANTE
+vlan 20
+ name OASPETI
+!
+interface Gi0/1
+ switchport mode access
+ switchport access vlan 10
+!
+interface Gi0/2
+ switchport mode access
+ switchport access vlan 20
+!
+interface Gi0/24
+ switchport mode trunk
+ switchport trunk allowed vlan 10,20
+ switchport trunk native vlan 999
+ switchport nonegotiate</pre></section>
+<section class="card refcard"><h2>${ro?"Router on a stick (R1)":"Router on a stick (R1)"}</h2>
+<pre class="yaml">interface Gi0/0.10
+ encapsulation dot1Q 10
+ ip address 10.10.10.1 255.255.255.0
+!
+interface Gi0/0.20
+ encapsulation dot1Q 20
+ ip address 10.20.20.1 255.255.255.0</pre>
+<h3>${ro?"Eticheta 802.1Q, bit cu bit":"The 802.1Q tag, bit by bit"}</h3>
+<div class="scroll"><table class="cmp"><tbody>
+<tr><td><span class="pill">TPID</span></td><td class="m">16 bit</td><td>0x8100</td></tr>
+<tr><td><span class="pill">PCP</span></td><td class="m">3 bit</td><td>${ro?"prioritate 0–7 (802.1p)":"priority 0–7 (802.1p)"}</td></tr>
+<tr><td><span class="pill">DEI</span></td><td class="m">1 bit</td><td>${ro?"poate fi aruncat primul la aglomerare":"may be dropped first under congestion"}</td></tr>
+<tr><td><span class="pill">VID</span></td><td class="m">12 bit</td><td>${ro?"numărul VLAN-ului, 1–4094":"the VLAN number, 1–4094"}</td></tr>
+</tbody></table></div></section></div>`;
+},
+
+gloss:[
+ ["VLAN","Virtual LAN",{ro:"Rețea locală virtuală: un domeniu de broadcast separat pe aceleași switch-uri.",en:"A virtual local network: a separate broadcast domain on the same switches."}],
+ ["802.1Q",null,{ro:"Standardul care definește eticheta VLAN de 4 octeți din cadrul Ethernet.",en:"The standard defining the 4-byte VLAN tag in an Ethernet frame."}],
+ [{ro:"Port access",en:"Access port"},null,{ro:"Port dintr-un singur VLAN; cadrele circulă fără etichetă.",en:"A port in a single VLAN; frames travel untagged."}],
+ [{ro:"Port trunk",en:"Trunk port"},null,{ro:"Port care duce mai multe VLAN-uri, cu cadre etichetate.",en:"A port carrying several VLANs, with tagged frames."}],
+ ["VID","VLAN ID",{ro:"Numărul VLAN-ului din etichetă (12 biți, 1–4094).",en:"The VLAN number in the tag (12 bits, 1–4094)."}],
+ ["TPID","Tag Protocol Identifier",{ro:"Valoarea 0x8100 care anunță o etichetă VLAN.",en:"The value 0x8100 announcing a VLAN tag."}],
+ ["PCP","Priority Code Point",{ro:"Prioritatea cadrului (0–7), folosită pentru QoS.",en:"The frame's priority (0–7), used for QoS."}],
+ [{ro:"VLAN nativ",en:"Native VLAN"},null,{ro:"VLAN-ul în care intră cadrele fără etichetă de pe un trunk.",en:"The VLAN untagged frames on a trunk belong to."}],
+ [{ro:"Domeniu de broadcast",en:"Broadcast domain"},null,{ro:"Toate dispozitivele la care ajunge un broadcast.",en:"Every device a broadcast reaches."}],
+ ["Router on a stick",null,{ro:"Router legat la switch printr-un trunk, cu câte o subinterfață pe VLAN.",en:"A router connected to the switch by a trunk, with one subinterface per VLAN."}],
+ ["SVI","Switched Virtual Interface",{ro:"Interfață virtuală a unui switch L3 pentru un VLAN (interface Vlan10).",en:"An L3 switch's virtual interface for a VLAN (interface Vlan10)."}],
+ ["DTP","Dynamic Trunking Protocol",{ro:"Negociere automată a trunk-urilor (Cisco); se dezactivează pentru securitate.",en:"Automatic trunk negotiation (Cisco); disabled for security."}],
+ ["VLAN hopping",null,{ro:"Atac prin care un atacator ajunge într-un VLAN în care n-ar avea voie.",en:"An attack where someone reaches a VLAN they shouldn't."}],
+ ["QinQ","802.1ad",{ro:"Două etichete VLAN una peste alta, folosite de furnizori.",en:"Two VLAN tags stacked, used by providers."}]
+],
+glossEx:{
+ "VLAN":{ro:"VLAN 10 = Finanțe (10.10.10.0/24), VLAN 20 = Oaspeți (10.20.20.0/24).",en:"VLAN 10 = Finance (10.10.10.0/24), VLAN 20 = Guests (10.20.20.0/24)."},
+ "802.1Q":{ro:"în Wireshark, un cadru etichetat apare cu linia „802.1Q Virtual LAN, PRI: 0, ID: 10”.",en:"in Wireshark, a tagged frame shows the line \"802.1Q Virtual LAN, PRI: 0, ID: 10\"."},
+ "Access port":{ro:"switchport access vlan 10 pe portul unde e PC-ul contabilului.",en:"switchport access vlan 10 on the accountant's PC port."},
+ "Trunk port":{ro:"portul spre switch-ul de la etajul 2 duce VLAN 10 și VLAN 20.",en:"the port to the floor-2 switch carries VLAN 10 and VLAN 20."},
+ "VID":{ro:"VID = 20 înseamnă „acest cadru e din rețeaua oaspeților”.",en:"VID = 20 means \"this frame is from the guest network\"."},
+ "TPID":{ro:"în locul unde de obicei ar fi EtherType-ul 0x0800, apare 0x8100.",en:"where the 0x0800 EtherType usually sits, 0x8100 appears instead."},
+ "PCP":{ro:"telefoanele IP își marchează vocea cu PCP 5, ca să treacă înaintea descărcărilor.",en:"IP phones mark their voice with PCP 5 so it goes ahead of downloads."},
+ "Native VLAN":{ro:"switchport trunk native vlan 999: un VLAN nefolosit, pentru siguranță.",en:"switchport trunk native vlan 999: an unused VLAN, for safety."},
+ "Broadcast domain":{ro:"ARP-ul unui oaspete ajunge la toți oaspeții, dar la niciun calculator din Finanțe.",en:"a guest's ARP reaches every guest, but no Finance computer."},
+ "Router on a stick":{ro:"R1 cu Gi0/0.10 și Gi0/0.20 pe un singur cablu spre SW1.",en:"R1 with Gi0/0.10 and Gi0/0.20 on a single cable to SW1."},
+ "SVI":{ro:"interface Vlan10 / ip address 10.10.10.1 255.255.255.0 pe un switch L3.",en:"interface Vlan10 / ip address 10.10.10.1 255.255.255.0 on an L3 switch."},
+ "DTP":{ro:"switchport nonegotiate oprește DTP-ul pe un port.",en:"switchport nonegotiate turns DTP off on a port."},
+ "VLAN hopping":{ro:"un cadru cu etichetele 999 și 10 trimis de un atacator din VLAN 999 ar putea ajunge în VLAN 10.",en:"a frame tagged 999 then 10, sent by an attacker in VLAN 999, could end up in VLAN 10."},
+ "QinQ":{ro:"furnizorul adaugă eticheta lui (100) peste eticheta clientului (10): 2 × 4 octeți.",en:"the provider adds its tag (100) over the customer's tag (10): 2 × 4 bytes."}
+},
+
+quiz:[
+ {q:{ro:"Ce face un VLAN?",en:"What does a VLAN do?"},o:[{ro:"Mărește viteza cablului",en:"Speeds up the cable"},{ro:"Împarte logic un switch în rețele separate (domenii de broadcast diferite)",en:"Logically splits a switch into separate networks (different broadcast domains)"},{ro:"Criptează traficul",en:"Encrypts traffic"},{ro:"Dă adrese IP",en:"Hands out IP addresses"}],a:1,e:{ro:"Aceleași cabluri, dar rețele care nu se văd între ele.",en:"The same cables, but networks that can't see each other."}},
+ {q:{ro:"Unde apare eticheta 802.1Q?",en:"Where does the 802.1Q tag appear?"},o:[{ro:"Pe toate cablurile",en:"On every cable"},{ro:"Doar pe porturile trunk, între switch-uri sau spre router",en:"Only on trunk ports, between switches or to the router"},{ro:"Doar pe calculatoare",en:"Only on computers"},{ro:"În antetul IP",en:"In the IP header"}],a:1,e:{ro:"Pe porturile access cadrele sunt fără etichetă.",en:"On access ports frames are untagged."}},
+ {q:{ro:"Câți octeți are eticheta 802.1Q?",en:"How many bytes is the 802.1Q tag?"},o:[{ro:"2",en:"2"},{ro:"4",en:"4"},{ro:"8",en:"8"},{ro:"14",en:"14"}],a:1,e:{ro:"TPID (2) + PCP, DEI și VID (2).",en:"TPID (2) + PCP, DEI and VID (2)."}},
+ {q:{ro:"Unde e inserată eticheta în cadru?",en:"Where is the tag inserted in the frame?"},o:[{ro:"La sfârșit, după FCS",en:"At the end, after the FCS"},{ro:"Între MAC-ul sursă și EtherType",en:"Between the source MAC and the EtherType"},{ro:"În interiorul pachetului IP",en:"Inside the IP packet"},{ro:"Înaintea MAC-ului destinație",en:"Before the destination MAC"}],a:1,e:{ro:"De aceea, după etichetare, FCS-ul trebuie recalculat.",en:"That's why the FCS must be recalculated after tagging."}},
+ {q:{ro:"Un oaspete (VLAN 20) trimite un broadcast. Cine îl primește?",en:"A guest (VLAN 20) sends a broadcast. Who receives it?"},o:[{ro:"Toți, din ambele VLAN-uri",en:"Everyone, in both VLANs"},{ro:"Doar dispozitivele din VLAN 20",en:"Only devices in VLAN 20"},{ro:"Doar routerul",en:"Only the router"},{ro:"Nimeni",en:"Nobody"}],a:1,e:{ro:"Fiecare VLAN e un domeniu de broadcast separat.",en:"Each VLAN is a separate broadcast domain."}},
+ {q:{ro:"Cum ajunge un pachet din VLAN 10 în VLAN 20?",en:"How does a packet get from VLAN 10 to VLAN 20?"},o:[{ro:"Switch-ul îl mută singur",en:"The switch moves it by itself"},{ro:"Printr-un router sau switch de nivel 3",en:"Through a router or a layer-3 switch"},{ro:"Nu se poate niciodată",en:"It never can"},{ro:"Prin broadcast",en:"Via broadcast"}],a:1,e:{ro:"VLAN-urile sunt subrețele IP diferite; între ele e nevoie de rutare.",en:"VLANs are different IP subnets; routing is needed between them."}},
+ {q:{ro:"Ce e VLAN-ul nativ?",en:"What is the native VLAN?"},o:[{ro:"VLAN-ul cu cel mai mare număr",en:"The highest-numbered VLAN"},{ro:"VLAN-ul în care intră cadrele fără etichetă de pe un trunk",en:"The VLAN untagged frames on a trunk belong to"},{ro:"VLAN-ul routerului",en:"The router's VLAN"},{ro:"VLAN-ul Wi-Fi",en:"The Wi-Fi VLAN"}],a:1,e:{ro:"Implicit e VLAN 1; bine e să fie un VLAN nefolosit.",en:"VLAN 1 by default; ideally an unused VLAN."}},
+ {q:{ro:"De ce se dezactivează DTP pe porturile spre calculatoare?",en:"Why is DTP disabled on ports facing computers?"},o:[{ro:"Ca să meargă mai repede",en:"To go faster"},{ro:"Ca un calculator să nu se poată da drept switch și primi toate VLAN-urile",en:"So a computer can't pose as a switch and receive every VLAN"},{ro:"Pentru că DTP criptează traficul",en:"Because DTP encrypts traffic"},{ro:"Nu se dezactivează",en:"It isn't"}],a:1,e:{ro:"Atacul se numește switch spoofing, o formă de VLAN hopping.",en:"The attack is called switch spoofing, a form of VLAN hopping."}}
+]
+};
+})();
+</script>
+<script src="../assets/engine.js"></script>
+</body>
+</html>
