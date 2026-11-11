@@ -47,6 +47,18 @@ td.n{font-variant-numeric:tabular-nums;white-space:nowrap}
 .msg.good{color:var(--ok);font-weight:600}.msg.bad{color:var(--bad)}
 .gate{max-width:560px;margin:0 auto;border:2px solid var(--text)}
 .gate input{flex:1 1 220px;font:600 1rem var(--mono);padding:10px 12px}
+.online{border:2px solid #1f9d55}
+.ocards{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
+.oc{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:var(--surface2);min-width:0}
+.oc .av{flex:none;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;font:700 .95rem var(--head);background:var(--text);color:var(--surface);position:relative}
+.oc .av i{position:absolute;right:-2px;bottom:-2px;width:12px;height:12px;border-radius:50%;border:2px solid var(--surface2);background:#9b9478}
+.oc .av i.on{background:#1f9d55}.oc .av i.away{background:#e0a100}
+.oc .who{min-width:0;font-size:.86rem;line-height:1.35}
+.oc .who b{display:block;font-size:.95rem;overflow-wrap:anywhere}
+.oc .who span{display:block;color:var(--muted);overflow-wrap:anywhere}
+.oc .who a{overflow-wrap:anywhere}
+.oc .who b span{display:inline;color:inherit}.oc .who b .badge{display:inline-block}.oc .who b .muted{color:var(--muted);font-weight:500}
+.sub{font:700 .95rem var(--head);margin:16px 0 8px}
 .cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}
 @media (max-width:820px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.cols{grid-template-columns:minmax(0,1fr)}}
 [hidden]{display:none!important}
@@ -73,6 +85,13 @@ td.n{font-variant-numeric:tabular-nums;white-space:nowrap}
 
   <div id="panel" hidden>
     <div class="kpis" id="kpis"></div>
+
+    <section class="block online" id="onlineBox">
+      <div class="row"><h2 id="onT"></h2><span class="muted" style="font-size:.84rem" id="onUpd"></span></div>
+      <div class="ocards" id="onList"></div>
+      <h3 class="sub" id="awT"></h3>
+      <div class="ocards" id="awList"></div>
+    </section>
 
     <section class="block">
       <div class="row"><h2 data-t="usersT"></h2>
@@ -108,7 +127,8 @@ const UI={
   gen:["Generează cod nou","Generate a new code"],copy:["Copiază","Copy"],copied:["Copiat ✓","Copied ✓"],off:["Dezactivează codul","Disable the code"],noCode:["Niciun cod activ: nimeni nu poate deveni admin cu un cod.","No active code: nobody can become admin with a code."],
   codeSaved:["Cod nou activ. Cel vechi nu mai merge.","New code active. The old one no longer works."],codeOff:["Codul a fost dezactivat.","The code has been disabled."],
   name:["Nume","Name"],email:["E-mail","Email"],status:["Stare","Status"],last:["Văzut ultima dată","Last seen"],where:["Pagina","Page"],tests:["Teste","Quizzes"],avg:["Medie","Average"],since:["Cont creat","Joined"],act:["",""],
-  on:["Online","Online"],away:["Activ recent","Recently active"],offline:["Offline","Offline"],never:["niciodată","never"],
+  on:["Online","Online"],away:["Activ recent","Recently active"],onNow:["Online acum","Online now"],nobody:["Nimeni nu e online în acest moment.","Nobody is online right now."],
+  now:["Acum pe:","Now on:"],signal:["ultimul semnal","last signal"],live:["Se actualizează singur ·","Updates live ·"],offline:["Offline","Offline"],never:["niciodată","never"],
   fAll:["Toți","All"],fOn:["Online","Online"],fToday:["Azi","Today"],search:["Caută nume sau e-mail","Search name or email"],
   kUsers:["utilizatori","users"],kOn:["online acum","online now"],kToday:["activi azi","active today"],kTests:["teste terminate","quizzes finished"],
   make:["Fă admin","Make admin"],remove:["Scoate admin","Remove admin"],you:["tu","you"],how:{code:["prin cod","by code"],granted:["adăugat de un admin","added by an admin"],console:["din consolă","from the console"]},
@@ -141,6 +161,18 @@ function renderPanel(){
   const today=new Date();today.setHours(0,0,0,0);
   const on=users.filter(u=>statusOf(u)==="on").length,act=users.filter(u=>u.d&&u.d>=today).length;
   $("#kpis").innerHTML=[[users.length,T("kUsers")],[on,T("kOn")],[act,T("kToday")],[results.length,T("kTests")]].map(([b,s])=>`<div class="kpi"><b>${b}</b><span>${s}</span></div>`).join("");
+  // "Online now" list: only people online at this moment, then the recently active ones
+  const byLast=(a,b)=>(b.d||0)-(a.d||0);
+  const onU=users.filter(u=>statusOf(u)==="on").sort(byLast),awU=users.filter(u=>statusOf(u)==="away").sort(byLast);
+  const card=(u,s)=>{const ini=(u.name||u.email||"?").trim().split(/\s+/).map(p=>p[0]).slice(0,2).join("").toUpperCase();const x=byUid[u.id];
+    return `<div class="oc"><span class="av">${esc(ini)}<i class="${s}"></i></span><span class="who"><b>${esc(u.name||"—")}${admins[u.id]?`<span class="badge">admin</span>`:""}${me&&u.id===me.uid?` <span class="muted">(${T("you")})</span>`:""}</b><span>${esc(u.email)}</span>
+<span>${T("now")} ${u.path?`<a href="${esc(u.path)}">${esc(u.page||u.path)}</a>`:"—"}</span><span>${s==="on"?T("signal")+" "+esc(ago(u.d)):T("last")+": "+esc(ago(u.d))}${x?` · ${x.n} ${x.n===1?(lang==="en"?"quiz":"test"):T("tests").toLowerCase()}`:""}</span></span></div>`};
+  $("#onT").textContent=`🟢 ${T("onNow")} (${onU.length})`;
+  $("#onList").innerHTML=onU.length?onU.map(u=>card(u,"on")).join(""):`<p class="muted">${T("nobody")}</p>`;
+  $("#awT").textContent=`🟡 ${T("away")} (${awU.length})`;$("#awT").hidden=!awU.length;
+  $("#awList").innerHTML=awU.map(u=>card(u,"away")).join("");
+  $("#onUpd").textContent=T("live")+" "+new Date().toLocaleTimeString(lang==="en"?"en-GB":"ro-RO",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
+
   const q=$("#q").value.trim().toLowerCase();
   const rank={on:0,away:1,offline:2};
   const list=users.filter(u=>(!q||(u.name+" "+u.email).toLowerCase().includes(q))&&(filter==="all"||(filter==="on"&&statusOf(u)==="on")||(filter==="today"&&u.d&&u.d>=today)))
@@ -169,7 +201,7 @@ async function startPanel(){
   unsub.push(onSnapshot(collection(db,"admins"),s=>{admins={};s.docs.forEach(d=>admins[d.id]=d.data());renderPanel()},e=>console.error(e)));
   unsub.push(onSnapshot(collection(db,"results"),s=>{results=s.docs.map(d=>d.data());renderPanel()},e=>console.error(e)));
   unsub.push(onSnapshot(doc(db,"config","admin"),s=>{code=s.exists()?s.data().code:null;renderPanel()},e=>console.error(e)));
-  setInterval(()=>{if(!$("#panel").hidden)renderPanel()},20000);
+  setInterval(()=>{if(!$("#panel").hidden)renderPanel()},15000);
 }
 
 onAuthStateChanged(auth,async u=>{
