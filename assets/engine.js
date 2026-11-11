@@ -4,6 +4,8 @@
 (function(){
 "use strict";
 const LS=window.LESSON;
+if(LS.quizMore)LS.quiz=LS.quiz.concat(LS.quizMore);
+const glossKey=t=>typeof t==="object"&&t?t.en:t;
 const $=s=>document.querySelector(s);
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
 let lang=store.get("cadru-lang")==="en"?"en":"ro";
@@ -42,8 +44,8 @@ const S=LS.steps,N=S.length;
 /* ---------- page skeleton ---------- */
 document.getElementById("app").innerHTML=`
 <header class="topbar" id="top"><div class="topbar-in">
-  <a class="brand" href="../"><svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="var(--accent)"/><path d="M7 16h18M19 11l6 5-6 5" fill="none" stroke="var(--accent-text)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="16" r="2.6" fill="var(--accent-text)"/></svg><span data-t="brand"></span></a>
-  <nav class="nav" aria-label="Secțiuni / Sections"><a href="../" data-t="navHome"></a><a href="#sim" data-t="navSim"></a><a href="#ref" data-t="navRef"></a><a href="#gloss" data-t="navGloss"></a><a href="#quiz" data-t="navQuiz"></a></nav>
+  <a class="brand" href="../index.html"><svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="var(--accent)"/><path d="M7 16h18M19 11l6 5-6 5" fill="none" stroke="var(--accent-text)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="16" r="2.6" fill="var(--accent-text)"/></svg><span data-t="brand"></span></a>
+  <nav class="nav" aria-label="Secțiuni / Sections"><a href="../index.html" data-t="navHome"></a><a href="#sim" data-t="navSim"></a><a href="#ref" data-t="navRef"></a><a href="#gloss" data-t="navGloss"></a><a href="#quiz" data-t="navQuiz"></a></nav>
   <div class="tools"><div class="seg" role="group" aria-label="Limba / Language"><button type="button" data-lang="ro">RO</button><button type="button" data-lang="en">EN</button></div><button type="button" class="icon-btn" id="theme">◐</button></div>
 </div></header>
 <section class="hero"><div class="hero-in">
@@ -207,7 +209,9 @@ function renderQuiz(){
 $("#quiz").addEventListener("click",e=>{const b=e.target.closest(".opt");if(!b||b.disabled)return;answers[+b.dataset.q]=+b.dataset.o;renderQuiz()});
 function renderGloss(){
   let h=`<h2>${T(UI.glossT)}</h2><p class="lead">${T(UI.glossLead)}</p><dl class="gl">`;
-  LS.gloss.forEach(([t,full,d])=>{const fl=T(full);h+=`<div><dt>${T(t)}${fl?`<small>${fl}</small>`:""}</dt><dd>${T(d)}</dd></div>`});
+  const exLbl=lang==="ro"?"Exemplu":"Example";
+  LS.gloss.forEach(([t,full,d])=>{const fl=T(full),ex=(LS.glossEx||{})[glossKey(t)];
+    h+=`<div><dt>${T(t)}${fl?`<small>${fl}</small>`:""}</dt><dd>${T(d)}</dd>${ex?`<dd class="ex"><b>${exLbl}:</b> ${T(ex)}</dd>`:""}</div>`});
   $("#gloss").innerHTML=h+`</dl>`;
 }
 function renderControls(){

@@ -29,7 +29,7 @@ docTitle:{ro:"Cum funcționează DNS",en:"How DNS Works"},
 eyebrow:{ro:"Lecție interactivă · DNS",en:"Interactive lesson · DNS"},
 title:{ro:"DNS: cum află calculatorul adresa unui site",en:"DNS: how your computer finds a site's address"},
 sub:{ro:"Scrii www.example.com în browser. Urmărește întrebarea prin cache-ul local, resolver-ul furnizorului, serverul rădăcină, serverul .com și serverul autoritar, apoi vezi cum te ajută cache-ul data viitoare.",en:"You type www.example.com into the browser. Follow the question through the local cache, your provider's resolver, the root server, the .com server and the authoritative server, then see how caching helps next time."},
-meta:[{ro:"≈ 15 minute",en:"≈ 15 minutes"},{ro:"13 pași",en:"13 steps"},{ro:"7 întrebări",en:"7 questions"},{ro:"Începător",en:"Beginner"}],
+meta:[{ro:"≈ 15 minute",en:"≈ 15 minutes"},{ro:"13 pași",en:"13 steps"},{ro:"12 întrebări",en:"12 questions"},{ro:"Începător",en:"Beginner"}],
 goals:[{ro:"Diferența dintre resolver recursiv și server autoritar",en:"The difference between a recursive resolver and an authoritative server"},{ro:"Cum funcționează ierarhia: rădăcină → TLD → domeniu",en:"How the hierarchy works: root → TLD → domain"},{ro:"Ce sunt înregistrările A, NS, CNAME, MX, TXT",en:"What A, NS, CNAME, MX and TXT records are"},{ro:"Cum funcționează cache-ul și TTL-ul",en:"How caching and TTL work"}],
 foot:{ro:"Domeniul example.com și adresele 192.0.2.x, 198.51.100.x, 203.0.113.x sunt rezervate pentru exemple. Serverul rădăcină și cel .com au adresele lor reale.",en:"The example.com domain and the 192.0.2.x, 198.51.100.x, 203.0.113.x addresses are reserved for examples. The root and .com servers use their real addresses."},
 ui:{refT:{ro:"Tipuri de înregistrări și comenzi utile",en:"Record types and useful commands"},refLead:{ro:"Ce poate conține o zonă DNS, diferența dintre recursiv și iterativ, și comenzi de încercat pe Windows.",en:"What a DNS zone can hold, recursive vs iterative, and commands to try on Windows."}},
@@ -185,9 +185,9 @@ steps:[
 {at:"pc",frame:{srcIp:IP.pc,dstIp:IP.web,proto:"TCP",srcPort:"52044",dstPort:"443",req:"TLS ClientHello (SNI: www.example.com)"},kind:"web",move:[[["pc","web"]]],log:{ro:"laptop → site",en:"laptop → site"},who:{ro:"browserul",en:"the browser"},
  title:{ro:"Abia acum se conectează la site",en:"Only now does it connect to the site"},
  body:{ro:`<p>Cu IP-ul aflat, browserul deschide o conexiune <strong>TCP</strong> spre <code>203.0.113.80:443</code> și începe negocierea <strong>TLS</strong> (HTTPS). În mesaj trimite din nou numele (<strong>SNI</strong>), ca serverul să știe ce site vrei, dacă găzduiește mai multe.</p>
-<p>Tot ce ai văzut până acum a durat de obicei între <strong>20 și 150 ms</strong>. Drumul pachetelor până la site e exact cel din <a href="../ethernet/">lecția Ethernet</a>.</p>`,
+<p>Tot ce ai văzut până acum a durat de obicei între <strong>20 și 150 ms</strong>. Drumul pachetelor până la site e exact cel din <a href="../ethernet/index.html">lecția Ethernet</a>.</p>`,
  en:`<p>With the IP known, the browser opens a <strong>TCP</strong> connection to <code>203.0.113.80:443</code> and starts the <strong>TLS</strong> (HTTPS) handshake. In that message it sends the name again (<strong>SNI</strong>) so the server knows which site you want if it hosts several.</p>
-<p>Everything you've seen so far usually takes <strong>20 to 150 ms</strong>. The packets' path to the site is exactly the one from the <a href="../ethernet/">Ethernet lesson</a>.</p>`}},
+<p>Everything you've seen so far usually takes <strong>20 to 150 ms</strong>. The packets' path to the site is exactly the one from the <a href="../ethernet/index.html">Ethernet lesson</a>.</p>`}},
 
 {at:"res",frame:{...A0,answer:"www.example.com. 2958 A "+IP.web},kind:"dns",cmp:9,move:[[["pc","res"]],[["res","pc"]]],log:{ro:"mai târziu: din cache",en:"later: from cache"},tables:["rcache"],hl:{rcache:"www.example.com."},who:{ro:"resolver-ul",en:"the resolver"},
  title:{ro:"Data viitoare: răspuns din cache",en:"Next time: an answer from the cache"},
@@ -208,14 +208,14 @@ steps:[
 <li>Pune o întrebare <strong>recursivă</strong> resolver-ului: „dă-mi răspunsul final”.</li>
 <li>Resolver-ul pune întrebări <strong>iterative</strong>: rădăcina și TLD-ul răspund cu <strong>trimiteri</strong> (NS), serverul <strong>autoritar</strong> răspunde cu înregistrarea.</li>
 <li>Fiecare răspuns are un <strong>TTL</strong>; până expiră, răspunsul e luat din <strong>cache</strong>.</li></ul>
-<p>În Kubernetes, CoreDNS joacă rolul serverului autoritar pentru <code>cluster.local</code> (vezi <a href="../kubernetes/">lecția Kubernetes</a>).</p>
+<p>În Kubernetes, CoreDNS joacă rolul serverului autoritar pentru <code>cluster.local</code> (vezi <a href="../kubernetes/index.html">lecția Kubernetes</a>).</p>
 <p><button type="button" class="btn primary" data-goto="quiz">Mergi la test ↓</button></p>`,
  en:`<div class="flow"><span>laptop</span><i>→</i><span>resolver</span><i>→</i><span>.</span><i>→</i><span>com</span><i>→</i><span>example.com</span><i>⇒</i><span>203.0.113.80</span></div>
 <ul><li>The computer first checks its <strong>local cache</strong> and the <strong>hosts</strong> file.</li>
 <li>It asks the resolver a <strong>recursive</strong> question: "give me the final answer".</li>
 <li>The resolver asks <strong>iterative</strong> questions: the root and TLD reply with <strong>referrals</strong> (NS), the <strong>authoritative</strong> server replies with the record.</li>
 <li>Every answer has a <strong>TTL</strong>; until it expires, the answer comes from the <strong>cache</strong>.</li></ul>
-<p>In Kubernetes, CoreDNS plays the authoritative server for <code>cluster.local</code> (see the <a href="../kubernetes/">Kubernetes lesson</a>).</p>
+<p>In Kubernetes, CoreDNS plays the authoritative server for <code>cluster.local</code> (see the <a href="../kubernetes/index.html">Kubernetes lesson</a>).</p>
 <p><button type="button" class="btn primary" data-goto="quiz">Go to the quiz ↓</button></p>`}}
 ],
 
@@ -269,6 +269,44 @@ gloss:[
  ["FQDN","Fully Qualified Domain Name",{ro:"Numele complet, cu punctul final: www.example.com.",en:"The complete name, with the final dot: www.example.com."}]
 ],
 
+glossEx:{
+ "DNS":{ro:"scrii emag.ro, DNS-ul răspunde cu un IP, iar abia apoi browserul se conectează la acel IP.",en:"you type wikipedia.org, DNS answers with an IP, and only then does the browser connect to that IP."},
+ "Resolver":{ro:"resolver-ul furnizorului tău (primit automat prin DHCP) sau unul public, ca 1.1.1.1 ori 8.8.8.8.",en:"your provider's resolver (handed out automatically via DHCP) or a public one such as 1.1.1.1 or 8.8.8.8."},
+ "Authoritative server":{ro:"ns1.example.com deține zona example.com; doar el poate da răspunsul „oficial” (cu indicatorul AA).",en:"ns1.example.com holds the example.com zone; only it can give the \"official\" answer (with the AA flag)."},
+ "Root server":{ro:"a.root-servers.net (198.41.0.4) e unul din cele 13 nume de servere rădăcină; are sute de copii anycast în lume.",en:"a.root-servers.net (198.41.0.4) is one of the 13 root server names; it has hundreds of anycast copies worldwide."},
+ "TLD":{ro:"în www.example.com, TLD-ul e com; în magazin.ro e ro.",en:"in www.example.com the TLD is com; in shop.co.uk it's uk."},
+ "Zone":{ro:"zona example.com conține www A 203.0.113.80, MX 10 mail.example.com și alte înregistrări ale domeniului.",en:"the example.com zone holds www A 203.0.113.80, MX 10 mail.example.com and the domain's other records."},
+ "TTL":{ro:"„www.example.com. 3600 A 203.0.113.80”: resolver-ul poate păstra răspunsul o oră; după 10 minute TTL-ul afișat e 3000.",en:"\"www.example.com. 3600 A 203.0.113.80\": the resolver may keep the answer for an hour; after 10 minutes the TTL shown is 3000."},
+ "Cache":{ro:"prima căutare a unui site durează poate 80 ms; a doua, din cache, sub 1 ms.",en:"the first lookup of a site might take 80 ms; the second, from cache, under 1 ms."},
+ "Referral":{ro:"serverul .com răspunde „example.com. NS ns1.example.com” în loc de IP: „întreabă-l pe el”.",en:"the .com server answers \"example.com. NS ns1.example.com\" instead of an IP: \"ask that one\"."},
+ "Glue":{ro:"fără glue, ca să afle IP-ul lui ns1.example.com, resolver-ul ar trebui să întrebe tot example.com: un cerc fără ieșire.",en:"without glue, to find the IP of ns1.example.com the resolver would have to ask example.com itself: a loop with no way out."},
+ "RD / RA / AA":{ro:"întrebarea laptopului are RD; răspunsul resolver-ului are RD RA; răspunsul serverului autoritar are AA.",en:"the laptop's query has RD; the resolver's reply has RD RA; the authoritative server's reply has AA."},
+ "NXDOMAIN":{ro:"Resolve-DnsName nu-exista-123.ro întoarce „DNS name does not exist”; în browser apare DNS_PROBE_FINISHED_NXDOMAIN.",en:"Resolve-DnsName does-not-exist-123.com returns \"DNS name does not exist\"; the browser shows DNS_PROBE_FINISHED_NXDOMAIN."},
+ "hosts":{ro:"linia „127.0.0.1  site-de-test.local” în fișierul hosts face ca acel nume să ducă la propriul calculator.",en:"the line \"127.0.0.1  test-site.local\" in the hosts file makes that name point at your own computer."},
+ "Anycast":{ro:"1.1.1.1 răspunde și din București, și din Tokyo: rețeaua te duce la cea mai apropiată copie.",en:"1.1.1.1 answers from both London and Tokyo: the network takes you to the nearest copy."},
+ "DNSSEC":{ro:"răspunsul pentru un domeniu semnat vine cu o înregistrare RRSIG; resolver-ul verifică semnătura și respinge un răspuns falsificat.",en:"the answer for a signed domain comes with an RRSIG record; the resolver checks the signature and rejects a forged answer."},
+ "DoH / DoT":{ro:"în setările browserului poți activa „DNS securizat”: întrebările pleacă criptate prin HTTPS (port 443) în loc de UDP 53.",en:"in browser settings you can enable \"secure DNS\": queries go encrypted over HTTPS (port 443) instead of UDP 53."},
+ "Registrar / Registry":{ro:"cumperi domeniul de la o firmă de hosting (registrar), care îl înregistrează la RoTLD (registry-ul pentru .ro).",en:"you buy the domain from a hosting company (registrar), which registers it with Verisign (the registry for .com)."},
+ "SNI":{ro:"un singur IP poate găzdui zeci de site-uri; prin SNI serverul știe dacă ai cerut site-a.ro sau site-b.ro și trimite certificatul potrivit.",en:"one IP can host dozens of sites; through SNI the server knows whether you asked for site-a.com or site-b.com and sends the right certificate."},
+ "FQDN":{ro:"„www” singur e ambiguu; „www.example.com.” e numele complet, fără nicio presupunere.",en:"\"www\" alone is ambiguous; \"www.example.com.\" is the complete name, with nothing assumed."}
+},
+quizMore:[
+ {q:{ro:"Pe ce port lucrează de obicei DNS?",en:"Which port does DNS normally use?"},
+  o:[{ro:"80",en:"80"},{ro:"443",en:"443"},{ro:"53",en:"53"},{ro:"25",en:"25"}],a:2,
+  e:{ro:"DNS folosește portul 53, de obicei pe UDP (și pe TCP pentru răspunsuri mari). DoH folosește 443.",en:"DNS uses port 53, usually over UDP (and TCP for large answers). DoH uses 443."}},
+ {q:{ro:"Ce tip de înregistrare face dintr-un nume un alias pentru alt nume?",en:"Which record type makes one name an alias for another?"},
+  o:[{ro:"A",en:"A"},{ro:"CNAME",en:"CNAME"},{ro:"MX",en:"MX"},{ro:"PTR",en:"PTR"}],a:1,
+  e:{ro:"blog.example.com CNAME www.example.com: resolver-ul continuă căutarea cu www.example.com.",en:"blog.example.com CNAME www.example.com: the resolver carries on looking up www.example.com."}},
+ {q:{ro:"Ce înseamnă indicatorul AA într-un răspuns DNS?",en:"What does the AA flag in a DNS answer mean?"},
+  o:[{ro:"Răspunsul vine din cache",en:"The answer comes from a cache"},{ro:"Răspunsul vine chiar de la serverul autoritar al zonei",en:"The answer comes straight from the zone's authoritative server"},{ro:"Răspunsul e criptat",en:"The answer is encrypted"},{ro:"Numele nu există",en:"The name doesn't exist"}],a:1,
+  e:{ro:"AA = Authoritative Answer. Un răspuns din cache-ul resolver-ului nu are AA.",en:"AA = Authoritative Answer. An answer from the resolver's cache doesn't have AA."}},
+ {q:{ro:"Câte nume de servere rădăcină există?",en:"How many root server names are there?"},
+  o:[{ro:"1",en:"1"},{ro:"13 (de la a la m)",en:"13 (a to m)"},{ro:"256",en:"256"},{ro:"Unul pentru fiecare țară",en:"One per country"}],a:1,
+  e:{ro:"Sunt 13 nume, dar peste 1.500 de servere fizice, datorită anycast.",en:"There are 13 names, but over 1,500 physical servers thanks to anycast."}},
+ {q:{ro:"Ce comandă golește cache-ul DNS al Windows?",en:"Which command clears the Windows DNS cache?"},
+  o:[{ro:"ipconfig /flushdns",en:"ipconfig /flushdns"},{ro:"ipconfig /release",en:"ipconfig /release"},{ro:"arp -d",en:"arp -d"},{ro:"tracert",en:"tracert"}],a:0,
+  e:{ro:"ipconfig /displaydns afișează cache-ul, iar ipconfig /flushdns îl golește.",en:"ipconfig /displaydns shows the cache and ipconfig /flushdns clears it."}}
+],
 quiz:[
  {q:{ro:"Cine face toată căutarea când scrii un nume în browser?",en:"Who does the whole search when you type a name into the browser?"},
   o:[{ro:"Browserul întreabă singur fiecare server",en:"The browser asks every server itself"},{ro:"Resolver-ul recursiv (de ex. al furnizorului)",en:"The recursive resolver (e.g. your provider's)"},{ro:"Serverul rădăcină",en:"The root server"},{ro:"Site-ul pe care vrei să-l deschizi",en:"The site you want to open"}],a:1,

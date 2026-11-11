@@ -176,6 +176,8 @@ tr.added td{background:var(--newbg)}
 .gl dt small{font-weight:400;color:var(--muted);margin-left:6px}
 .gl dd{margin:2px 0 0;font-size:.9rem}
 .glink{color:var(--accent);font-size:.82rem}
+.gl dd.ex{margin-top:6px;padding-top:6px;border-top:1px dashed var(--border);font-size:.85rem;color:var(--muted)}
+.gl dd.ex b{color:var(--text);font-weight:600}
 footer{color:var(--muted);font-size:.8rem;text-align:center;padding:18px 0 8px}
 
 @media (max-width:860px){.main{grid-template-columns:minmax(0,1fr)}}
@@ -292,12 +294,12 @@ footer{text-align:left;padding:0}
 <body>
 <header class="topbar" id="top">
   <div class="topbar-in">
-    <a class="brand" href="../">
+    <a class="brand" href="../index.html">
       <svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="var(--accent)"/><path d="M7 16h18M19 11l6 5-6 5" fill="none" stroke="var(--accent-text)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="16" r="2.6" fill="var(--accent-text)"/></svg>
       <span data-t="brand"></span>
     </a>
     <nav class="nav" aria-label="Secțiuni / Sections">
-      <a href="../" data-t="navHome"></a><a href="#sim" data-t="navSim"></a><a href="#anatomy" data-t="navAnat"></a><a href="#gloss" data-t="navGloss"></a><a href="#quiz" data-t="navQuiz"></a>
+      <a href="../index.html" data-t="navHome"></a><a href="#sim" data-t="navSim"></a><a href="#anatomy" data-t="navAnat"></a><a href="#gloss" data-t="navGloss"></a><a href="#quiz" data-t="navQuiz"></a>
     </nav>
     <div class="tools">
       <div class="seg" role="group" aria-label="Limba / Language">
@@ -673,8 +675,8 @@ const MORE=[
  {more:{ro:`<p>De ce straturi? Fiecare strat are <strong>o singură treabă</strong> și nu trebuie să știe cum lucrează celelalte. Browserul nu știe nimic despre cabluri, iar placa de rețea nu știe ce e o pagină web.</p><p>O analogie: scrii o scrisoare (aplicația), o pui într-un plic cu numele destinatarului (TCP), plicul intră într-un colet cu adresa poștală (IP), iar curierul lipește o etichetă pentru drumul până la următorul depozit (Ethernet). La fiecare depozit se schimbă eticheta curierului, dar adresa poștală rămâne aceeași.</p>`,
    en:`<p>Why layers? Each layer has <strong>one job</strong> and doesn't need to know how the others work. The browser knows nothing about cables, and the network card doesn't know what a web page is.</p><p>An analogy: you write a letter (the application), put it in an envelope with the recipient's name (TCP), the envelope goes into a parcel with the postal address (IP), and the courier sticks on a label for the trip to the next depot (Ethernet). At each depot the courier label is replaced, but the postal address stays the same.</p>`},
   try:[{cmd:"ipconfig /all",d:{ro:"Arată IP-ul, masca, gateway-ul și adresa MAC („Physical Address”) ale calculatorului tău.",en:"Shows your computer's IP, mask, gateway and MAC address (\"Physical Address\")."}}]},
- {more:{ro:`<p>În realitate, înainte de acest pas browserul face o interogare <strong>DNS</strong> (vezi <a href="../dns/">lecția DNS</a>): transformă un nume (de ex. <code>server-b.ro</code>) în IP-ul <code>192.168.2.20</code>.</p><p>Azi aproape toate site-urile folosesc <strong>HTTPS</strong> (portul 443), care criptează datele. Aici folosim HTTP simplu ca să poți citi conținutul. Criptarea schimbă doar datele; drumul cadrului e identic.</p>`,
-   en:`<p>In reality, before this step the browser makes a <strong>DNS</strong> query (see the <a href="../dns/">DNS lesson</a>): it turns a name (e.g. <code>server-b.com</code>) into the IP <code>192.168.2.20</code>.</p><p>Almost every site today uses <strong>HTTPS</strong> (port 443), which encrypts the data. We use plain HTTP here so you can read the content. Encryption only changes the data; the frame's journey is identical.</p>`},
+ {more:{ro:`<p>În realitate, înainte de acest pas browserul face o interogare <strong>DNS</strong> (vezi <a href="../dns/index.html">lecția DNS</a>): transformă un nume (de ex. <code>server-b.ro</code>) în IP-ul <code>192.168.2.20</code>.</p><p>Azi aproape toate site-urile folosesc <strong>HTTPS</strong> (portul 443), care criptează datele. Aici folosim HTTP simplu ca să poți citi conținutul. Criptarea schimbă doar datele; drumul cadrului e identic.</p>`,
+   en:`<p>In reality, before this step the browser makes a <strong>DNS</strong> query (see the <a href="../dns/index.html">DNS lesson</a>): it turns a name (e.g. <code>server-b.com</code>) into the IP <code>192.168.2.20</code>.</p><p>Almost every site today uses <strong>HTTPS</strong> (port 443), which encrypts the data. We use plain HTTP here so you can read the content. Encryption only changes the data; the frame's journey is identical.</p>`},
   try:[{cmd:"nslookup example.com",d:{ro:"Întreabă DNS-ul ce IP are un nume de site.",en:"Asks DNS which IP a site name has."}}]},
  {more:{ro:`<p>Antetul TCP are minimum <strong>20 de octeți</strong>. Pe lângă porturi conține: număr de secvență, număr de confirmare (ACK), indicatori (SYN, ACK, FIN…) și o „fereastră” care spune câte date pot veni fără confirmare.</p><p>Porturile sursă temporare sunt de obicei între <code>49152</code> și <code>65535</code>. Alternativa la TCP este <strong>UDP</strong>: fără conexiune și fără confirmări, mai rapid, folosit pentru DNS, jocuri, apeluri video.</p>`,
    en:`<p>The TCP header is at least <strong>20 bytes</strong>. Besides ports it holds: a sequence number, an acknowledgement number (ACK), flags (SYN, ACK, FIN…) and a "window" saying how much data may arrive without acknowledgement.</p><p>Temporary source ports are usually between <code>49152</code> and <code>65535</code>. The alternative to TCP is <strong>UDP</strong>: no connection and no acknowledgements, faster, used for DNS, games and video calls.</p>`},
@@ -777,7 +779,7 @@ const UI={
   heroEyebrow:{ro:"Lecție interactivă · Rețelistică",en:"Interactive lesson · Networking"},
   goalsT:{ro:"Ce vei învăța",en:"What you'll learn"},
   goals:[{ro:"Cum se încapsulează datele, strat cu strat",en:"How data is encapsulated, layer by layer"},{ro:"De ce MAC-urile se schimbă la fiecare hop, iar IP-urile nu",en:"Why MACs change at every hop while IPs don't"},{ro:"Cum învață și trimite un switch, cum alege drumul un router",en:"How a switch learns and forwards, how a router picks a route"},{ro:"Ce fac ARP, TTL și FCS",en:"What ARP, TTL and FCS do"}],
-  meta:[{ro:"≈ 15 minute",en:"≈ 15 minutes"},{ro:"18 pași",en:"18 steps"},{ro:"7 întrebări",en:"7 questions"},{ro:"Începător",en:"Beginner"}],
+  meta:[{ro:"≈ 15 minute",en:"≈ 15 minutes"},{ro:"18 pași",en:"18 steps"},{ro:"12 întrebări",en:"12 questions"},{ro:"Începător",en:"Beginner"}],
   lgRing:{ro:"dispozitivul activ",en:"active device"},lgEth:{ro:"cadru Ethernet",en:"Ethernet frame"},lgArp:{ro:"cadru ARP",en:"ARP frame"},lgIp:{ro:"pachet IP",en:"IP packet"},lgTcp:{ro:"segment",en:"segment"},lgApp:{ro:"date",en:"data"},
   more:{ro:"Află mai mult",en:"Learn more"},tryT:{ro:"Încearcă pe calculatorul tău (PowerShell sau Command Prompt)",en:"Try it on your computer (PowerShell or Command Prompt)"},
   copy:{ro:"Copiază",en:"Copy"},copied:{ro:"Copiat ✓",en:"Copied ✓"},
@@ -816,6 +818,23 @@ const QUIZ=[
   o:[{ro:"Pentru că FCS-ul conține IP-ul routerului",en:"Because the FCS contains the router's IP"},{ro:"Nu îl recalculează, FCS-ul rămâne același",en:"It doesn't – the FCS stays the same"},{ro:"Pentru că a construit un cadru nou (MAC-uri noi, TTL nou), deci și suma de control e alta",en:"Because it built a new frame (new MACs, new TTL), so the checksum is different too"},{ro:"Pentru că așa îi cere switch-ul",en:"Because the switch asks it to"}],a:2,
   e:{ro:"FCS-ul e calculat din tot conținutul cadrului. Cadru nou ⇒ FCS nou.",en:"The FCS is calculated from the whole frame's content. New frame ⇒ new FCS."}}
 ];
+QUIZ.push(
+ {q:{ro:"La ce strat lucrează un switch obișnuit?",en:"Which layer does an ordinary switch work at?"},
+  o:[{ro:"Stratul 2 – Legătură de date",en:"Layer 2 – Data link"},{ro:"Stratul 3 – Rețea",en:"Layer 3 – Network"},{ro:"Stratul 4 – Transport",en:"Layer 4 – Transport"},{ro:"Stratul 7 – Aplicație",en:"Layer 7 – Application"}],a:0,
+  e:{ro:"Switch-ul citește doar antetul Ethernet (MAC-urile). Routerul lucrează la stratul 3.",en:"A switch only reads the Ethernet header (the MACs). A router works at layer 3."}},
+ {q:{ro:"Ce înseamnă EtherType 0x0806?",en:"What does EtherType 0x0806 mean?"},
+  o:[{ro:"Înăuntru e un pachet IPv4",en:"There's an IPv4 packet inside"},{ro:"Înăuntru e IPv6",en:"There's IPv6 inside"},{ro:"Înăuntru e un mesaj ARP",en:"There's an ARP message inside"},{ro:"Cadrul e stricat",en:"The frame is damaged"}],a:2,
+  e:{ro:"0x0800 = IPv4, 0x0806 = ARP, 0x86DD = IPv6.",en:"0x0800 = IPv4, 0x0806 = ARP, 0x86DD = IPv6."}},
+ {q:{ro:"Care e mărimea minimă a unui cadru Ethernet (fără preambul)?",en:"What is the minimum size of an Ethernet frame (without the preamble)?"},
+  o:[{ro:"14 octeți",en:"14 bytes"},{ro:"64 de octeți",en:"64 bytes"},{ro:"1500 de octeți",en:"1500 bytes"},{ro:"1518 octeți",en:"1518 bytes"}],a:1,
+  e:{ro:"Sub 64 de octeți, placa adaugă umplutură. 1500 e MTU-ul (datele maxime), 1518 e cadrul maxim.",en:"Below 64 bytes the card adds padding. 1500 is the MTU (max payload), 1518 the max frame."}},
+ {q:{ro:"Ce înseamnă MAC-ul destinație FF:FF:FF:FF:FF:FF?",en:"What does the destination MAC FF:FF:FF:FF:FF:FF mean?"},
+  o:[{ro:"Un MAC necunoscut",en:"An unknown MAC"},{ro:"MAC-ul routerului",en:"The router's MAC"},{ro:"Broadcast: pentru toți din rețeaua locală",en:"Broadcast: for everyone on the local network"},{ro:"Un cadru de test",en:"A test frame"}],a:2,
+  e:{ro:"Switch-ul trimite un broadcast pe toate porturile; routerul nu îl trimite mai departe în alte rețele.",en:"A switch sends a broadcast out of every port; a router doesn't forward it to other networks."}},
+ {q:{ro:"Care câmp are aceeași valoare pe toate legăturile, de la A la B?",en:"Which field has the same value on every link from A to B?"},
+  o:[{ro:"MAC sursă",en:"Source MAC"},{ro:"TTL",en:"TTL"},{ro:"FCS",en:"FCS"},{ro:"IP destinație",en:"Destination IP"}],a:3,
+  e:{ro:"IP-urile sursă și destinație rămân aceleași (fără NAT). MAC-urile, TTL-ul și FCS-ul se schimbă la fiecare router.",en:"Source and destination IPs stay the same (without NAT). MACs, TTL and FCS change at every router."}}
+);
 let answers=new Array(QUIZ.length).fill(null);
 
 /* ---------- glossary ---------- */
@@ -843,9 +862,34 @@ const GLOSS=[
  ["SYN / ACK","Synchronize / Acknowledge",{ro:"Mesajele TCP din „strângerea de mână” cu care se deschide o conexiune.",en:"The TCP messages of the handshake that opens a connection."}],
  ["DNS / DHCP","Domain Name System / Dynamic Host Configuration Protocol",{ro:"DNS transformă un nume (ex. exemplu.ro) în adresă IP. DHCP dă automat calculatorului IP, mască și gateway.",en:"DNS turns a name (e.g. example.com) into an IP address. DHCP automatically gives a computer its IP, mask and gateway."}]
 ];
+const GLOSS_EX={
+ "TTL":{ro:"un pachet pleacă din Windows cu TTL 128; după 3 routere ajunge cu 125. Comanda tracert folosește TTL 1, 2, 3… ca să afle fiecare router.",en:"a packet leaves Windows with TTL 128; after 3 routers it arrives with 125. The tracert command uses TTL 1, 2, 3… to discover each router."},
+ "FCS":{ro:"dacă un bit se strică pe un cablu defect, FCS-ul calculat de receptor diferă de cel din cadru, iar cadrul e aruncat. Contorul „CRC errors” al portului crește.",en:"if one bit gets damaged on a faulty cable, the FCS the receiver calculates differs from the one in the frame, so the frame is dropped. The port's \"CRC errors\" counter goes up."},
+ "CRC-32":{ro:"în simulare, FCS-ul se schimbă la fiecare router (0x9CC7D9AC → altă valoare), pentru că s-au schimbat MAC-urile și TTL-ul din cadru.",en:"in the simulation the FCS changes at every router (0x9CC7D9AC → another value) because the MACs and TTL inside the frame changed."},
+ "MAC":{ro:"în ipconfig /all, „Physical Address . . : 3C-52-82-1A-7F-09” e adresa MAC; 3C-52-82 identifică producătorul plăcii.",en:"in ipconfig /all, \"Physical Address . . : 3C-52-82-1A-7F-09\" is the MAC address; 3C-52-82 identifies the card's manufacturer."},
+ "IP":{ro:"192.168.1.10 cu masca /24 înseamnă rețeaua 192.168.1.0 și calculatorul nr. 10 din ea.",en:"192.168.1.10 with a /24 mask means network 192.168.1.0 and computer number 10 in it."},
+ "ARP":{ro:"comanda arp -a pe Windows poate arăta „192.168.1.1  a4-91-b1-22-0c-10  dynamic”: gateway-ul și MAC-ul lui, aflate prin ARP.",en:"the arp -a command on Windows may show \"192.168.1.1  a4-91-b1-22-0c-10  dynamic\": the gateway and its MAC, learned via ARP."},
+ "TCP":{ro:"când descarci un fișier, TCP numerotează fiecare bucată; dacă una se pierde, o cere din nou, iar fișierul ajunge întreg.",en:"when you download a file, TCP numbers every piece; if one is lost it asks for it again, so the file arrives complete."},
+ "Port":{ro:"pe același server pot rula simultan un site (port 443), e-mail (port 25) și SSH (port 22): portul spune cărui program îi e destinat pachetul.",en:"one server can run a website (port 443), email (port 25) and SSH (port 22) at once: the port says which program a packet is for."},
+ "HTTP":{ro:"„GET /contact HTTP/1.1” cere pagina de contact; serverul răspunde „HTTP/1.1 200 OK” și conținutul paginii.",en:"\"GET /contact HTTP/1.1\" asks for the contact page; the server answers \"HTTP/1.1 200 OK\" and the page content."},
+ "EtherType":{ro:"0x0800 = IPv4, 0x0806 = ARP, 0x86DD = IPv6, 0x8100 = cadru cu etichetă VLAN.",en:"0x0800 = IPv4, 0x0806 = ARP, 0x86DD = IPv6, 0x8100 = VLAN-tagged frame."},
+ "Checksum IP":{ro:"în simulare, la R1 TTL-ul trece din 64 în 63, iar checksum-ul din 0x9A0D în 0x9B0D.",en:"in the simulation, at R1 the TTL goes from 64 to 63 and the checksum from 0x9A0D to 0x9B0D."},
+ "Payload":{ro:"pentru cadrul Ethernet, payload-ul e tot pachetul IP; pentru TCP, payload-ul e doar textul „GET / HTTP/1.1”.",en:"for the Ethernet frame the payload is the whole IP packet; for TCP the payload is just the text \"GET / HTTP/1.1\"."},
+ "LAN / WAN":{ro:"rețeaua Wi-Fi de acasă e un LAN; legătura dintre routerul tău și furnizorul de internet face parte dintr-un WAN.",en:"your home Wi-Fi is a LAN; the link between your router and your internet provider is part of a WAN."},
+ "/24":{ro:"o rețea /24 are 256 de adrese (192.168.1.0–255), din care 254 pot fi date calculatoarelor; o rețea /30 are doar 4 (2 utilizabile), cât pentru o legătură între două routere.",en:"a /24 network has 256 addresses (192.168.1.0–255), 254 of them usable for computers; a /30 has just 4 (2 usable), enough for a link between two routers."},
+ "Gateway":{ro:"„Default Gateway . . : 192.168.1.1” din ipconfig e de obicei routerul Wi-Fi de acasă.",en:"\"Default Gateway . . : 192.168.1.1\" in ipconfig is usually your home Wi-Fi router."},
+ "Hop":{ro:"tracert 1.1.1.1 afișează fiecare hop pe câte o linie: 1 = routerul tău, 2 = primul router al furnizorului etc.",en:"tracert 1.1.1.1 prints every hop on its own line: 1 = your router, 2 = your provider's first router, and so on."},
+ "Broadcast / Unicast":{ro:"cererea ARP („cine are 192.168.1.1?”) e broadcast; răspunsul ARP și cadrul cu date sunt unicast.",en:"the ARP request (\"who has 192.168.1.1?\") is a broadcast; the ARP reply and the data frame are unicast."},
+ "Gi0 / Gi1":{ro:"pe un router Cisco, „show ip interface brief” listează GigabitEthernet0/0, GigabitEthernet0/1 cu IP-urile lor.",en:"on a Cisco router, \"show ip interface brief\" lists GigabitEthernet0/0, GigabitEthernet0/1 with their IPs."},
+ "OSI":{ro:"„problema e la stratul 1” înseamnă cablu sau placă de rețea; „la stratul 3” înseamnă adrese IP sau rutare.",en:"\"it's a layer 1 problem\" means a cable or network card; \"layer 3\" means IP addresses or routing."},
+ "PDU":{ro:"în lecție, același mesaj e pe rând date (L7), segment (L4), pachet (L3), cadru (L2) și biți (L1).",en:"in the lesson, the same message is in turn data (L7), a segment (L4), a packet (L3), a frame (L2) and bits (L1)."},
+ "SYN / ACK":{ro:"deschiderea unei conexiuni: A → SYN, B → SYN-ACK, A → ACK. Abia apoi se trimite cererea HTTP.",en:"opening a connection: A → SYN, B → SYN-ACK, A → ACK. Only then is the HTTP request sent."},
+ "DNS / DHCP":{ro:"când te conectezi la Wi-Fi, DHCP îți dă IP-ul; când scrii google.com, DNS îți dă IP-ul site-ului. Vezi lecția DNS.",en:"when you join Wi-Fi, DHCP gives you an IP; when you type google.com, DNS gives you the site's IP. See the DNS lesson."}
+};
 function renderGloss(){
   let h=`<h2>${T(UI.glossT)}</h2><p class="lead">${T(UI.glossLead)}</p><dl class="gl">`;
-  GLOSS.forEach(([t,full,d])=>{h+=`<div><dt>${t}${full?`<small>${T(full)}</small>`:""}</dt><dd>${T(d)}</dd></div>`});
+  const exLbl=lang==="ro"?"Exemplu":"Example";
+  GLOSS.forEach(([t,full,d])=>{const ex=GLOSS_EX[t];h+=`<div><dt>${t}${full?`<small>${T(full)}</small>`:""}</dt><dd>${T(d)}</dd>${ex?`<dd class="ex"><b>${exLbl}:</b> ${T(ex)}</dd>`:""}</div>`});
   $("#gloss").innerHTML=h+`</dl>`;
 }
 

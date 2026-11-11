@@ -10,6 +10,9 @@
 .bar .c-l2{background:var(--l2bg);color:var(--l2)} .bar .c-l3{background:var(--l3bg);color:var(--l3)} .bar .c-l4{background:var(--l4bg);color:var(--l4)}
 .bar .c-l7{background:var(--l7bg);color:var(--l7)} .bar .c-arp{background:var(--arpbg);color:var(--arp)}
 
+.gl dd.ex{margin-top:6px;padding-top:6px;border-top:1px dashed var(--border);font-size:.85rem;color:var(--muted)}
+.gl dd.ex b{color:var(--text);font-weight:600}
+
 /* reference blocks */
 .ref-stack{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
 .refcard{min-width:0}

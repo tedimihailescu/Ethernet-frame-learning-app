@@ -48,7 +48,7 @@
 </head>
 <body>
 <header class="topbar" id="top"><div class="topbar-in">
-  <a class="brand" href="./"><svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="var(--accent)"/><path d="M7 16h18M19 11l6 5-6 5" fill="none" stroke="var(--accent-text)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="16" r="2.6" fill="var(--accent-text)"/></svg><span data-t="brand"></span></a>
+  <a class="brand" href="index.html"><svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="var(--accent)"/><path d="M7 16h18M19 11l6 5-6 5" fill="none" stroke="var(--accent-text)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="16" r="2.6" fill="var(--accent-text)"/></svg><span data-t="brand"></span></a>
   <nav class="nav" aria-label="Secțiuni / Sections"><a href="#lectii" data-t="navLessons"></a><a href="#curand" data-t="navSoon"></a></nav>
   <div class="tools"><div class="seg" role="group" aria-label="Limba / Language"><button type="button" data-lang="ro">RO</button><button type="button" data-lang="en">EN</button></div><button type="button" class="icon-btn" id="theme">◐</button></div>
 </div></header>
@@ -83,7 +83,7 @@ const UI={
   eyebrow:{ro:"Lecții interactive · gratuite · RO / EN",en:"Interactive lessons · free · RO / EN"},
   h1:{ro:"Înțelege rețelele urmărind pachetele, pas cu pas",en:"Understand networks by following the packets, step by step"},
   sub:{ro:"Fiecare lecție e o simulare animată: vezi ce face fiecare dispozitiv și ce câmpuri se schimbă la fiecare hop. Pornești de la cadrul Ethernet și ajungi la Service-urile din Kubernetes.",en:"Each lesson is an animated simulation: see what every device does and which fields change at every hop. You start with the Ethernet frame and end with Kubernetes Services."},
-  meta:[{ro:"3 lecții",en:"3 lessons"},{ro:"47 de pași",en:"47 steps"},{ro:"21 de întrebări",en:"21 questions"},{ro:"fără cont, fără instalări",en:"no account, no install"}],
+  meta:[{ro:"3 lecții",en:"3 lessons"},{ro:"47 de pași",en:"47 steps"},{ro:"36 de întrebări",en:"36 questions"},{ro:"fără cont, fără instalări",en:"no account, no install"}],
   how:[["▶",{ro:"Simulare pas cu pas",en:"Step-by-step simulation"},{ro:"Înainte, înapoi sau redare automată, cu animația pachetului pe diagramă.",en:"Forward, back or auto-play, with the packet animated on the diagram."}],
        ["≡",{ro:"Pachetul „live”",en:"The \"live\" packet"},{ro:"Câmpurile noi, schimbate sau eliminate sunt colorate la fiecare pas.",en:"New, changed or removed fields are coloured at every step."}],
        [">_",{ro:"Comenzi reale",en:"Real commands"},{ro:"La fiecare lecție: comenzi de încercat pe Windows sau într-un cluster.",en:"In every lesson: commands to try on Windows or in a cluster."}]],
@@ -100,15 +100,15 @@ const ILL={
  k8s:`<svg viewBox="0 0 300 100" aria-hidden="true"><rect x="10" y="10" width="110" height="80" rx="8" fill="none" stroke="var(--border)" stroke-dasharray="4 3"/><rect x="180" y="10" width="110" height="80" rx="8" fill="none" stroke="var(--border)" stroke-dasharray="4 3"/><line class="ill-line" x1="65" y1="38" x2="150" y2="50" stroke-dasharray="5 4"/><line class="ill-line" x1="150" y1="50" x2="235" y2="38" stroke-dasharray="5 4"/><line class="ill-line" x1="150" y1="50" x2="65" y2="72" stroke-dasharray="5 4"/><polygon class="ill-dev" points="65,24 77,31 77,45 65,52 53,45 53,31"/><polygon class="ill-dev" points="65,60 75,66 75,78 65,84 55,78 55,66"/><polygon class="ill-dev" points="235,24 247,31 247,45 235,52 223,45 223,31"/><rect class="ill-dev" x="128" y="40" width="44" height="20" rx="10" stroke-dasharray="3 2"/><circle class="ill-acc" cx="137" cy="50" r="2.5"/></svg>`
 };
 const LESSONS=[
- {href:"ethernet/",ill:"eth",lvl:{ro:"Începător",en:"Beginner"},stats:{ro:"18 pași · ≈ 15 min",en:"18 steps · ≈ 15 min"},
+ {href:"ethernet/index.html",ill:"eth",lvl:{ro:"Începător",en:"Beginner"},stats:{ro:"18 pași · ≈ 15 min",en:"18 steps · ≈ 15 min"},
   t:{ro:"Drumul unui cadru Ethernet",en:"The journey of an Ethernet frame"},
   d:{ro:"De la Host A la Host B prin switch-uri și routere: încapsulare, ARP, tabele MAC și de rutare.",en:"From Host A to Host B via switches and routers: encapsulation, ARP, MAC and routing tables."},
   topics:[{ro:"De ce MAC-urile se schimbă și IP-urile nu",en:"Why MACs change and IPs don't"},{ro:"TTL, FCS, ARP",en:"TTL, FCS, ARP"},{ro:"Anatomia cadrului, octet cu octet",en:"Frame anatomy, byte by byte"}]},
- {href:"dns/",ill:"dns",lvl:{ro:"Începător",en:"Beginner"},stats:{ro:"13 pași · ≈ 15 min",en:"13 steps · ≈ 15 min"},
+ {href:"dns/index.html",ill:"dns",lvl:{ro:"Începător",en:"Beginner"},stats:{ro:"13 pași · ≈ 15 min",en:"13 steps · ≈ 15 min"},
   t:{ro:"Cum funcționează DNS",en:"How DNS works"},
   d:{ro:"Cum devine www.example.com o adresă IP: resolver, server rădăcină, .com, server autoritar și cache.",en:"How www.example.com becomes an IP address: resolver, root server, .com, authoritative server and caching."},
   topics:[{ro:"Recursiv vs. iterativ",en:"Recursive vs. iterative"},{ro:"Înregistrări A, NS, CNAME, MX, TXT",en:"A, NS, CNAME, MX, TXT records"},{ro:"TTL și cache",en:"TTL and caching"}]},
- {href:"kubernetes/",ill:"k8s",lvl:{ro:"Intermediar",en:"Intermediate"},stats:{ro:"16 pași · ≈ 20 min",en:"16 steps · ≈ 20 min"},
+ {href:"kubernetes/index.html",ill:"k8s",lvl:{ro:"Intermediar",en:"Intermediate"},stats:{ro:"16 pași · ≈ 20 min",en:"16 steps · ≈ 20 min"},
   t:{ro:"Kubernetes: Service-uri și DNS în cluster",en:"Kubernetes: Services and cluster DNS"},
   d:{ro:"Un pod cheamă „backend”: CoreDNS, ClusterIP, kube-proxy și DNAT, trecerea între noduri, NodePort și LoadBalancer.",en:"A pod calls \"backend\": CoreDNS, ClusterIP, kube-proxy and DNAT, crossing nodes, NodePort and LoadBalancer."},
   topics:[{ro:"Cluster, noduri, pod-uri, etichete",en:"Cluster, nodes, pods, labels"},{ro:"ClusterIP, NodePort, LoadBalancer, headless",en:"ClusterIP, NodePort, LoadBalancer, headless"},{ro:"Nume DNS: backend.shop.svc.cluster.local",en:"DNS names: backend.shop.svc.cluster.local"}]}
