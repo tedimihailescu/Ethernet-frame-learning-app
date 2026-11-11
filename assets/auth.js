@@ -7,7 +7,7 @@ if (location.protocol !== "file:") {
 
 async function boot() {
   const [{ auth, db, ROOT, lang }, authMod, fs] = await Promise.all([
-    import("./firebase.js?v=3"),
+    import("./firebase.js?v=4"),
     import("https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js"),
     import("https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js")
   ]);
@@ -67,7 +67,7 @@ async function boot() {
     const wrap = document.createElement("div");
     wrap.id = "user-menu";
     wrap.className = "user-menu";
-    wrap.innerHTML = `<a class="um-link um-tests" href="${ROOT}teste/index.html">✎ <span class="um-name">${L("Teste", "Quizzes")}</span></a><a class="um-link" href="${ROOT}rezultate/index.html" title="${L("Rezultatele mele", "My results")}">★ <span class="um-name"></span></a><button type="button" class="icon-btn um-out" title="${L("Ieșire", "Sign out")}" aria-label="${L("Ieșire", "Sign out")}">⎋</button>`;
+    wrap.innerHTML = `<a class="um-link" href="${ROOT}joc/index.html" title="${L("Mini-joc", "Mini-game")}">🎮 <span class="um-name">${L("Joc", "Game")}</span></a><a class="um-link um-tests" href="${ROOT}teste/index.html">✎ <span class="um-name">${L("Teste", "Quizzes")}</span></a><a class="um-link" href="${ROOT}rezultate/index.html" title="${L("Rezultatele mele", "My results")}">★ <span class="um-name"></span></a><button type="button" class="icon-btn um-out" title="${L("Ieșire", "Sign out")}" aria-label="${L("Ieșire", "Sign out")}">⎋</button>`;
     wrap.querySelector(".um-name").textContent = name;
     wrap.querySelector(".um-out").onclick = () => signOut(auth);
     tools.prepend(wrap);

@@ -64,7 +64,7 @@ input:focus-visible,.gbtn:focus-visible,.tabs button:focus-visible,.linkbtn:focu
 </main>
 
 <script type="module">
-import { auth, ROOT } from "../assets/firebase.js?v=3";
+import { auth, ROOT } from "../assets/firebase.js?v=4";
 import { GoogleAuthProvider, signInWithPopup, signInWithRedirect, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, sendPasswordResetEmail, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};

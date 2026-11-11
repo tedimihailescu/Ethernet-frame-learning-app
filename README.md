@@ -64,3 +64,5 @@ Every lesson has an animated diagram, a live packet view with changed fields hig
 A new lesson is one HTML file that defines `window.LESSON` and loads `assets/engine.js`.
 
 No build step and no dependencies (fonts load from Google Fonts, with system-font fallbacks). Addresses and names in the lessons are examples.
+
+**Mini-joc:** [Livrează pachetul](joc/index.html): rutare, porturi, MAC-uri, DNS, straturi OSI și IPv6 contra cronometru; scorul intră în rezultate.

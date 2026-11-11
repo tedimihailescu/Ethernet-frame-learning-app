@@ -30,6 +30,7 @@ h2.grp{font:700 1.05rem var(--head);margin:22px 0 10px}
 .bar i{display:block;height:100%;background:var(--text)}
 .go{margin-top:auto;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 12px;border-radius:8px;background:var(--accent);color:var(--accent-text);font:700 .9rem var(--sans);text-decoration:none;border:1px solid var(--accent)}
 .go:hover{filter:brightness(1.1)}
+.t.game{display:flex;margin:0 0 18px;text-decoration:none;color:var(--text);border:2px solid var(--text);background:var(--hero)}
 .done{font:600 .72rem var(--mono);padding:1px 7px;border-radius:999px;border:1px solid var(--text);margin-left:6px}
 </style>
 </head>
@@ -43,11 +44,12 @@ h2.grp{font:700 1.05rem var(--head);margin:22px 0 10px}
 <main class="page">
   <h1 data-t="title"></h1>
   <p class="lead" data-t="lead"></p>
+  <a class="t game" href="../joc/index.html"><span class="lvl" data-t="gameK"></span><h3 data-t="gameT"></h3><span class="st" data-t="gameD"></span></a>
   <div class="sum" id="sum"></div>
   <div id="list"></div>
 </main>
 
-<script type="module" src="../assets/auth.js?v=3"></script>
+<script type="module" src="../assets/auth.js?v=4"></script>
 <script type="module">
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
 let lang=store.get("cadru-lang")==="en"?"en":"ro";
@@ -55,7 +57,8 @@ const UI={brand:["Rețea pas cu pas","Network step by step"],home:["← Lecții"
   lead:["Alege un test. Fiecare deschide lecția direct la „Test final”; după ce răspunzi la toate întrebările, scorul se salvează automat. Poți reface un test oricând.","Pick a quiz. Each one opens the lesson straight at the \"Final quiz\"; once you answer every question the score is saved automatically. You can retake a quiz any time."],
   start:["Începe testul →","Start the quiz →"],again:["Refă testul →","Retake the quiz →"],best:["Cel mai bun","Best"],tries:["încercări","attempts"],none:["Încă neîncercat","Not taken yet"],
   done:["teste încercate","quizzes taken"],avg:["media celor mai bune scoruri","average of best scores"],total:["teste disponibile","quizzes available"],
-  g1:["Rețele: bazele","Networking basics"],g2:["Internet și web","Internet and web"],g3:["Kubernetes și operare","Kubernetes and operations"],g4:["Aplicații în producție","Production apps"]};
+  g1:["Rețele: bazele","Networking basics"],g2:["Internet și web","Internet and web"],g3:["Kubernetes și operare","Kubernetes and operations"],g4:["Aplicații în producție","Production apps"],
+  gameK:["Pauză de joacă","Play break"],gameT:["🎮 Livrează pachetul: mini-joc de 2 minute →","🎮 Deliver the packet: a 2-minute mini-game →"],gameD:["Rutare, porturi, MAC-uri, DNS, OSI și IPv6, contra cronometru. Scorul intră în rezultate.","Routing, ports, MACs, DNS, OSI and IPv6, against the clock. The score goes into your results."]};
 const T=k=>UI[k][lang==="en"?1:0];
 const G=[
  ["g1",[["ethernet","Drumul unui cadru Ethernet","The journey of an Ethernet frame","Începător","Beginner"],["vlan","VLAN: mai multe rețele pe un switch","VLANs: several networks on one switch","Începător+","Beginner+"],["nat","NAT: un singur IP public","NAT: one public IP","Începător+","Beginner+"]]],
@@ -82,7 +85,7 @@ const saved=store.get("cadru-theme");if(saved==="light"||saved==="dark")document
 document.getElementById("theme").onclick=()=>{const r=document.documentElement,d=r.dataset.theme?r.dataset.theme==="dark":matchMedia("(prefers-color-scheme: dark)").matches;const nt=d?"light":"dark";r.dataset.theme=nt;store.set("cadru-theme",nt)};
 render();
 if(location.protocol!=="file:"){
-  const [{auth,db},{onAuthStateChanged},{collection,query,where,getDocs}]=await Promise.all([import("../assets/firebase.js?v=3"),import("https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js"),import("https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js")]);
+  const [{auth,db},{onAuthStateChanged},{collection,query,where,getDocs}]=await Promise.all([import("../assets/firebase.js?v=4"),import("https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js"),import("https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js")]);
   onAuthStateChanged(auth,async u=>{if(!u)return;try{const snap=await getDocs(query(collection(db,"results"),where("uid","==",u.uid)));stats={};
     snap.docs.forEach(d=>{const x=d.data();const p=x.total?Math.round(100*x.score/x.total):0;const s=stats[x.lesson]=stats[x.lesson]||{best:0,n:0};s.n++;if(p>s.best)s.best=p});render()}catch(e){console.error(e)}});
 }

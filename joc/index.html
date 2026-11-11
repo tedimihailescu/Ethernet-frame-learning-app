@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Livrează pachetul</title>
+<meta name="description" content="Mini-joc: alege repede ieșirea corectă pentru fiecare pachet. Rutare, porturi, MAC-uri, DNS, straturi OSI și IPv6. / Mini-game: deliver the packet.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/theme.css">
+<style>
+.page{max-width:820px;margin:0 auto;padding-block:20px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1{font:700 clamp(1.5rem,4vw,2.2rem) var(--head);margin:0 0 6px}
+.lead{color:var(--muted);margin:0 0 16px}
+.card{background:var(--surface);border:2px solid var(--text);border-radius:14px;padding:18px;min-width:0}
+.hud{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;justify-content:space-between;margin:0 0 12px;font:600 .95rem var(--sans)}
+.hud b{font:700 1.25rem var(--head);font-variant-numeric:tabular-nums}
+.lives{letter-spacing:2px;font-size:1.15rem}
+.timer{height:10px;border-radius:5px;background:var(--surface2);overflow:hidden;margin:0 0 16px;border:1px solid var(--border)}
+.timer i{display:block;height:100%;width:100%;background:var(--text);transform-origin:left;transition:transform .1s linear}
+.timer.low i{background:var(--bad)}
+.kind{font:600 .74rem var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 6px}
+.pkt{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
+.pkt span{font:600 .9rem var(--mono);padding:6px 10px;border-radius:8px;background:var(--accent);color:var(--accent-text);overflow-wrap:anywhere;max-width:100%}
+.pkt span.alt{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+.q{font:600 1.08rem var(--sans);margin:0 0 12px}
+.ctx{margin:0 0 14px;overflow-x:auto}
+.ctx table{border-collapse:collapse;font:500 .88rem var(--mono);min-width:240px}
+.ctx th,.ctx td{border-bottom:1px solid var(--border);padding:5px 10px;text-align:left}
+.ctx th{font:600 .74rem var(--sans);color:var(--muted)}
+.opts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.opt{display:flex;align-items:center;gap:10px;text-align:left;border:2px solid var(--text);background:var(--surface);color:var(--text);border-radius:10px;padding:12px 14px;font:600 1rem var(--sans);cursor:pointer;min-height:56px;min-width:0;overflow-wrap:anywhere}
+.opt:hover:not(:disabled){background:var(--surface2)}
+.opt .k{flex:none;display:inline-grid;place-items:center;width:26px;height:26px;border-radius:6px;background:var(--text);color:var(--surface);font:700 .8rem var(--mono)}
+.opt.ok{background:var(--ok);border-color:var(--ok);color:#fff}
+.opt.no{background:var(--bad);border-color:var(--bad);color:#fff}
+.opt:disabled{cursor:default}
+.fb{min-height:3.2em;margin:14px 0 0;font-size:.95rem}
+.fb b.good{color:var(--ok)} .fb b.bad{color:var(--bad)}
+.pop{display:inline-block;font:700 1rem var(--head);margin-left:8px;animation:pop .7s ease}
+@keyframes pop{from{transform:translateY(6px);opacity:0}to{transform:none;opacity:1}}
+.big{font:700 3rem var(--head);margin:6px 0;font-variant-numeric:tabular-nums}
+.btn{border:2px solid var(--text);background:var(--accent);color:var(--accent-text);border-radius:10px;padding:12px 20px;font:700 1rem var(--sans);cursor:pointer;text-decoration:none;display:inline-flex}
+.btn.sec{background:var(--surface);color:var(--text)}
+.row{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+.rules{margin:10px 0 0;padding-left:20px;line-height:1.7}
+.rank{font:700 1.2rem var(--head)}
+.shake{animation:shake .35s}
+@keyframes shake{25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+@media (max-width:520px){.opts{grid-template-columns:minmax(0,1fr)}}
+@media (prefers-reduced-motion:reduce){.pop,.shake{animation:none}.timer i{transition:none}}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<header class="topbar" id="top"><div class="topbar-in">
+  <a class="brand" href="../index.html"><svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="var(--accent)"/><path d="M7 16h18M19 11l6 5-6 5" fill="none" stroke="var(--accent-text)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="16" r="2.6" fill="var(--accent-text)"/></svg><span data-t="brand"></span></a>
+  <nav class="nav"><a href="../index.html" data-t="home"></a></nav>
+  <div class="tools"><div class="seg" role="group" aria-label="Limba / Language"><button type="button" data-lang="ro">RO</button><button type="button" data-lang="en">EN</button></div><button type="button" class="icon-btn" id="theme">◐</button></div>
+</div></header>
+
+<main class="page">
+  <h1 data-t="title"></h1>
+  <p class="lead" data-t="lead"></p>
+
+  <section class="card" id="intro">
+    <p><b data-t="howT"></b></p>
+    <ul class="rules" id="rules"></ul>
+    <p id="bestLine" class="lead" style="margin-top:12px"></p>
+    <div class="row"><button type="button" class="btn" id="start" data-t="start"></button></div>
+  </section>
+
+  <section class="card" id="game" hidden>
+    <div class="hud"><span><span data-t="round"></span> <b id="rnd"></b></span><span><span data-t="score"></span> <b id="sc">0</b><span id="pop"></span></span><span><span data-t="streak"></span> <b id="st">0</b></span><span class="lives" id="lv" aria-label="lives"></span></div>
+    <div class="timer" id="tm"><i id="tmi"></i></div>
+    <p class="kind" id="kind"></p>
+    <div class="pkt" id="pkt"></div>
+    <p class="q" id="q"></p>
+    <div class="ctx" id="ctx"></div>
+    <div class="opts" id="opts"></div>
+    <p class="fb" id="fb" aria-live="polite"></p>
+    <div class="row" id="nextRow" hidden><button type="button" class="btn" id="next" data-t="next"></button></div>
+  </section>
+
+  <section class="card" id="end" hidden>
+    <p class="kind" data-t="over"></p>
+    <p class="big" id="final"></p>
+    <p id="endStats"></p>
+    <p class="rank" id="rank"></p>
+    <p id="saved" class="lead"></p>
+    <div class="row"><button type="button" class="btn" id="again" data-t="again"></button><a class="btn sec" href="../rezultate/index.html" data-t="results"></a><a class="btn sec" href="../teste/index.html" data-t="tests"></a></div>
+  </section>
+</main>
+
+<script type="module" src="../assets/auth.js?v=4"></script>
+<script>
+(function(){
+"use strict";
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+let lang=store.get("cadru-lang")==="en"?"en":"ro";
+const L=(ro,en)=>lang==="en"?en:ro;
+const UI={brand:["Rețea pas cu pas","Network step by step"],home:["← Lecții","← Lessons"],title:["🎮 Livrează pachetul","🎮 Deliver the packet"],
+  lead:["Un mini-joc rapid: fiecare pachet trebuie trimis pe ieșirea corectă înainte să expire timpul.","A quick mini-game: send each packet out the right exit before time runs out."],
+  howT:["Cum se joacă","How to play"],start:["▶ Start","▶ Start"],round:["Runda","Round"],score:["Scor","Score"],streak:["Serie","Streak"],next:["Următorul pachet →","Next packet →"],
+  over:["Joc terminat","Game over"],again:["↻ Joacă din nou","↻ Play again"],results:["★ Rezultatele mele","★ My results"],tests:["✎ Teste","✎ Quizzes"]};
+const T=k=>UI[k][lang==="en"?1:0];
+const ROUNDS=15,TIME=15000;
+const R=n=>Math.floor(Math.random()*n),pick=a=>a[R(a.length)],shuf=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=R(i+1);[a[i],a[j]]=[a[j],a[i]]}return a};
+
+/* ---------- question generators: each returns {kind,pkt,q,ctx,opts,ans,why} ---------- */
+const GEN={
+ route(){const b=10,o2=R(200)+20,o3=R(200)+20;
+  const rows=[["0.0.0.0/0","eth0"],[b+".0.0.0/8","eth1"],[b+"."+o2+".0.0/16","eth2"],[b+"."+o2+"."+o3+".0/24","eth3"]];
+  const target=R(4);let dst;
+  if(target===0)dst=pick(["8.8.8.8","1.1.1.1","142.250.74."+R(250),"93.184.216.34"]);
+  else if(target===1)dst=b+"."+((o2+1+R(30))%250)+"."+R(250)+"."+R(250);
+  else if(target===2)dst=b+"."+o2+"."+((o3+1+R(30))%250)+"."+R(250);
+  else dst=b+"."+o2+"."+o3+"."+(R(250)+2);
+  return {kind:L("Router · tabela de rutare","Router · routing table"),pkt:[L("IP destinație ","Destination IP ")+dst],
+   q:L("Pe ce interfață pleacă pachetul?","Which interface does the packet leave on?"),
+   ctx:tbl([L("Rețea","Network"),L("Interfață","Interface")],rows),opts:["eth0","eth1","eth2","eth3"],ans:"eth"+target,
+   why:L("Câștigă potrivirea cea mai lungă (cel mai specific prefix) care conține adresa; 0.0.0.0/0 e ruta implicită.","The longest match (most specific prefix) containing the address wins; 0.0.0.0/0 is the default route.")}},
+ port(){const S=[["HTTPS","443"],["HTTP","80"],["DNS","53"],["SSH","22"],["SMTP","25"],["BGP","179"],["PostgreSQL","5432"],["MySQL","3306"],["RDP","3389"],["Kubernetes API","6443"]];
+  const [name,p]=pick(S);const wrong=shuf(S.filter(s=>s[1]!==p)).slice(0,3).map(s=>s[1]);
+  return {kind:L("Firewall · porturi","Firewall · ports"),pkt:["TCP SYN",L("serviciu: ","service: ")+name],q:L("Ce port destinație trebuie deschis pentru "+name+"?","Which destination port must be open for "+name+"?"),ctx:"",
+   opts:shuf([p,...wrong]),ans:p,why:L(name+" ascultă implicit pe portul "+p+".",name+" listens on port "+p+" by default.")}},
+ mac(){const hex=()=>R(256).toString(16).padStart(2,"0");const mk=()=>["aa",hex(),hex(),hex(),hex(),hex()].join(":");
+  const macs=[mk(),mk(),mk()];const rows=macs.map((m,i)=>[m,"Fa0/"+(i+1)]);const known=R(4)>0;const dst=known?pick(macs):mk();
+  const ans=known?"Fa0/"+(macs.indexOf(dst)+1):L("Pe toate porturile (flood)","Out every port (flood)");
+  return {kind:L("Switch · tabela MAC","Switch · MAC table"),pkt:[L("MAC destinație ","Destination MAC ")+dst],q:L("Pe ce port trimite switch-ul cadrul?","Which port does the switch send the frame out?"),
+   ctx:tbl(["MAC","Port"],rows),opts:["Fa0/1","Fa0/2","Fa0/3",L("Pe toate porturile (flood)","Out every port (flood)")],ans,
+   why:known?L("MAC-ul e în tabelă, deci cadrul pleacă doar pe portul lui.","The MAC is in the table, so the frame goes out its port only."):L("MAC necunoscut: switch-ul inundă cadrul pe toate porturile, în afară de cel pe care a venit.","Unknown MAC: the switch floods the frame out every port except the one it came in on.")}},
+ dns(){const S=[["A",L("adresa IPv4 a unui nume","a name's IPv4 address")],["AAAA",L("adresa IPv6 a unui nume","a name's IPv6 address")],["MX",L("serverul de e-mail al unui domeniu","a domain's mail server")],["CNAME",L("un alias spre alt nume","an alias for another name")],["NS",L("serverele DNS autoritare ale domeniului","the domain's authoritative DNS servers")],["TXT",L("un text liber (verificări, SPF)","free text (verifications, SPF)")]];
+  const [rec,what]=pick(S);const wrong=shuf(S.filter(s=>s[0]!==rec)).slice(0,3).map(s=>s[0]);
+  return {kind:"DNS",pkt:[L("interogare DNS","DNS query"),"example.com"],q:L("Ce tip de înregistrare ceri pentru "+what+"?","Which record type do you ask for to get "+what+"?"),ctx:"",opts:shuf([rec,...wrong]),ans:rec,
+   why:L(rec+" = "+what+".",rec+" = "+what+".")}},
+ osi(){const S=[["Ethernet","L2"],[L("adresa MAC","the MAC address"),"L2"],[L("eticheta VLAN 802.1Q","the 802.1Q VLAN tag"),"L2"],["IP","L3"],["ICMP (ping)","L3"],[L("routerul","the router"),"L3"],["TCP","L4"],["UDP","L4"],[L("portul 443","port 443"),"L4"],["HTTP","L7"],["DNS","L7"],["SMTP","L7"]];
+  const [thing,layer]=pick(S);const N={L2:L("L2 · Legătură de date","L2 · Data link"),L3:L("L3 · Rețea","L3 · Network"),L4:L("L4 · Transport","L4 · Transport"),L7:L("L7 · Aplicație","L7 · Application")};
+  return {kind:L("Modelul OSI","The OSI model"),pkt:[thing],q:L("În ce strat lucrează?","Which layer does it work at?"),ctx:"",opts:["L2","L3","L4","L7"].map(k=>N[k]),ans:N[layer],
+   why:L(thing+" ține de "+N[layer]+".",thing+" belongs to "+N[layer]+".")}},
+ v6(){const h=()=>(R(4095)+1).toString(16);const x=h(),y=h();const g=v=>v.padStart(4,"0");
+  const full="2001:0db8:"+g(x)+":0000:0000:0000:0000:"+g(y);const ok="2001:db8:"+x+"::"+y;
+  const wrong=["2001:db8::"+x+"::"+y,"2001:db8:"+x+":"+y,"2001:db8:"+x+":0::"+y+":0"].filter(w=>w!==ok);
+  return {kind:"IPv6",pkt:[full],q:L("Care e forma scurtă corectă?","Which is the correct short form?"),ctx:"",opts:shuf([ok,...wrong]),ans:ok,
+   why:L("Zerourile de la începutul grupurilor dispar, iar un singur șir de grupuri 0000 devine ::.","Leading zeros in groups are dropped, and one run of 0000 groups becomes ::.")}}
+};
+function tbl(cols,rows){return `<table><thead><tr>${cols.map(c=>`<th>${c}</th>`).join("")}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table>`}
+
+const $=s=>document.querySelector(s);
+let st=null,timer=null;
+function newGame(){
+  const kinds=shuf([...Object.keys(GEN),...Object.keys(GEN),...Object.keys(GEN)]).slice(0,ROUNDS);
+  st={round:0,score:0,streak:0,best:0,lives:3,correct:0,answered:0,kinds,cur:null,locked:false,saved:false};
+  $("#intro").hidden=true;$("#end").hidden=true;$("#game").hidden=false;nextRound();
+}
+function nextRound(){
+  if(st.lives<=0||st.round>=ROUNDS){endGame();return}
+  st.round++;st.locked=false;st.cur=GEN[st.kinds[st.round-1]]();st.t0=performance.now();
+  drawRound();clearInterval(timer);timer=setInterval(tick,100);
+}
+function drawRound(){
+  const c=st.cur;$("#rnd").textContent=st.round+" / "+ROUNDS;$("#sc").textContent=st.score;$("#st").textContent=st.streak;
+  $("#lv").textContent="❤".repeat(st.lives)+"♡".repeat(3-st.lives);
+  $("#kind").textContent=c.kind;$("#pkt").innerHTML=c.pkt.map((p,i)=>`<span class="${i?"alt":""}">${p}</span>`).join("");
+  $("#q").textContent=c.q;$("#ctx").innerHTML=c.ctx;$("#fb").innerHTML="";$("#nextRow").hidden=true;
+  $("#opts").innerHTML=c.opts.map((o,i)=>`<button type="button" class="opt" data-v="${o.replace(/"/g,"&quot;")}"><span class="k">${i+1}</span><span>${o}</span></button>`).join("");
+  $("#tm").classList.remove("low");$("#tmi").style.transform="scaleX(1)";
+}
+function tick(){const left=Math.max(0,1-(performance.now()-st.t0)/TIME);$("#tmi").style.transform="scaleX("+left+")";$("#tm").classList.toggle("low",left<.3);if(left<=0)answer(null)}
+function answer(v){
+  if(st.locked)return;st.locked=true;clearInterval(timer);st.answered++;
+  const c=st.cur,good=v===c.ans;
+  document.querySelectorAll(".opt").forEach(b=>{b.disabled=true;if(b.dataset.v===c.ans)b.classList.add("ok");else if(b.dataset.v===v)b.classList.add("no")});
+  if(good){const left=Math.max(0,1-(performance.now()-st.t0)/TIME);const pts=100+Math.round(50*left)+20*st.streak;st.score+=pts;st.streak++;st.best=Math.max(st.best,st.streak);st.correct++;
+    $("#pop").innerHTML=`<span class="pop">+${pts}</span>`;$("#fb").innerHTML=`<b class="good">${L("Livrat! ✓","Delivered! ✓")}</b> ${c.why}`}
+  else{st.lives--;st.streak=0;$("#pop").innerHTML="";$("#game").classList.remove("shake");void $("#game").offsetWidth;$("#game").classList.add("shake");
+    $("#fb").innerHTML=`<b class="bad">${v===null?L("Timpul a expirat.","Time's up."):L("Pachet pierdut ✗","Packet lost ✗")}</b> ${L("Corect: ","Correct: ")}<b>${c.ans}</b>. ${c.why}`}
+  $("#sc").textContent=st.score;$("#st").textContent=st.streak;$("#lv").textContent="❤".repeat(st.lives)+"♡".repeat(3-st.lives);
+  $("#nextRow").hidden=false;$("#next").textContent=st.lives<=0||st.round>=ROUNDS?L("Vezi rezultatul →","See the result →"):T("next");$("#next").focus({preventScroll:true});
+}
+function endGame(){
+  clearInterval(timer);$("#game").hidden=true;$("#end").hidden=false;
+  $("#final").textContent=st.score+" "+L("puncte","points");
+  $("#endStats").textContent=L(`${st.correct} pachete livrate din ${st.answered} · cea mai lungă serie: ${st.best}`,`${st.correct} packets delivered out of ${st.answered} · longest streak: ${st.best}`);
+  const p=st.answered?st.correct/st.answered:0;
+  $("#rank").textContent=p>=.9&&st.answered>=ROUNDS?L("🏆 Arhitect de rețea","🏆 Network architect"):p>=.75?L("🥇 Inginer de rețea","🥇 Network engineer"):p>=.5?L("🥈 Administrator de rețea","🥈 Network admin"):L("🥉 Stagiar de rețea, mai încearcă!","🥉 Network intern, try again!");
+  const best=+(store.get("joc-best")||0);if(st.score>best)store.set("joc-best",String(st.score));
+  $("#saved").textContent=st.score>best?L("Record personal nou!","New personal best!"):L("Recordul tău: ","Your best: ")+best;
+  if(!st.saved&&st.answered>0){st.saved=true;
+    window.dispatchEvent(new CustomEvent("quiz:complete",{detail:{lesson:"joc",title:"Mini-joc: Livrează pachetul",score:st.correct,total:st.answered,answers:[]}}))}
+}
+function render(){
+  document.documentElement.lang=lang;document.title=L("Livrează pachetul","Deliver the packet");
+  document.querySelectorAll("[data-t]").forEach(e=>{if(UI[e.dataset.t])e.textContent=T(e.dataset.t)});
+  document.querySelectorAll("[data-lang]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.lang===lang?"true":"false"));
+  $("#rules").innerHTML=[L("Primești "+ROUNDS+" pachete; pentru fiecare ai 15 secunde.","You get "+ROUNDS+" packets; 15 seconds for each."),L("Alege ieșirea corectă: o interfață, un port, un tip de înregistrare DNS…","Pick the right exit: an interface, a port, a DNS record type…"),L("Ai 3 vieți. Un răspuns greșit sau timpul expirat costă o viață.","You have 3 lives. A wrong answer or running out of time costs one."),L("Răspunsurile rapide și seriile lungi aduc puncte bonus.","Quick answers and long streaks earn bonus points."),L("Pe tastatură: tastele 1–4 și Enter.","On a keyboard: keys 1–4 and Enter.")].map(x=>`<li>${x}</li>`).join("");
+  const best=+(store.get("joc-best")||0);$("#bestLine").textContent=best?L("Recordul tău: "+best+" puncte","Your best: "+best+" points"):"";
+}
+$("#opts").addEventListener("click",e=>{const b=e.target.closest(".opt");if(b&&!b.disabled)answer(b.dataset.v)});
+$("#start").onclick=newGame;$("#again").onclick=newGame;$("#next").onclick=nextRound;
+document.addEventListener("keydown",e=>{if($("#game").hidden||e.ctrlKey||e.metaKey||e.altKey)return;
+  if(/^[1-4]$/.test(e.key)&&!st.locked){const b=document.querySelectorAll(".opt")[+e.key-1];if(b)answer(b.dataset.v)}
+  else if(e.key==="Enter"&&st.locked){e.preventDefault();nextRound()}});
+document.querySelectorAll("[data-lang]").forEach(b=>b.onclick=()=>{lang=b.dataset.lang;store.set("cadru-lang",lang);render()});
+const saved=store.get("cadru-theme");if(saved==="light"||saved==="dark")document.documentElement.dataset.theme=saved;
+$("#theme").onclick=()=>{const r=document.documentElement,d=r.dataset.theme?r.dataset.theme==="dark":matchMedia("(prefers-color-scheme: dark)").matches;const nt=d?"light":"dark";r.dataset.theme=nt;store.set("cadru-theme",nt)};
+render();
+})();
+</script>
+</body>
+</html>

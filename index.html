@@ -61,7 +61,7 @@
     <h1 data-t="h1"></h1>
     <p class="sub" data-t="sub"></p>
     <ul class="meta" id="meta"></ul>
-    <p class="hero-cta"><a class="btn primary" href="teste/index.html" data-t="ctaTests"></a> <a class="btn" href="rezultate/index.html" data-t="ctaResults"></a></p>
+    <p class="hero-cta"><a class="btn primary" href="teste/index.html" data-t="ctaTests"></a> <a class="btn" href="joc/index.html" data-t="ctaGame"></a> <a class="btn" href="rezultate/index.html" data-t="ctaResults"></a></p>
   </div>
   <ul class="how" id="how"></ul>
 </div></section>
@@ -91,7 +91,7 @@ const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},se
 let lang=store.get("cadru-lang")==="en"?"en":"ro";
 const T=v=>(v&&typeof v==="object"&&!Array.isArray(v))?v[lang]:v;
 const UI={
-  ctaTests:{ro:"✎ Testează-ți cunoștințele",en:"✎ Test your knowledge"},ctaResults:{ro:"★ Rezultatele mele",en:"★ My results"},
+  ctaTests:{ro:"✎ Testează-ți cunoștințele",en:"✎ Test your knowledge"},ctaResults:{ro:"★ Rezultatele mele",en:"★ My results"},ctaGame:{ro:"🎮 Mini-joc",en:"🎮 Mini-game"},
   brand:{ro:"Rețea pas cu pas",en:"Network step by step"},navLessons:{ro:"Lecții",en:"Lessons"},navSoon:{ro:"În curând",en:"Coming soon"},
   eyebrow:{ro:"Lecții interactive · gratuite · RO / EN",en:"Interactive lessons · free · RO / EN"},
   h1:{ro:"Înțelege rețelele urmărind pachetele, pas cu pas",en:"Understand networks by following the packets, step by step"},
@@ -227,6 +227,6 @@ document.getElementById("theme").onclick=()=>{const r=document.documentElement,d
 render();
 })();
 </script>
-<script type="module" src="assets/auth.js?v=3"></script>
+<script type="module" src="assets/auth.js?v=4"></script>
 </body>
 </html>
