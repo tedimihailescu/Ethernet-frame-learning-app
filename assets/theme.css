@@ -1,0 +1,62 @@
+/* Yellow & black theme. Loaded last on every page, so it overrides the base palette.
+   Light: warm yellow paper, black ink, black bars. Dark: black, with yellow accents. */
+:root{
+  --bg:#fbf1c4; --surface:#fffbe6; --surface2:#f6e8a6; --text:#14120a; --muted:#4f4726; --border:#e1cf7a;
+  --accent:#14120a; --accent-text:#ffd83d; --focus:#14120a; --ink:#14120a; --hero:#f7de6a;
+  --zone:#fcf4cf; --link:#9a8b45; --hot:#14120a;
+  --chgbg:#ffc95c; --chgfg:#5e3b00; --arpbg:#fde7b0; --arp:#8a5a00;
+  --bar:#14120a; --bar-text:#ffd83d; --bar-muted:#d9cf9f; --bar-hover:#2a2614;
+  --shadow:none; color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e0d08; --surface:#18160d; --surface2:#232012; --text:#f6efcf; --muted:#b8ad7c; --border:#3a351c;
+    --accent:#ffd83d; --accent-text:#14120a; --focus:#ffd83d; --ink:#f6efcf; --hero:#161409;
+    --zone:#141209; --link:#6d6436; --hot:#ffd83d;
+    --chgbg:#4d3a05; --chgfg:#ffd36b; --arpbg:#3a3012; --arp:#f0c44f;
+    --bar:#000000; --bar-text:#ffd83d; --bar-muted:#a89f74; --bar-hover:#1c1a0e;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0e0d08; --surface:#18160d; --surface2:#232012; --text:#f6efcf; --muted:#b8ad7c; --border:#3a351c;
+  --accent:#ffd83d; --accent-text:#14120a; --focus:#ffd83d; --ink:#f6efcf; --hero:#161409;
+  --zone:#141209; --link:#6d6436; --hot:#ffd83d;
+  --chgbg:#4d3a05; --chgfg:#ffd36b; --arpbg:#3a3012; --arp:#f0c44f;
+  --bar:#000000; --bar-text:#ffd83d; --bar-muted:#a89f74; --bar-hover:#1c1a0e;
+  color-scheme:dark;
+}
+body{background:var(--bg);color:var(--text)}
+
+/* black top bar with yellow brand */
+.topbar{background:var(--bar);border-bottom:3px solid var(--bar-text)}
+.brand{color:var(--bar-text)}
+.brand svg rect{fill:var(--bar-text)}
+.brand svg path{stroke:var(--bar)}
+.brand svg circle{fill:var(--bar)}
+.nav a{color:var(--bar-muted)}
+.nav a:hover{color:var(--bar-text);background:var(--bar-hover)}
+.topbar .seg{background:var(--bar);border-color:var(--bar-muted)}
+.topbar .seg button{color:var(--bar-muted)}
+.topbar .seg button[aria-pressed="true"]{background:var(--bar-text);color:var(--bar)}
+.topbar .icon-btn{background:var(--bar);color:var(--bar-text);border-color:var(--bar-muted)}
+.topbar a:focus-visible,.topbar button:focus-visible{outline-color:var(--bar-text)}
+
+/* hero band and footer */
+.hero{border-bottom:1px solid var(--border)}
+.eyebrow{color:var(--text)}
+.meta li{background:var(--surface);border-color:var(--text);color:var(--text)}
+.foot{background:var(--bar);border-top:3px solid var(--bar-text)}
+.foot-in{color:var(--bar-muted)}
+.foot a{color:var(--bar-text)}
+
+/* controls and accents */
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-text)}
+.dots button.cur{background:var(--accent);border-color:var(--accent)}
+.facts-list div{border-left-color:var(--accent)}
+.lesson:hover{border-color:var(--text)}
+.lesson .num{color:var(--text)}
+/* text links: black with a yellow underline in light mode, yellow in dark mode */
+#exp a,.more-body a,.refcard a,.sec-head a,.glink{color:var(--text);text-decoration-thickness:2px;text-decoration-color:#d9a400;text-underline-offset:2px}
+:root[data-theme="dark"] #exp a,:root[data-theme="dark"] .more-body a,:root[data-theme="dark"] .refcard a,:root[data-theme="dark"] .glink{color:var(--accent)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) #exp a,:root:not([data-theme="light"]) .more-body a,:root:not([data-theme="light"]) .refcard a,:root:not([data-theme="light"]) .glink{color:var(--accent)}}
