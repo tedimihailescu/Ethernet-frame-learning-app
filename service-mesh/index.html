@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Service mesh pas cu pas</title>
+<meta name="description" content="Lecție interactivă: o cerere între două microservicii printr-un service mesh (Istio / Envoy): sidecar, xDS, mTLS cu identități SPIFFE, canary, retry, outlier detection și telemetrie. / Interactive service mesh lesson.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<script>
+(function(){
+const SFE="spiffe://cluster.local/ns/shop/sa/frontend",SOR="spiffe://cluster.local/ns/shop/sa/orders";
+const X={xds:{ro:"LDS, RDS, CDS, EDS: ascultători, rute, clustere, endpoint-uri",en:"LDS, RDS, CDS, EDS: listeners, routes, clusters, endpoints"},eds:"orders → 10.1.0.31 (v1), 10.1.0.47 (v2)",cert:{ro:"certificat X.509 pentru "+SFE+", valabil 24 h",en:"X.509 certificate for "+SFE+", valid 24 h"}};
+const R0={method:"GET",path:"/orders/42",host:"orders.shop.svc:8080",trace:"traceparent: 00-4bf92f…-00f067…-01",src:"10.1.0.12:47210",dst:{ro:"orders:8080 → iptables → 127.0.0.1:15001",en:"orders:8080 → iptables → 127.0.0.1:15001"},tls:{ro:"niciunul (text simplu, în interiorul podului)",en:"none (plain text, inside the pod)"}};
+const R1={...R0,trace:"traceparent: 00-4bf92f…-b7ad6b…-01",dst:"10.1.0.31:8080 (orders-v1)",tls:"mTLS · TLS 1.3",id:SFE};
+const R1b={...R1,dst:{ro:"127.0.0.1:8080 (aplicația orders)",en:"127.0.0.1:8080 (the orders app)"},tls:{ro:"decriptat de Envoy-ul lui orders",en:"decrypted by orders' Envoy"},id:{ro:SFE+" ✓ permis",en:SFE+" ✓ allowed"}};
+const R2={...R1,trace:"traceparent: 00-4bf92f…-e3c1a0…-01",path:"/orders/43",dst:"10.1.0.47:8080 (orders-v2)"};
+const E1={status:"503 Service Unavailable",from:"orders-v2 (10.1.0.47)",note:{ro:"politica de retry: 5xx → încearcă alt endpoint",en:"retry policy: 5xx → try another endpoint"}};
+const R3={...R2,dst:"10.1.0.31:8080 (orders-v1)",trace:"traceparent: 00-4bf92f…-5d2e9f…-01",retry:{ro:"încercarea 2 din 3 · per-try timeout 2 s",en:"attempt 2 of 3 · per-try timeout 2 s"}};
+const TM={metric:"istio_requests_total{source=frontend, destination=orders, version=v2, code=503} +1",span:{ro:"span „orders.shop” 12 ms, legat de trace-ul 4bf92f…",en:"span \"orders.shop\" 12 ms, linked to trace 4bf92f…"},log:{ro:"log de acces: GET /orders/43 503 UF,URX 12ms",en:"access log: GET /orders/43 503 UF,URX 12ms"}};
+
+window.LESSON={
+docTitle:{ro:"Service mesh pas cu pas",en:"Service Mesh Step by Step"},
+eyebrow:{ro:"Lecție interactivă · Kubernetes",en:"Interactive lesson · Kubernetes"},
+title:{ro:"Service mesh: o cerere între două microservicii",en:"Service mesh: a request between two microservices"},
+sub:{ro:"Frontend-ul cheamă serviciul orders. Codul face un simplu GET pe HTTP, dar un proxy Envoy de lângă fiecare aplicație criptează traficul cu mTLS, verifică identitatea, împarte cererile între versiuni, reîncearcă erorile, scoate din rotație podurile bolnave și raportează metrici și trace-uri. Urmărești pas cu pas cum, în Istio, și ce alternative există.",en:"The frontend calls the orders service. The code does a plain HTTP GET, but an Envoy proxy next to each app encrypts traffic with mTLS, checks identity, splits requests between versions, retries errors, ejects sick pods and reports metrics and traces. Follow step by step how it works in Istio, and what the alternatives are."},
+meta:[{ro:"≈ 25 minute",en:"≈ 25 minutes"},{ro:"12 pași",en:"12 steps"},{ro:"8 întrebări",en:"8 questions"},{ro:"Avansat",en:"Advanced"}],
+goals:[{ro:"Plan de date (Envoy) vs. plan de control (istiod)",en:"Data plane (Envoy) vs control plane (istiod)"},{ro:"Cum interceptează sidecar-ul traficul fără schimbări de cod",en:"How the sidecar intercepts traffic with no code changes"},{ro:"mTLS cu identități SPIFFE și politici de autorizare",en:"mTLS with SPIFFE identities and authorization policies"},{ro:"Canary, retry, timeout, outlier detection și telemetrie",en:"Canary, retries, timeouts, outlier detection and telemetry"}],
+foot:{ro:"Exemplul folosește Istio cu sidecar Envoy. Linkerd și modul ambient al Istio sunt descrise la final.",en:"The example uses Istio with Envoy sidecars. Linkerd and Istio's ambient mode are covered at the end."},
+ui:{refT:{ro:"Resurse Istio și comenzi",en:"Istio resources and commands"},refLead:{ro:"Obiectele YAML din lecție și comenzile de depanare.",en:"The YAML objects from the lesson and the troubleshooting commands."}},
+tryT:{ro:"Încearcă în cluster",en:"Try it in a cluster"},
+legend:[["lg-tcp","xDS",{ro:"configurație de la istiod",en:"configuration from istiod"}],["lg-ip","mTLS",{ro:"cerere criptată între poduri",en:"encrypted request between pods"}],["lg-arp","HTTP",{ro:"răspuns / telemetrie",en:"response / telemetry"}]],
+
+nodes:{
+  usr:{type:"user",name:{ro:"Client",en:"Client"},lines:[]},
+  gw:{type:"svc",name:"Ingress gateway",lines:["Envoy"]},
+  fe:{type:"pod",name:"frontend",lines:["+ Envoy · 10.1.0.12"]},
+  o1:{type:"pod",name:"orders v1",lines:["+ Envoy · 10.1.0.31"]},
+  o2:{type:"pod",name:"orders v2",lines:["+ Envoy · 10.1.0.47"]},
+  ist:{type:"box",name:"istiod",lines:[{ro:"plan de control",en:"control plane"}]},
+  obs:{type:"box",name:"Prometheus · Jaeger",lines:[{ro:"telemetrie",en:"telemetry"}]}
+},
+links:[["usr","gw"],["gw","fe"],["fe","o1"],["fe","o2"],["ist","fe","virt"],["ist","o1","virt"],["fe","obs","virt"],["o2","obs","virt"]],
+layouts:{
+  wide:{vb:[0,0,1000,500],n:{usr:[60,250],gw:[220,250],fe:[440,250],o1:[760,130],o2:[760,380],ist:[440,70],obs:[440,430]},
+    zones:[{x:150,y:20,w:840,h:470,top:true,cls:"virt",l:{ro:"Cluster · namespace shop · istio-injection=enabled",en:"Cluster · namespace shop · istio-injection=enabled"}}]},
+  narrow:{vb:[0,0,360,720],n:{usr:[60,50],gw:[60,170],fe:[180,320],o1:[80,500],o2:[280,500],ist:[290,170],obs:[180,650]},
+    side:{usr:"right",gw:"right",fe:"right",obs:"right"},hideLinks:["o2-obs"]}
+},
+groups:[
+  {id:"c",color:"l2",fields:["xds","eds","cert"],name:{ro:"Configurație trimisă de istiod (xDS)",en:"Configuration sent by istiod (xDS)"},short:"xDS",grow:3},
+  {id:"h",color:"l7",fields:["method","path","host","trace","status","from"],name:{ro:"HTTP",en:"HTTP"},short:"HTTP",grow:3},
+  {id:"n",color:"l4",fields:["src","dst"],name:{ro:"Conexiune",en:"Connection"},short:"TCP",grow:2},
+  {id:"t",color:"l3",fields:["tls","id"],name:{ro:"Criptare și identitate",en:"Encryption and identity"},short:"mTLS",grow:2},
+  {id:"o",color:"l4",fields:["metric","span","log"],name:{ro:"Telemetrie",en:"Telemetry"},short:{ro:"Telemetrie",en:"Telemetry"},grow:3},
+  {id:"d",color:"arp",fields:["retry","note"],name:{ro:"Ce decide Envoy",en:"What Envoy decides"},short:"Envoy",grow:2}
+],
+fieldLabels:{xds:"xDS",eds:{ro:"Endpoint-uri (EDS)",en:"Endpoints (EDS)"},cert:{ro:"Certificat (SDS)",en:"Certificate (SDS)"},method:{ro:"Metodă",en:"Method"},path:{ro:"Cale",en:"Path"},host:"Host",trace:{ro:"Antet de trace",en:"Trace header"},status:"Status",from:{ro:"De la",en:"From"},src:{ro:"Sursă",en:"Source"},dst:{ro:"Destinație",en:"Destination"},tls:"TLS",id:{ro:"Identitatea clientului",en:"Client identity"},metric:{ro:"Metrică",en:"Metric"},span:"Span",log:"Log",retry:"Retry",note:{ro:"Decizie",en:"Decision"}},
+pdu:f=>f.xds?{badge:{ro:"Configurație xDS + certificat",en:"xDS configuration + certificate"},tok:["xDS","k-tcp"]}:f.status?{badge:{ro:"Răspuns HTTP",en:"HTTP response"},tok:["503","k-arp"]}:f.metric?{badge:{ro:"Telemetrie",en:"Telemetry"},tok:["OTel","k-arp"]}:/mTLS/.test(T0(f.tls))?{badge:{ro:"Cerere HTTP în mTLS",en:"HTTP request in mTLS"},tok:["mTLS","k-ip"]}:{badge:{ro:"Cerere HTTP",en:"HTTP request"},tok:["HTTP","k-app"]},
+
+init:{ep:[]},
+tables:{
+  why:{title:{ro:"Unde pui logica de rețea?",en:"Where do you put the network logic?"},cols:[{ro:"Funcție",en:"Feature"},{ro:"În fiecare aplicație (biblioteci)",en:"In every app (libraries)"},{ro:"În mesh (proxy)",en:"In the mesh (proxy)"}],plain:[1,2],
+    rows:()=>[["mTLS",{ro:"fiecare echipă gestionează certificate",en:"every team manages certificates"},{ro:"automat, rotit la 24 h",en:"automatic, rotated every 24 h"}],[{ro:"Retry, timeout",en:"Retries, timeouts"},{ro:"cod diferit în Java, Go, Node…",en:"different code in Java, Go, Node…"},{ro:"aceeași configurație YAML",en:"the same YAML config"}],[{ro:"Împărțirea traficului",en:"Traffic splitting"},{ro:"greu",en:"hard"},{ro:"procente pe versiuni",en:"percentages per version"}],[{ro:"Metrici, trace-uri",en:"Metrics, traces"},{ro:"instrumentare manuală",en:"manual instrumentation"},{ro:"pentru orice cerere",en:"for every request"}],[{ro:"Cost",en:"Cost"},{ro:"zero componente noi",en:"no new components"},{ro:"un proxy per pod: CPU, memorie, ~1–3 ms",en:"a proxy per pod: CPU, memory, ~1–3 ms"}]]},
+  ports:{title:{ro:"Porturile Envoy din fiecare pod",en:"Envoy's ports in every pod"},cols:["Port",{ro:"Rol",en:"Role"}],plain:[1],
+    rows:()=>[["15001",{ro:"tot ce iese din pod (outbound) e redirecționat aici",en:"everything leaving the pod (outbound) is redirected here"}],["15006",{ro:"tot ce intră în pod (inbound) e redirecționat aici",en:"everything entering the pod (inbound) is redirected here"}],["15090",{ro:"metrici Prometheus ale proxy-ului",en:"the proxy's Prometheus metrics"}],["15021",{ro:"health check",en:"health check"}],["15000",{ro:"interfața admin (doar local)",en:"admin interface (local only)"}]]},
+  ep:{title:{ro:"Endpoint-urile lui orders, văzute de Envoy-ul frontend",en:"orders' endpoints, as frontend's Envoy sees them"},cols:["Endpoint",{ro:"Versiune",en:"Version"},{ro:"Pondere",en:"Weight"},{ro:"Stare",en:"State"}]},
+  vs:{title:"VirtualService orders",cols:[{ro:"Potrivire",en:"Match"},{ro:"Destinație",en:"Destination"},{ro:"Pondere",en:"Weight"}],rows:()=>[[{ro:"orice cerere",en:"any request"},"orders · subset v1","90 %"],[{ro:"orice cerere",en:"any request"},"orders · subset v2","10 %"],[{ro:"antet x-canary: true",en:"header x-canary: true"},"orders · subset v2","100 %"]]},
+  authz:{title:{ro:"Politici de securitate pentru orders",en:"Security policies for orders"},cols:[{ro:"Resursă",en:"Resource"},{ro:"Regulă",en:"Rule"}],plain:[1],
+    rows:()=>[["PeerAuthentication",{ro:"mode: STRICT, acceptă doar mTLS",en:"mode: STRICT, accept only mTLS"}],["AuthorizationPolicy",{ro:"permite doar de la "+SFE+", metode GET și POST",en:"allow only from "+SFE+", GET and POST methods"}]]},
+  res:{title:"DestinationRule orders",cols:[{ro:"Setare",en:"Setting"},{ro:"Valoare",en:"Value"},{ro:"Efect",en:"Effect"}],plain:[2],
+    rows:()=>[["retries","attempts: 3, retryOn: 5xx",{ro:"reîncearcă pe alt pod",en:"retries on another pod"}],["timeout","5 s",{ro:"nu aștepta la nesfârșit",en:"don't wait forever"}],["outlierDetection","5 × 5xx → eject 30 s",{ro:"scoate podul bolnav din rotație",en:"takes the sick pod out of rotation"}],["connectionPool","http1MaxPendingRequests: 100",{ro:"circuit breaker: refuză repede peste limită",en:"circuit breaker: fail fast above the limit"}]]}
+},
+log:{title:{ro:"Jurnalul cererilor",en:"Request log"},lead:{ro:"Observă că aplicația trimite mereu același lucru; Envoy alege podul, criptează și reîncearcă.",en:"Notice the app always sends the same thing; Envoy picks the pod, encrypts and retries."},first:{ro:"Pas",en:"Step"},minWidth:620,
+  cols:[{h:{ro:"Ce",en:"What"},v:f=>f.status||(f.method?f.method+" "+f.path:f.xds?"xDS":"telemetry")},{h:{ro:"Spre",en:"To"},v:f=>f.dst||f.from||f.eds||"Prometheus / Jaeger",cls:"ip"},{h:"TLS",v:f=>f.tls||"—",cls:"mac"}]},
+
+steps:[
+{at:["fe","o1","o2"],frame:null,kind:"none",tables:["why"],
+ title:{ro:"Problema: multe servicii, multe conexiuni",en:"The problem: many services, many connections"},
+ body:{ro:`<p>Într-o aplicație cu zeci de <a href="../microservicii/index.html">microservicii</a>, fiecare cerere a unui utilizator devine multe cereri între servicii. Toate au nevoie de aceleași lucruri: criptare, verificarea cine cheamă, timeout-uri, retry-uri, metrici.</p>
+<p>Le poți scrie în fiecare aplicație, cu biblioteci, sau le poți muta într-un <strong>service mesh</strong>: un <strong>proxy</strong> pus lângă fiecare aplicație, prin care trece tot traficul ei. Codul rămâne simplu, iar regulile sunt configurate central.</p>
+<ul><li><strong>Planul de date</strong>: proxy-urile (aici <strong>Envoy</strong>), care mută efectiv cererile.</li>
+<li><strong>Planul de control</strong>: <strong>istiod</strong>, care le trimite configurația și certificatele.</li></ul>`,
+ en:`<p>In an app with dozens of <a href="../microservicii/index.html">microservices</a>, each user request becomes many requests between services. They all need the same things: encryption, checking who's calling, timeouts, retries, metrics.</p>
+<p>You can write them into every app with libraries, or move them into a <strong>service mesh</strong>: a <strong>proxy</strong> placed next to each app, through which all its traffic flows. The code stays simple and the rules are configured centrally.</p>
+<ul><li>The <strong>data plane</strong>: the proxies (here <strong>Envoy</strong>), which actually move the requests.</li>
+<li>The <strong>control plane</strong>: <strong>istiod</strong>, which sends them configuration and certificates.</li></ul>`}},
+
+{at:"fe",frame:null,kind:"none",tables:["ports"],who:"frontend",
+ title:{ro:"Sidecar-ul: un al doilea container în fiecare pod",en:"The sidecar: a second container in every pod"},
+ body:{ro:`<p>Namespace-ul are eticheta <code>istio-injection=enabled</code>. Când se creează un pod, un <em>webhook</em> modifică automat definiția lui și adaugă:</p>
+<ul><li>containerul <strong>istio-proxy</strong> (Envoy), lângă aplicație;</li>
+<li>un <strong>init container</strong> (sau pluginul CNI) care scrie reguli <strong>iptables</strong> în namespace-ul de rețea al podului: tot ce iese merge la portul <code>15001</code> al lui Envoy, tot ce intră la <code>15006</code>.</li></ul>
+<p class="key">Aplicația nu știe nimic: crede că vorbește direct cu <code>orders:8080</code>. Interceptarea se face în kernel, ca la <a href="../k8s-intrare/index.html">kube-proxy</a>.</p>`,
+ en:`<p>The namespace has the <code>istio-injection=enabled</code> label. When a pod is created, a <em>webhook</em> rewrites its definition automatically and adds:</p>
+<ul><li>the <strong>istio-proxy</strong> container (Envoy), next to the app;</li>
+<li>an <strong>init container</strong> (or the CNI plugin) that writes <strong>iptables</strong> rules in the pod's network namespace: everything going out goes to Envoy's port <code>15001</code>, everything coming in to <code>15006</code>.</li></ul>
+<p class="key">The app knows nothing: it thinks it talks straight to <code>orders:8080</code>. Interception happens in the kernel, like with <a href="../k8s-intrare/index.html">kube-proxy</a>.</p>`},
+ try:[{cmd:"kubectl label namespace shop istio-injection=enabled",d:{ro:"Activează injecția automată pentru namespace.",en:"Turns on automatic injection for the namespace."}},{cmd:"kubectl get pod -n shop -o jsonpath='{.items[0].spec.containers[*].name}'",d:{ro:"Vezi că podul are două containere: aplicația și istio-proxy.",en:"See that the pod has two containers: the app and istio-proxy."}}]},
+
+{at:"ist",frame:X,kind:"xds",move:[[["ist","fe"],["ist","o1"]]],fx:[["ep","10.1.0.31:8080","v1","90","healthy"],["ep","10.1.0.47:8080","v2","10","healthy"]],tables:["ep"],log:{ro:"istiod trimite configurația",en:"istiod sends the configuration"},who:"istiod",
+ title:{ro:"istiod: configurație (xDS) și certificate",en:"istiod: configuration (xDS) and certificates"},
+ body:{ro:`<p>Fiecare Envoy ține o conexiune gRPC deschisă cu istiod. Prin ea primește, prin API-urile <strong>xDS</strong>, tot ce trebuie să știe: ce porturi ascultă (LDS), cum se rutează cererile (RDS), ce servicii există (CDS) și IP-urile podurilor din spatele fiecăruia (EDS). Când un pod pornește sau dispare, istiod trimite doar schimbarea.</p>
+<p>Tot istiod e și <strong>autoritate de certificare</strong>. Fiecare proxy primește un certificat (prin SDS) cu identitatea contului de serviciu al podului, în format <strong>SPIFFE</strong>: <code>${SFE}</code>. Certificatul expiră în 24 h și e reînnoit automat.</p>`,
+ en:`<p>Each Envoy keeps a gRPC connection open to istiod. Through it, via the <strong>xDS</strong> APIs, it gets everything it needs: which ports to listen on (LDS), how to route requests (RDS), which services exist (CDS), and the pod IPs behind each (EDS). When a pod starts or goes away, istiod sends only the change.</p>
+<p>istiod is also a <strong>certificate authority</strong>. Each proxy gets a certificate (via SDS) with the identity of the pod's service account, in <strong>SPIFFE</strong> format: <code>${SFE}</code>. It expires in 24 h and is renewed automatically.</p>`},
+ more:{ro:`<p>Identitatea vine din <strong>ServiceAccount</strong>, nu din IP. IP-urile podurilor se schimbă mereu; identitatea rămâne. De aceea politicile din mesh se scriu cu „cine ești” (contul de serviciu), nu cu „de unde vii” (IP).</p>`,
+  en:`<p>Identity comes from the <strong>ServiceAccount</strong>, not the IP. Pod IPs change all the time; identity stays. That's why mesh policies are written as "who you are" (the service account), not "where you come from" (the IP).</p>`}},
+
+{at:"fe",frame:R0,kind:"req",log:{ro:"aplicația → propriul Envoy",en:"the app → its own Envoy"},who:{ro:"Aplicația frontend",en:"The frontend app"},
+ title:{ro:"Aplicația trimite un GET simplu",en:"The app sends a plain GET"},
+ body:{ro:`<p>Codul frontend-ului face <code>GET http://orders:8080/orders/42</code>, fără TLS și fără nimic special. Conexiunea pleacă spre <code>orders:8080</code>, dar regula iptables din pod o trimite la <code>127.0.0.1:15001</code>, adică la Envoy-ul din același pod.</p>
+<p>Singurul lucru pe care aplicația trebuie să-l facă e să <strong>transmită mai departe antetele de trace</strong> (<code>traceparent</code>) primite în cererea ei. Altfel, mesh-ul vede cererile, dar nu le poate lega într-un singur trace.</p>`,
+ en:`<p>The frontend code does <code>GET http://orders:8080/orders/42</code>, with no TLS and nothing special. The connection heads for <code>orders:8080</code>, but the pod's iptables rule sends it to <code>127.0.0.1:15001</code>, the Envoy in the same pod.</p>
+<p>The only thing the app must do is <strong>pass on the trace headers</strong> (<code>traceparent</code>) it received in its own request. Otherwise the mesh sees the requests but can't link them into one trace.</p>`}},
+
+{at:"fe",frame:R1,kind:"req",move:[[["fe","o1"]]],tables:["vs","ep"],hl:{ep:"10.1.0.31:8080"},log:{ro:"Envoy → orders v1, în mTLS",en:"Envoy → orders v1, in mTLS"},who:{ro:"Envoy-ul frontend",en:"frontend's Envoy"},
+ title:{ro:"Envoy alege podul și deschide mTLS",en:"Envoy picks the pod and opens mTLS"},
+ body:{ro:`<p>Envoy-ul frontend-ului citește cererea HTTP și aplică regulile primite:</p>
+<ul><li><strong>VirtualService</strong> (tabelul de sus): 90% din cereri merg la <code>v1</code>, 10% la <code>v2</code>. Aici iese v1.</li>
+<li><strong>Load balancing</strong>: dintre podurile v1, alege unul (implicit, cel cu cele mai puține cereri active), direct după IP, fără ClusterIP.</li></ul>
+<p>Apoi deschide spre podul ales o conexiune <strong>mTLS</strong> (TLS mutual): <em>ambele</em> părți prezintă certificate. Pe rețea, cererea circulă criptată, cu identitatea clientului în certificat.</p>`,
+ en:`<p>The frontend's Envoy reads the HTTP request and applies the rules it received:</p>
+<ul><li><strong>VirtualService</strong> (top table): 90% of requests go to <code>v1</code>, 10% to <code>v2</code>. This one draws v1.</li>
+<li><strong>Load balancing</strong>: among the v1 pods it picks one (by default the one with the fewest active requests), straight by IP, bypassing the ClusterIP.</li></ul>
+<p>Then it opens an <strong>mTLS</strong> (mutual TLS) connection to the chosen pod: <em>both</em> sides present certificates. On the wire the request travels encrypted, with the client's identity in its certificate.</p>`}},
+
+{at:"o1",frame:R1b,kind:"req",tables:["authz"],log:{ro:"Envoy orders: verificat, decriptat",en:"orders' Envoy: checked, decrypted"},who:{ro:"Envoy-ul orders",en:"orders' Envoy"},
+ title:{ro:"La destinație: verificarea identității și autorizarea",en:"At the destination: identity check and authorization"},
+ body:{ro:`<p>Conexiunea intră în podul orders și e redirecționată la portul <code>15006</code> al Envoy-ului lui. Acesta:</p>
+<ol><li>verifică certificatul clientului: semnat de CA-ul mesh-ului, identitatea <code>…/sa/frontend</code>;</li>
+<li>aplică <strong>PeerAuthentication STRICT</strong>: conexiunile fără mTLS sunt refuzate;</li>
+<li>aplică <strong>AuthorizationPolicy</strong>: doar frontend-ul are voie, și doar cu GET/POST. Altfel răspunde <code>403</code>;</li>
+<li>decriptează și dă cererea aplicației pe <code>127.0.0.1:8080</code>.</li></ol>
+<p class="key">Asta e <strong>zero trust</strong> în interiorul clusterului: nu contează că cererea vine din rețeaua internă, contează cine o trimite.</p>`,
+ en:`<p>The connection enters the orders pod and is redirected to its Envoy's port <code>15006</code>. That Envoy:</p>
+<ol><li>checks the client's certificate: signed by the mesh CA, identity <code>…/sa/frontend</code>;</li>
+<li>applies <strong>PeerAuthentication STRICT</strong>: connections without mTLS are refused;</li>
+<li>applies the <strong>AuthorizationPolicy</strong>: only the frontend is allowed, and only with GET/POST. Otherwise it answers <code>403</code>;</li>
+<li>decrypts and hands the request to the app on <code>127.0.0.1:8080</code>.</li></ol>
+<p class="key">This is <strong>zero trust</strong> inside the cluster: it doesn't matter that the request comes from the internal network, what matters is who sends it.</p>`}},
+
+{at:"fe",frame:R2,kind:"req",move:[[["fe","o2"]]],tables:["ep"],hl:{ep:"10.1.0.47:8080"},log:{ro:"canary: 10% spre v2",en:"canary: 10% to v2"},who:{ro:"Envoy-ul frontend",en:"frontend's Envoy"},
+ title:{ro:"Canary: o parte din cereri la versiunea nouă",en:"Canary: some requests to the new version"},
+ body:{ro:`<p>Următoarea cerere, <code>/orders/43</code>, cade în cele 10% și merge la <strong>orders v2</strong>, versiunea lansată azi. Așa se testează o versiune nouă pe trafic real, cu risc mic: dacă merge bine, crești procentul (25%, 50%, 100%); dacă nu, îl pui înapoi la 0, fără redeploy.</p>
+<p>Tot din VirtualService poți trimite la v2 doar cererile cu un anumit antet (<code>x-canary: true</code>), de exemplu doar ale echipei interne.</p>`,
+ en:`<p>The next request, <code>/orders/43</code>, falls in the 10% and goes to <strong>orders v2</strong>, the version released today. That's how a new version is tested on real traffic with little risk: if it goes well you raise the share (25%, 50%, 100%); if not, you set it back to 0, with no redeploy.</p>
+<p>The VirtualService can also send only requests with a certain header (<code>x-canary: true</code>) to v2, for example just the internal team's.</p>`}},
+
+{at:"o2",frame:E1,kind:"resp",move:[[["o2","fe"]]],marks:{o2:{k:"drop",t:"503"}},log:{ro:"v2 răspunde cu eroare",en:"v2 answers with an error"},who:"orders v2",
+ title:{ro:"Versiunea nouă are o problemă: 503",en:"The new version has a problem: 503"},
+ body:{ro:`<p>orders v2 are un bug: nu se poate conecta la baza de date și răspunde <code>503 Service Unavailable</code>.</p>
+<p>Fără mesh, eroarea ar ajunge direct în codul frontend-ului, care ar trebui să știe singur ce să facă. Aici, răspunsul trece întâi prin Envoy-ul frontend-ului, care are o <strong>politică de retry</strong>: pentru erori 5xx, încearcă din nou, pe alt pod.</p>`,
+ en:`<p>orders v2 has a bug: it can't connect to the database and answers <code>503 Service Unavailable</code>.</p>
+<p>Without a mesh, the error would go straight into the frontend code, which would have to know what to do on its own. Here the response passes through the frontend's Envoy first, which has a <strong>retry policy</strong>: for 5xx errors, try again, on another pod.</p>`}},
+
+{at:"fe",frame:R3,kind:"req",move:[[["fe","o1"]]],fx:[["ep","10.1.0.47:8080","v2","10",{ro:"scos din rotație 30 s",en:"ejected for 30 s"}]],tables:["res","ep"],hl:{ep:"10.1.0.47:8080"},log:{ro:"retry spre v1",en:"retry to v1"},who:{ro:"Envoy-ul frontend",en:"frontend's Envoy"},
+ title:{ro:"Retry, timeout, outlier detection",en:"Retries, timeouts, outlier detection"},
+ body:{ro:`<p>Envoy reîncearcă cererea pe <strong>orders v1</strong>, care răspunde <code>200</code>. Utilizatorul nu observă nimic, doar câteva milisecunde în plus.</p>
+<p>După mai multe erori la rând de la același pod, <strong>outlier detection</strong> îl <strong>scoate din rotație</strong> 30 de secunde (tabelul de jos), ca să nu mai primească cereri până se repară.</p>
+<p class="key">Atenție la retry-uri: dacă fiecare strat reîncearcă de 3 ori, o eroare se multiplică (3 × 3 × 3 = 27 de cereri). Reîncearcă doar operații sigure (GET, sau POST idempotente) și pune un <strong>timeout total</strong>.</p>`,
+ en:`<p>Envoy retries the request on <strong>orders v1</strong>, which answers <code>200</code>. The user notices nothing, just a few extra milliseconds.</p>
+<p>After several errors in a row from the same pod, <strong>outlier detection</strong> <strong>ejects it</strong> for 30 seconds (bottom table), so it gets no requests until it recovers.</p>
+<p class="key">Careful with retries: if every layer retries 3 times, one error multiplies (3 × 3 × 3 = 27 requests). Only retry safe operations (GET, or idempotent POSTs) and set an <strong>overall timeout</strong>.</p>`}},
+
+{at:"o2",frame:TM,kind:"tel",move:[[["fe","obs"],["o2","obs"]]],log:{ro:"metrici și span-uri",en:"metrics and spans"},who:"Envoy",
+ title:{ro:"Telemetrie pentru orice cerere, fără cod",en:"Telemetry for every request, with no code"},
+ body:{ro:`<p>Fiecare Envoy a numărat, cronometrat și jurnalizat fiecare cerere:</p>
+<ul><li><strong>metrici</strong> (expuse pe <code>:15090</code>, citite de Prometheus): <code>istio_requests_total</code> cu sursa, destinația, versiunea și codul. De aici vezi imediat că <em>doar v2</em> dă 503;</li>
+<li><strong>span-uri</strong> de trace, trimise la Jaeger/Tempo, legate prin antetul <code>traceparent</code>;</li>
+<li><strong>log-uri de acces</strong>; flag-urile Envoy (<code>UF</code> = upstream failure, <code>URX</code> = retry-uri epuizate) spun exact ce s-a întâmplat.</li></ul>
+<p>Despre ce faci cu ele: <a href="../observabilitate/index.html">lecția de observabilitate</a>.</p>`,
+ en:`<p>Every Envoy has counted, timed and logged every request:</p>
+<ul><li><strong>metrics</strong> (exposed on <code>:15090</code>, scraped by Prometheus): <code>istio_requests_total</code> with source, destination, version and code. From this you immediately see that <em>only v2</em> returns 503;</li>
+<li>trace <strong>spans</strong>, sent to Jaeger/Tempo, linked through the <code>traceparent</code> header;</li>
+<li><strong>access logs</strong>; Envoy's flags (<code>UF</code> = upstream failure, <code>URX</code> = retries exhausted) say exactly what happened.</li></ul>
+<p>What you do with them: the <a href="../observabilitate/index.html">observability lesson</a>.</p>`},
+ try:[{cmd:"istioctl proxy-config endpoints deploy/frontend -n shop",d:{ro:"Endpoint-urile pe care le vede Envoy-ul frontend, cu starea lor.",en:"The endpoints frontend's Envoy sees, with their state."}},{cmd:"kubectl logs deploy/frontend -c istio-proxy -n shop",d:{ro:"Log-urile de acces ale sidecar-ului.",en:"The sidecar's access logs."}}]},
+
+{at:["ist","fe","o1"],frame:null,kind:"none",who:{ro:"Alternative",en:"Alternatives"},
+ title:{ro:"Fără sidecar: ambient mode, Linkerd și costurile",en:"Without sidecars: ambient mode, Linkerd and the costs"},
+ body:{ro:`<p>Un proxy în fiecare pod costă: memorie și CPU (zeci de MB per pod, înmulțit cu sute de poduri), ~1–3 ms per salt și o repornire a podurilor la fiecare upgrade al proxy-ului. De aceea au apărut variante:</p>
+<ul><li><strong>Istio ambient</strong>: un <strong>ztunnel</strong> per nod face mTLS și L4; un <strong>waypoint proxy</strong> per namespace face partea HTTP (L7) doar unde e nevoie. Podurile nu mai au sidecar.</li>
+<li><strong>Linkerd</strong>: tot cu sidecar, dar cu un proxy mic scris în Rust și mai puține funcții; mai simplu de operat.</li>
+<li><strong>Cilium</strong>: o parte din funcții direct în kernel, cu eBPF.</li></ul>
+<p class="key">Un mesh merită când ai multe servicii, cerințe de securitate (mTLS peste tot) și mai multe echipe. Pentru trei servicii, e de obicei prea mult.</p>`,
+ en:`<p>A proxy in every pod has a cost: memory and CPU (tens of MB per pod, times hundreds of pods), ~1–3 ms per hop, and pod restarts on every proxy upgrade. That's why alternatives appeared:</p>
+<ul><li><strong>Istio ambient</strong>: one <strong>ztunnel</strong> per node does mTLS and L4; a <strong>waypoint proxy</strong> per namespace does the HTTP (L7) part only where needed. Pods have no sidecar.</li>
+<li><strong>Linkerd</strong>: still sidecars, but a small proxy written in Rust and fewer features; simpler to run.</li>
+<li><strong>Cilium</strong>: part of the features directly in the kernel, with eBPF.</li></ul>
+<p class="key">A mesh pays off when you have many services, security requirements (mTLS everywhere) and several teams. For three services it's usually too much.</p>`}},
+
+{at:["fe","o1","o2","ist"],frame:null,kind:"none",summary:true,
+ title:{ro:"Recapitulare",en:"Recap"},
+ body:{ro:`<div class="flow"><span>app: GET orders</span><i>iptables →</i><span>Envoy (15001)</span><i>mTLS →</i><span>Envoy (15006)</span><i>→</i><span>app orders</span></div>
+<ul><li>Mesh = <strong>proxy-uri</strong> lângă aplicații (plan de date) + <strong>istiod</strong> (plan de control).</li>
+<li>Sidecar-ul e injectat automat; <strong>iptables</strong> îi trimite tot traficul podului.</li>
+<li>istiod trimite configurația prin <strong>xDS</strong> și certificate cu identități <strong>SPIFFE</strong>, rotite automat.</li>
+<li><strong>mTLS</strong> criptează și autentifică; <strong>AuthorizationPolicy</strong> decide cine are voie.</li>
+<li><strong>VirtualService</strong> împarte traficul (canary); <strong>DestinationRule</strong> setează retry, timeout, outlier detection.</li>
+<li>Metrici, trace-uri și log-uri pentru orice cerere; aplicația doar transmite antetele de trace.</li></ul>
+<p><button type="button" class="btn primary" data-goto="quiz">Mergi la test ↓</button></p>`,
+ en:`<div class="flow"><span>app: GET orders</span><i>iptables →</i><span>Envoy (15001)</span><i>mTLS →</i><span>Envoy (15006)</span><i>→</i><span>orders app</span></div>
+<ul><li>Mesh = <strong>proxies</strong> next to apps (data plane) + <strong>istiod</strong> (control plane).</li>
+<li>The sidecar is injected automatically; <strong>iptables</strong> sends it all the pod's traffic.</li>
+<li>istiod sends configuration via <strong>xDS</strong> and certificates with <strong>SPIFFE</strong> identities, rotated automatically.</li>
+<li><strong>mTLS</strong> encrypts and authenticates; the <strong>AuthorizationPolicy</strong> decides who's allowed.</li>
+<li>The <strong>VirtualService</strong> splits traffic (canary); the <strong>DestinationRule</strong> sets retries, timeouts, outlier detection.</li>
+<li>Metrics, traces and logs for every request; the app only passes on trace headers.</li></ul>
+<p><button type="button" class="btn primary" data-goto="quiz">Go to the quiz ↓</button></p>`}}
+],
+
+reference:(T,lang)=>{
+  const ro=lang==="ro";
+  let h=`<div class="ref-grid"><section class="card refcard"><h2>${ro?"Canary 90/10 și retry":"Canary 90/10 and retries"}</h2>
+<pre class="yaml">apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata: { name: orders, namespace: shop }
+spec:
+  hosts: [orders]
+  http:
+  - route:
+    - destination: { host: orders, subset: v1 }
+      weight: 90
+    - destination: { host: orders, subset: v2 }
+      weight: 10
+    timeout: 5s
+    retries: { attempts: 3, perTryTimeout: 2s, retryOn: 5xx }
+---
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata: { name: orders, namespace: shop }
+spec:
+  host: orders
+  subsets:
+  - { name: v1, labels: { version: v1 } }
+  - { name: v2, labels: { version: v2 } }
+  trafficPolicy:
+    outlierDetection: { consecutive5xxErrors: 5, interval: 10s, baseEjectionTime: 30s }</pre></section>`;
+  h+=`<section class="card refcard"><h2>${ro?"mTLS strict și autorizare":"Strict mTLS and authorization"}</h2>
+<pre class="yaml">apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata: { name: default, namespace: shop }
+spec: { mtls: { mode: STRICT } }
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata: { name: orders, namespace: shop }
+spec:
+  selector: { matchLabels: { app: orders } }
+  rules:
+  - from: [{ source: { principals: ["cluster.local/ns/shop/sa/frontend"] } }]
+    to: [{ operation: { methods: ["GET","POST"] } }]
+
+<span class="c"># ${ro?"depanare":"troubleshooting"}</span>
+istioctl analyze -n shop
+istioctl proxy-status
+istioctl proxy-config routes deploy/frontend -n shop</pre></section></div>`;
+  return h;
+},
+
+gloss:[
+ ["Service mesh",null,{ro:"Strat de proxy-uri care gestionează traficul dintre servicii, configurat central.",en:"A layer of proxies managing traffic between services, configured centrally."}],
+ ["Sidecar",null,{ro:"Container adăugat lângă aplicație în același pod; aici, proxy-ul Envoy.",en:"A container added next to the app in the same pod; here, the Envoy proxy."}],
+ ["Envoy",null,{ro:"Proxy L4/L7 open-source folosit de Istio și multe gateway-uri.",en:"An open-source L4/L7 proxy used by Istio and many gateways."}],
+ ["istiod",null,{ro:"Planul de control Istio: configurație, descoperirea serviciilor, certificate.",en:"Istio's control plane: configuration, service discovery, certificates."}],
+ [{ro:"Plan de date / control",en:"Data / control plane"},null,{ro:"Datele: proxy-urile care mută cererile. Controlul: cel care le spune cum.",en:"Data: the proxies moving requests. Control: what tells them how."}],
+ ["xDS",null,{ro:"API-urile prin care Envoy primește configurația (LDS, RDS, CDS, EDS, SDS).",en:"The APIs Envoy gets configuration through (LDS, RDS, CDS, EDS, SDS)."}],
+ ["mTLS","mutual TLS",{ro:"TLS în care și clientul, și serverul prezintă certificate.",en:"TLS where both client and server present certificates."}],
+ ["SPIFFE",null,{ro:"Standard de identitate pentru servicii, de forma spiffe://domeniu/cale.",en:"An identity standard for services, of the form spiffe://domain/path."}],
+ ["VirtualService",null,{ro:"Resursă Istio cu reguli de rutare: procente, antete, timeout-uri, retry-uri.",en:"An Istio resource with routing rules: percentages, headers, timeouts, retries."}],
+ ["DestinationRule",null,{ro:"Resursă Istio cu subset-uri (versiuni) și politici de conexiune.",en:"An Istio resource with subsets (versions) and connection policies."}],
+ ["Canary",null,{ro:"Lansarea unei versiuni noi întâi pentru un procent mic din trafic.",en:"Releasing a new version to a small share of traffic first."}],
+ ["Retry",null,{ro:"Reîncercarea automată a unei cereri eșuate, de preferat pe alt pod.",en:"Automatically retrying a failed request, preferably on another pod."}],
+ ["Outlier detection",null,{ro:"Scoaterea temporară din rotație a podurilor care dau erori.",en:"Temporarily removing pods that return errors from rotation."}],
+ ["Circuit breaker",null,{ro:"Refuzarea rapidă a cererilor peste o limită, ca să nu se prăbușească serviciul.",en:"Rejecting requests fast above a limit so the service doesn't collapse."}],
+ ["Zero trust",null,{ro:"Nicio cerere nu e de încredere doar pentru că vine din rețeaua internă.",en:"No request is trusted just because it comes from the internal network."}],
+ ["Ambient mesh",null,{ro:"Modul Istio fără sidecar: ztunnel per nod + waypoint proxy pentru L7.",en:"Istio's sidecar-less mode: a ztunnel per node + a waypoint proxy for L7."}]
+],
+glossEx:{
+ "Service mesh":{ro:"Istio, Linkerd, Cilium Service Mesh.",en:"Istio, Linkerd, Cilium Service Mesh."},
+ "Sidecar":{ro:"containerul istio-proxy din podul frontend.",en:"the istio-proxy container in the frontend pod."},
+ "Envoy":{ro:"ascultă pe 15001 (ieșire) și 15006 (intrare).",en:"listens on 15001 (outbound) and 15006 (inbound)."},
+ "istiod":{ro:"trimite EDS: orders → 10.1.0.31, 10.1.0.47.",en:"sends EDS: orders → 10.1.0.31, 10.1.0.47."},
+ "Data / control plane":{ro:"Envoy = date; istiod = control.",en:"Envoy = data; istiod = control."},
+ "xDS":{ro:"istioctl proxy-config clusters arată ce a primit prin CDS.",en:"istioctl proxy-config clusters shows what it got via CDS."},
+ "mTLS":{ro:"frontend și orders își arată certificatele unul altuia.",en:"frontend and orders show each other their certificates."},
+ "SPIFFE":{ro:"spiffe://cluster.local/ns/shop/sa/frontend",en:"spiffe://cluster.local/ns/shop/sa/frontend"},
+ "VirtualService":{ro:"90% v1, 10% v2, timeout 5 s.",en:"90% v1, 10% v2, timeout 5 s."},
+ "DestinationRule":{ro:"subset v2 = podurile cu eticheta version: v2.",en:"subset v2 = pods labelled version: v2."},
+ "Canary":{ro:"v2 primește 10%, apoi 50%, apoi 100%.",en:"v2 gets 10%, then 50%, then 100%."},
+ "Retry":{ro:"503 de la v2 → aceeași cerere la v1.",en:"503 from v2 → the same request to v1."},
+ "Outlier detection":{ro:"5 erori 5xx la rând → podul e scos 30 s.",en:"5 consecutive 5xx errors → the pod is ejected for 30 s."},
+ "Circuit breaker":{ro:"peste 100 de cereri în așteptare → 503 imediat.",en:"over 100 pending requests → 503 immediately."},
+ "Zero trust":{ro:"chiar și din cluster, fără certificat valid primești 403.",en:"even from inside the cluster, without a valid certificate you get 403."},
+ "Ambient mesh":{ro:"istioctl install --set profile=ambient",en:"istioctl install --set profile=ambient"}
+},
+
+quiz:[
+ {q:{ro:"Ce e planul de date într-un service mesh Istio?",en:"What is the data plane in an Istio service mesh?"},o:[{ro:"Proxy-urile Envoy prin care trec cererile",en:"The Envoy proxies the requests flow through"},{ro:"Baza de date",en:"The database"},{ro:"istiod",en:"istiod"},{ro:"DNS-ul clusterului",en:"The cluster DNS"}],a:0,e:{ro:"istiod e planul de control; Envoy mută efectiv traficul.",en:"istiod is the control plane; Envoy actually moves the traffic."}},
+ {q:{ro:"Cum ajunge traficul aplicației la sidecar fără schimbări de cod?",en:"How does the app's traffic reach the sidecar with no code changes?"},o:[{ro:"Reguli iptables în podul aplicației îl redirecționează",en:"iptables rules in the app's pod redirect it"},{ro:"Aplicația e rescrisă automat",en:"The app is rewritten automatically"},{ro:"Prin DNS",en:"Through DNS"},{ro:"Nu ajunge",en:"It doesn't"}],a:0,e:{ro:"Ieșirea merge la 15001, intrarea la 15006.",en:"Outbound goes to 15001, inbound to 15006."}},
+ {q:{ro:"Pe ce se bazează identitatea unui serviciu în mesh?",en:"What is a service's identity in the mesh based on?"},o:[{ro:"Pe ServiceAccount, într-un certificat SPIFFE",en:"On the ServiceAccount, in a SPIFFE certificate"},{ro:"Pe IP-ul podului",en:"On the pod IP"},{ro:"Pe numele nodului",en:"On the node name"},{ro:"Pe portul folosit",en:"On the port used"}],a:0,e:{ro:"IP-urile se schimbă; identitatea contului de serviciu rămâne.",en:"IPs change; the service account identity stays."}},
+ {q:{ro:"Ce înseamnă mTLS?",en:"What does mTLS mean?"},o:[{ro:"TLS în care ambele părți prezintă certificate",en:"TLS where both sides present certificates"},{ro:"TLS mai rapid",en:"Faster TLS"},{ro:"TLS fără criptare",en:"TLS without encryption"},{ro:"TLS doar pentru browsere",en:"TLS for browsers only"}],a:0,e:{ro:"Așa știe și serverul cine e clientul.",en:"That way the server knows who the client is too."}},
+ {q:{ro:"Ce face un VirtualService cu ponderile 90/10?",en:"What does a VirtualService with 90/10 weights do?"},o:[{ro:"Trimite 90% din cereri la v1 și 10% la v2",en:"Sends 90% of requests to v1 and 10% to v2"},{ro:"Limitează traficul la 90%",en:"Caps traffic at 90%"},{ro:"Pornește 90 de poduri",en:"Starts 90 pods"},{ro:"Blochează v2",en:"Blocks v2"}],a:0,e:{ro:"E mecanismul clasic de lansare canary.",en:"That's the classic canary release mechanism."}},
+ {q:{ro:"Un pod răspunde mereu cu 503. Ce face outlier detection?",en:"A pod keeps answering 503. What does outlier detection do?"},o:[{ro:"Îl scoate temporar din rotație",en:"Ejects it from rotation temporarily"},{ro:"Îl șterge",en:"Deletes it"},{ro:"Repornește clusterul",en:"Restarts the cluster"},{ro:"Nimic",en:"Nothing"}],a:0,e:{ro:"După timpul de ejectare, primește din nou trafic de probă.",en:"After the ejection time it gets trial traffic again."}},
+ {q:{ro:"De ce pot fi periculoase retry-urile?",en:"Why can retries be dangerous?"},o:[{ro:"Se multiplică pe straturi și pot supraîncărca un serviciu deja bolnav",en:"They multiply across layers and can overload an already sick service"},{ro:"Sunt criptate",en:"They're encrypted"},{ro:"Șterg date",en:"They delete data"},{ro:"Nu sunt periculoase",en:"They aren't"}],a:0,e:{ro:"De aceea: retry doar pentru operații sigure, cu timeout total.",en:"Hence: retry only safe operations, with an overall timeout."}},
+ {q:{ro:"Ce trebuie totuși să facă aplicația ca trace-urile să fie complete?",en:"What must the app still do for traces to be complete?"},o:[{ro:"Să transmită mai departe antetele de trace (traceparent)",en:"Pass on the trace headers (traceparent)"},{ro:"Să cripteze cererile",en:"Encrypt the requests"},{ro:"Să trimită metrici",en:"Send metrics"},{ro:"Nimic",en:"Nothing"}],a:0,e:{ro:"Proxy-ul nu poate ghici că cererea de ieșire ține de cea de intrare.",en:"The proxy can't guess that an outgoing request belongs to an incoming one."}}
+]
+};
+function T0(v){return v&&typeof v==="object"?(v.en||""):String(v||"")}
+})();
+</script>
+<script src="../assets/engine.js"></script>
+<script type="module" src="../assets/auth.js?v=3"></script>
+</body>
+</html>

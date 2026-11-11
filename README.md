@@ -22,6 +22,10 @@ Lecții web interactive despre rețele. Fiecare lecție e o simulare animată: u
 | 10 | [NAT pas cu pas](https://tedimihailescu.github.io/Ethernet-frame-learning-app/nat/) | Adrese private, SNAT/PAT, tabela NAT, port forwarding, CGNAT, IPv6 |
 | 11 | [HTTPS și TLS](https://tedimihailescu.github.io/Ethernet-frame-learning-app/https/) | TLS 1.3, ECDHE, certificate și lanț de încredere, man-in-the-middle, Let's Encrypt (ACME) |
 | 12 | [Ingress în Kubernetes](https://tedimihailescu.github.io/Ethernet-frame-learning-app/ingress/) | Controller, TLS din Secret-uri, host + cale, default backend, adnotări, Gateway API |
+| 13 | [IPv6 pas cu pas](https://tedimihailescu.github.io/Ethernet-frame-learning-app/ipv6/) | Scrierea adreselor, link-local și DAD, Router Advertisement, SLAAC, NDP în loc de ARP, Packet Too Big, dual-stack |
+| 14 | [BGP pas cu pas](https://tedimihailescu.github.io/Ethernet-frame-learning-app/bgp/) | AS-uri, sesiuni TCP 179, UPDATE și AS_PATH, alegerea drumului, bucle, route leak, convergență, RPKI |
+| 15 | [Service mesh](https://tedimihailescu.github.io/Ethernet-frame-learning-app/service-mesh/) | Istio și Envoy: sidecar, xDS, mTLS cu SPIFFE, autorizare, canary, retry, outlier detection, ambient mode |
+| 16 | [Observabilitate](https://tedimihailescu.github.io/Ethernet-frame-learning-app/observabilitate/) | Trace-uri și traceparent, histograme și p99, log-uri structurate, OpenTelemetry Collector, SLO și burn rate |
 
 Fiecare lecție are: diagramă animată, pachetul „live” cu câmpurile schimbate colorate, tabele (MAC, rutare, ARP, DNS, conntrack…), secțiuni „Află mai mult”, comenzi de încercat, referință, dicționar și test. Totul în română și engleză, temă luminoasă/întunecată, funcționează pe telefon.
 

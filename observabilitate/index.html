@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Observabilitate pas cu pas</title>
+<meta name="description" content="Lecție interactivă: metrici, log-uri și trace-uri pentru o cerere lentă: OpenTelemetry, Prometheus, Loki, Tempo, SLO și alerte. / Interactive observability lesson.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<script>
+(function(){
+const TID="4bf92f3577b34da6a3ce929d0e0e4736";
+const F1={method:"POST",path:"/checkout",tp:"traceparent: 00-"+TID+"-00f067aa0ba902b7-01",traceId:TID,spanId:"00f067aa0ba902b7",parent:{ro:"— (span rădăcină)",en:"— (root span)"}};
+const F2={...F1,path:"/v1/orders",tp:"traceparent: 00-"+TID+"-b7ad6b7169203331-01",spanId:"b7ad6b7169203331",parent:"00f067aa0ba902b7"};
+const F3={...F2,path:"/v1/charge",tp:"traceparent: 00-"+TID+"-e3c1a0d2f9b84c11-01",spanId:"e3c1a0d2f9b84c11",parent:"b7ad6b7169203331",dur:{ro:"1 820 ms (din care 1 740 ms la baza de date)",en:"1,820 ms (1,740 ms of it in the database)"}};
+const FX={otlp:"OTLP/gRPC → otel-collector:4317",batch:{ro:"în loturi de 512 span-uri sau la 5 s",en:"in batches of 512 spans or every 5 s"},samp:{ro:"tail sampling: toate erorile, tot ce e > 1 s, 10% din rest",en:"tail sampling: all errors, everything > 1 s, 10% of the rest"}};
+const FM={metric:'http_server_request_duration_seconds_bucket{service="payments", route="/v1/charge", le="0.5"}',val:{ro:"contor cumulativ: câte cereri au durat ≤ 0,5 s",en:"cumulative counter: how many requests took ≤ 0.5 s"},how:{ro:"Prometheus citește /metrics la fiecare 15 s",en:"Prometheus scrapes /metrics every 15 s"}};
+const FL={log:'{"ts":"2026-11-12T09:41:07.312Z","level":"error","service":"payments","msg":"lock wait timeout","table":"payments","waited_ms":1740,"trace_id":"'+TID+'"}',ship:{ro:"stdout → agentul de pe nod → Loki",en:"stdout → the node agent → Loki"}};
+const FA={alert:"CheckoutLatencySLO",slo:{ro:"99% din /checkout sub 500 ms, pe 30 de zile",en:"99% of /checkout under 500 ms, over 30 days"},burn:{ro:"bugetul de erori se consumă de 14× mai repede decât e permis (ultima oră)",en:"the error budget is burning 14× faster than allowed (last hour)"},to:{ro:"Alertmanager → pager-ul echipei de gardă",en:"Alertmanager → the on-call team's pager"}};
+
+window.LESSON={
+docTitle:{ro:"Observabilitate pas cu pas",en:"Observability Step by Step"},
+eyebrow:{ro:"Lecție interactivă · Producție",en:"Interactive lesson · Production"},
+title:{ro:"Observabilitate: de ce e lent checkout-ul?",en:"Observability: why is checkout slow?"},
+sub:{ro:"Un client apasă „Plătește” și așteaptă aproape două secunde. Urmărești cum lasă cererea urme în trei feluri (trace-uri, metrici și log-uri), cum ajung ele la OpenTelemetry Collector, Prometheus, Tempo și Loki, cum pornește o alertă pe baza unui SLO și cum găsește echipa de gardă cauza în câteva minute.",en:"A customer clicks \"Pay\" and waits almost two seconds. Follow how the request leaves three kinds of traces (traces, metrics and logs), how they reach the OpenTelemetry Collector, Prometheus, Tempo and Loki, how an SLO-based alert fires, and how the on-call team finds the cause in minutes."},
+meta:[{ro:"≈ 25 minute",en:"≈ 25 minutes"},{ro:"11 pași",en:"11 steps"},{ro:"8 întrebări",en:"8 questions"},{ro:"Intermediar",en:"Intermediate"}],
+goals:[{ro:"Ce spun metricile, log-urile și trace-urile, și când îți trebuie fiecare",en:"What metrics, logs and traces tell you, and when you need each"},{ro:"Cum se propagă un trace între servicii (W3C traceparent)",en:"How a trace propagates between services (W3C traceparent)"},{ro:"Histograme, percentile și PromQL",en:"Histograms, percentiles and PromQL"},{ro:"SLO, buget de erori, alerte și o investigație reală",en:"SLOs, error budgets, alerts and a real investigation"}],
+foot:{ro:"Serviciile și cifrele sunt fictive; uneltele (OpenTelemetry, Prometheus, Loki, Tempo, Grafana) sunt reale și open-source.",en:"The services and numbers are made up; the tools (OpenTelemetry, Prometheus, Loki, Tempo, Grafana) are real and open source."},
+ui:{refT:{ro:"Interogări și configurație",en:"Queries and configuration"},refLead:{ro:"Interogările PromQL și LogQL din lecție, plus o regulă de alertă.",en:"The PromQL and LogQL queries from the lesson, plus an alert rule."}},
+tryT:{ro:"Încearcă",en:"Try it"},
+legend:[["lg-ip","HTTP",{ro:"cererea clientului",en:"the customer's request"}],["lg-arp","OTLP",{ro:"telemetrie spre colector",en:"telemetry to the collector"}],["lg-tcp",{ro:"Alertă",en:"Alert"},{ro:"alertă și notificare",en:"alert and notification"}]],
+
+nodes:{
+  usr:{type:"user",name:{ro:"Client",en:"Customer"},lines:[]},
+  api:{type:"pod",name:"api-gateway",lines:[]},
+  co:{type:"pod",name:"checkout",lines:[]},
+  pay:{type:"pod",name:"payments",lines:[]},
+  db:{type:"db",name:"PostgreSQL",lines:[]},
+  col:{type:"box",name:"OTel Collector",lines:[]},
+  prom:{type:"box",name:"Prometheus",lines:[{ro:"metrici",en:"metrics"}]},
+  sto:{type:"box",name:"Tempo · Loki",lines:[{ro:"trace-uri · log-uri",en:"traces · logs"}]},
+  graf:{type:"box",name:"Grafana",lines:["+ Alertmanager"]}
+},
+links:[["usr","api"],["api","co"],["co","pay"],["pay","db"],["api","col","virt"],["co","col","virt"],["pay","col","virt"],["col","prom","virt"],["col","sto","virt"],["prom","graf","virt"],["sto","graf","virt"]],
+layouts:{
+  wide:{vb:[0,0,1000,500],n:{usr:[60,110],api:[230,110],co:[430,110],pay:[630,110],db:[840,110],col:[430,290],prom:[230,430],sto:[630,430],graf:[880,330]},
+    zones:[{x:150,y:30,w:780,h:150,top:true,l:{ro:"Aplicația (Kubernetes)",en:"The application (Kubernetes)"}},{x:150,y:220,w:840,h:270,top:true,cls:"virt",l:{ro:"Platforma de observabilitate",en:"The observability platform"}}]},
+  narrow:{vb:[0,0,360,720],n:{usr:[60,40],api:[60,140],co:[60,240],pay:[60,340],db:[60,440],col:[250,240],prom:[250,420],sto:[250,560],graf:[110,640]},
+    side:{usr:"right",api:"right",co:"right",pay:"right",db:"right"},hideLinks:["api-col","pay-col"]}
+},
+groups:[
+  {id:"h",color:"l7",fields:["method","path","dur"],name:{ro:"Cererea HTTP",en:"The HTTP request"},short:"HTTP",grow:2},
+  {id:"t",color:"l3",fields:["tp","traceId","spanId","parent"],name:{ro:"Contextul de trace",en:"Trace context"},short:"Trace",grow:3},
+  {id:"x",color:"l2",fields:["otlp","batch","samp"],name:{ro:"Export",en:"Export"},short:"OTLP",grow:2},
+  {id:"m",color:"l4",fields:["metric","val","how"],name:{ro:"Metrică",en:"Metric"},short:{ro:"Metrică",en:"Metric"},grow:3},
+  {id:"l",color:"l4",fields:["log","ship"],name:{ro:"Log structurat",en:"Structured log"},short:"Log",grow:3},
+  {id:"a",color:"arp",fields:["alert","slo","burn","to"],name:{ro:"Alertă",en:"Alert"},short:{ro:"Alertă",en:"Alert"},grow:3}
+],
+fieldLabels:{method:{ro:"Metodă",en:"Method"},path:{ro:"Cale",en:"Path"},dur:{ro:"Durată",en:"Duration"},tp:{ro:"Antet propagat",en:"Propagated header"},traceId:"trace_id",spanId:"span_id",parent:{ro:"Span părinte",en:"Parent span"},otlp:{ro:"Protocol",en:"Protocol"},batch:{ro:"Trimitere",en:"Sending"},samp:"Sampling",metric:{ro:"Serie",en:"Series"},val:{ro:"Valoare",en:"Value"},how:{ro:"Colectare",en:"Collection"},log:{ro:"Linie de log",en:"Log line"},ship:{ro:"Drum",en:"Route"},alert:{ro:"Regulă",en:"Rule"},slo:"SLO",burn:"Burn rate",to:{ro:"Notificare",en:"Notification"}},
+pdu:f=>f.alert?{badge:{ro:"Alertă",en:"Alert"},tok:["ALERT","k-tcp"]}:f.otlp?{badge:{ro:"Span-uri exportate",en:"Exported spans"},tok:["OTLP","k-arp"]}:f.metric?{badge:{ro:"Metrică",en:"Metric"},tok:["METRIC","k-arp"]}:f.log?{badge:{ro:"Log structurat",en:"Structured log"},tok:["LOG","k-arp"]}:{badge:{ro:"Cerere HTTP cu context de trace",en:"HTTP request with trace context"},tok:["HTTP","k-ip"]},
+
+init:{spans:[]},
+tables:{
+  three:{title:{ro:"Cele trei semnale",en:"The three signals"},cols:[{ro:"Semnal",en:"Signal"},{ro:"Răspunde la",en:"Answers"},{ro:"Cost",en:"Cost"}],plain:[1,2],
+    rows:()=>[[{ro:"Metrici",en:"Metrics"},{ro:"„Ceva e în neregulă? Cât, de când?” (numere în timp)",en:"\"Is something wrong? How much, since when?\" (numbers over time)"},{ro:"mic: o serie per combinație de etichete",en:"low: one series per label combination"}],[{ro:"Trace-uri",en:"Traces"},{ro:"„Unde se pierde timpul în cererea asta?”",en:"\"Where is the time going in this request?\""},{ro:"mediu: de obicei doar un eșantion",en:"medium: usually only a sample"}],[{ro:"Log-uri",en:"Logs"},{ro:"„Ce s-a întâmplat exact, cu ce date?”",en:"\"What exactly happened, with what data?\""},{ro:"mare: fiecare eveniment e păstrat",en:"high: every event is kept"}]]},
+  spans:{title:{ro:"Trace-ul "+TID.slice(0,8)+"… (waterfall)",en:"Trace "+TID.slice(0,8)+"… (waterfall)"},cols:["Span",{ro:"Serviciu",en:"Service"},{ro:"Începe la",en:"Starts at"},{ro:"Durată",en:"Duration"}]},
+  q:{title:{ro:"Întrebări PromQL",en:"PromQL questions"},cols:[{ro:"Întrebare",en:"Question"},{ro:"Interogare",en:"Query"}],plain:[0],
+    rows:()=>[[{ro:"Câte cereri pe secundă?",en:"How many requests per second?"},'sum(rate(http_server_request_duration_seconds_count{service="payments"}[5m]))'],[{ro:"Câte erori?",en:"How many errors?"},'sum(rate(…_count{service="payments", status=~"5.."}[5m]))'],[{ro:"Cât durează 99% din cereri (p99)?",en:"How long do 99% of requests take (p99)?"},'histogram_quantile(0.99, sum by (le) (rate(…_bucket{service="payments"}[5m])))']]},
+  inv:{title:{ro:"Investigația, minut cu minut",en:"The investigation, minute by minute"},cols:[{ro:"Minut",en:"Minute"},{ro:"Unde",en:"Where"},{ro:"Ce afli",en:"What you learn"}],plain:[2],
+    rows:()=>[["09:42","Alertmanager",{ro:"alertă: checkout încalcă SLO-ul de latență",en:"alert: checkout is breaking its latency SLO"}],["09:43",{ro:"Dashboard (metrici)",en:"Dashboard (metrics)"},{ro:"p99 /checkout a sărit de la 300 ms la 1,9 s la 09:30; doar payments e lent",en:"/checkout p99 jumped from 300 ms to 1.9 s at 09:30; only payments is slow"}],["09:44",{ro:"Exemplar → trace",en:"Exemplar → trace"},{ro:"waterfall-ul: 1 740 ms din 1 900 sunt în span-ul SQL UPDATE payments",en:"the waterfall: 1,740 ms of 1,900 is in the SQL UPDATE payments span"}],["09:45",{ro:"Log-uri după trace_id",en:"Logs by trace_id"},{ro:"„lock wait timeout” pe tabela payments",en:"\"lock wait timeout\" on the payments table"}],["09:47",{ro:"Metrici DB + deploy-uri",en:"DB metrics + deploys"},{ro:"la 09:30 a pornit un job de raportare care blochează tabela",en:"at 09:30 a reporting job started that locks the table"}]]}
+},
+log:{title:{ro:"Jurnalul semnalelor",en:"Signal log"},lead:{ro:"Aceeași cerere lasă urme în trei sisteme diferite; trace_id-ul le leagă între ele.",en:"The same request leaves traces in three different systems; the trace_id ties them together."},first:{ro:"Pas",en:"Step"},minWidth:600,
+  cols:[{h:{ro:"Semnal",en:"Signal"},v:f=>f.alert?"alert":f.otlp?"traces":f.metric?"metric":f.log?"log":"HTTP "+f.method+" "+f.path},{h:"trace_id",v:f=>f.traceId?f.traceId.slice(0,12)+"…":(f.log?TID.slice(0,12)+"…":"—"),cls:"ip"},{h:"span_id",v:f=>f.spanId||"—",cls:"mac"}]},
+
+steps:[
+{at:["api","co","pay"],frame:null,kind:"none",tables:["three"],
+ title:{ro:"Monitorizare vs. observabilitate",en:"Monitoring vs observability"},
+ body:{ro:`<p><strong>Monitorizarea</strong> răspunde la întrebări pe care le-ai pus dinainte: „e serverul pornit?”, „e CPU-ul peste 90%?”. <strong>Observabilitatea</strong> înseamnă să poți răspunde la întrebări <em>noi</em>, despre probleme pe care nu le-ai prevăzut, doar din datele pe care sistemul le produce deja.</p>
+<p>Pentru asta, fiecare serviciu emite trei semnale (tabelul din dreapta). În exemplu, aplicația are trei servicii (api-gateway, checkout, payments) și o bază de date. Telemetria lor e colectată cu <strong>OpenTelemetry</strong>, standardul deschis folosit azi de aproape toate uneltele.</p>`,
+ en:`<p><strong>Monitoring</strong> answers questions you asked in advance: "is the server up?", "is CPU above 90%?". <strong>Observability</strong> means being able to answer <em>new</em> questions, about problems you didn't foresee, using only the data the system already produces.</p>
+<p>For that, each service emits three signals (table on the right). In the example the app has three services (api-gateway, checkout, payments) and a database. Their telemetry is collected with <strong>OpenTelemetry</strong>, the open standard almost every tool uses today.</p>`}},
+
+{at:"api",frame:F1,kind:"req",move:[[["usr","api"]]],fx:[["spans","POST /checkout","api-gateway","0 ms",{ro:"1 900 ms",en:"1,900 ms"}]],tables:["spans"],log:{ro:"clientul → api-gateway",en:"customer → api-gateway"},who:"api-gateway",
+ title:{ro:"Cererea intră: începe un trace",en:"The request arrives: a trace begins"},
+ body:{ro:`<p>Clientul trimite <code>POST /checkout</code>. Biblioteca OpenTelemetry din api-gateway vede că cererea nu are context de trace și creează unul:</p>
+<ul><li>un <strong>trace_id</strong> de 128 de biți, același pentru toată călătoria cererii prin sistem;</li>
+<li>un <strong>span</strong>: o operație cu început, durată, nume și atribute (metodă, rută, status). Primul e <strong>span-ul rădăcină</strong>.</li></ul>
+<p>Span-urile se adună într-un <strong>waterfall</strong> (tabelul din dreapta), care crește la fiecare pas.</p>`,
+ en:`<p>The customer sends <code>POST /checkout</code>. The OpenTelemetry library in api-gateway sees the request has no trace context and creates one:</p>
+<ul><li>a 128-bit <strong>trace_id</strong>, the same for the request's whole journey through the system;</li>
+<li>a <strong>span</strong>: an operation with a start, duration, name and attributes (method, route, status). The first one is the <strong>root span</strong>.</li></ul>
+<p>Spans add up to a <strong>waterfall</strong> (table on the right), which grows at every step.</p>`}},
+
+{at:"api",frame:F2,kind:"req",move:[[["api","co"]]],fx:[["spans","POST /v1/orders","checkout","40 ms",{ro:"1 850 ms",en:"1,850 ms"}]],tables:["spans"],log:{ro:"api-gateway → checkout",en:"api-gateway → checkout"},who:"api-gateway",
+ title:{ro:"Propagarea: antetul traceparent",en:"Propagation: the traceparent header"},
+ body:{ro:`<p>api-gateway cheamă checkout. Ca trace-ul să continue, adaugă la cerere antetul standard W3C <strong>traceparent</strong>:</p>
+<p class="key"><code>00-{trace_id}-{span_id al apelantului}-01</code></p>
+<p>Checkout citește antetul și își creează propriul span, <strong>copil</strong> al celui din api-gateway: același trace_id, alt span_id, iar „părintele” e span-ul care l-a chemat. Ultimul <code>01</code> înseamnă „acest trace e eșantionat, păstrează-l”.</p>
+<p>Dacă un serviciu din mijloc nu transmite antetul, trace-ul se rupe în două bucăți fără legătură. Bibliotecile OpenTelemetry îl transmit automat pentru clienții HTTP, gRPC și Kafka obișnuiți.</p>`,
+ en:`<p>api-gateway calls checkout. To continue the trace it adds the standard W3C <strong>traceparent</strong> header to the request:</p>
+<p class="key"><code>00-{trace_id}-{caller's span_id}-01</code></p>
+<p>Checkout reads the header and creates its own span, a <strong>child</strong> of api-gateway's: the same trace_id, a different span_id, and its "parent" is the span that called it. The trailing <code>01</code> means "this trace is sampled, keep it".</p>
+<p>If a service in the middle doesn't pass the header on, the trace breaks into two unrelated pieces. OpenTelemetry libraries pass it automatically for common HTTP, gRPC and Kafka clients.</p>`}},
+
+{at:"pay",frame:F3,kind:"req",move:[[["co","pay"]],[["pay","db"]]],fx:[["spans","POST /v1/charge","payments","70 ms",{ro:"1 820 ms",en:"1,820 ms"}],["spans","SQL UPDATE payments","payments → PostgreSQL","75 ms",{ro:"1 740 ms ⚠",en:"1,740 ms ⚠"}]],tables:["spans"],hl:{spans:"SQL UPDATE payments"},log:{ro:"checkout → payments → DB",en:"checkout → payments → DB"},who:"payments",
+ title:{ro:"Unde se duce timpul: un span de 1,7 secunde",en:"Where the time goes: a 1.7-second span"},
+ body:{ro:`<p>Checkout cheamă payments, care face un <code>UPDATE</code> în baza de date. Biblioteca pentru driverul SQL creează automat un span și pentru interogare.</p>
+<p>Waterfall-ul (dreapta) spune deja povestea: din cele 1 900 ms ale cererii, <strong>1 740 ms</strong> sunt petrecute așteptând baza de date. Restul serviciilor sunt rapide. Fără trace, ai fi văzut doar „checkout e lent” și ai fi căutat în locul greșit.</p>`,
+ en:`<p>Checkout calls payments, which runs an <code>UPDATE</code> on the database. The SQL driver instrumentation automatically creates a span for the query too.</p>
+<p>The waterfall (right) already tells the story: of the request's 1,900 ms, <strong>1,740 ms</strong> are spent waiting for the database. The other services are fast. Without a trace you'd only have seen "checkout is slow" and looked in the wrong place.</p>`}},
+
+{at:["api","co","pay"],frame:FX,kind:"exp",move:[[["api","col"],["co","col"],["pay","col"]],[["col","sto"]]],log:{ro:"span-uri spre Collector → Tempo",en:"spans to the Collector → Tempo"},who:"OTel Collector",
+ title:{ro:"Span-urile pleacă la Collector, apoi la Tempo",en:"Spans go to the Collector, then to Tempo"},
+ body:{ro:`<p>Serviciile nu scriu direct în baza de trace-uri. Trimit span-urile, în loturi, prin protocolul <strong>OTLP</strong> la <strong>OpenTelemetry Collector</strong>, un proces separat care:</p>
+<ul><li>primește de la toate serviciile, în orice limbaj;</li>
+<li>adaugă informații (pod, nod, namespace) și șterge date sensibile;</li>
+<li>decide ce păstrează (<strong>sampling</strong>) și trimite mai departe la <strong>Tempo</strong> (sau Jaeger, sau un furnizor comercial).</li></ul>
+<p><strong>Tail sampling</strong>: Collector-ul așteaptă trace-ul întreg și păstrează toate erorile și cererile lente, dar doar 10% din cele normale. Costă mai puțin și nu pierzi exact trace-urile interesante.</p>`,
+ en:`<p>Services don't write straight into the trace store. They send spans, in batches, over the <strong>OTLP</strong> protocol to the <strong>OpenTelemetry Collector</strong>, a separate process that:</p>
+<ul><li>receives from every service, in any language;</li>
+<li>adds information (pod, node, namespace) and strips sensitive data;</li>
+<li>decides what to keep (<strong>sampling</strong>) and forwards to <strong>Tempo</strong> (or Jaeger, or a commercial vendor).</li></ul>
+<p><strong>Tail sampling</strong>: the Collector waits for the whole trace and keeps every error and slow request, but only 10% of normal ones. It costs less and you don't lose exactly the interesting traces.</p>`}},
+
+{at:"pay",frame:FM,kind:"met",move:[[["pay","col"]],[["col","prom"]]],tables:["q"],log:{ro:"metrici spre Prometheus",en:"metrics to Prometheus"},who:"Prometheus",
+ title:{ro:"Metrici: histograme și percentile",en:"Metrics: histograms and percentiles"},
+ body:{ro:`<p>Pe lângă span-uri, fiecare serviciu ține <strong>contoare</strong> în memorie: câte cereri, câte erori și o <strong>histogramă</strong> a duratelor, adică în câte cereri au durat ≤ 50 ms, ≤ 100 ms, ≤ 500 ms, ≤ 1 s… Prometheus le citește periodic și le păstrează ca serii de timp.</p>
+<p>Media e înșelătoare: dacă 98 de cereri durează 100 ms și 2 durează 10 s, media e ~300 ms și pare totul bine. De aceea se urmăresc <strong>percentile</strong>: <strong>p99</strong> = 99% din cereri sunt mai rapide de atât. Interogările din dreapta (PromQL) calculează cele trei semnale <strong>RED</strong>: Rate, Errors, Duration.</p>`,
+ en:`<p>Besides spans, each service keeps <strong>counters</strong> in memory: how many requests, how many errors, and a <strong>histogram</strong> of durations, i.e. how many requests took ≤ 50 ms, ≤ 100 ms, ≤ 500 ms, ≤ 1 s… Prometheus reads them periodically and stores them as time series.</p>
+<p>The average is misleading: if 98 requests take 100 ms and 2 take 10 s, the average is ~300 ms and everything looks fine. That's why you track <strong>percentiles</strong>: <strong>p99</strong> = 99% of requests are faster than this. The queries on the right (PromQL) compute the three <strong>RED</strong> signals: Rate, Errors, Duration.</p>`},
+ more:{ro:`<p>Fiecare combinație diferită de etichete e o serie separată în Prometheus. Etichete ca <code>route</code> sau <code>status</code> au câteva valori; una ca <code>user_id</code> sau <code>order_id</code> ar crea milioane de serii (<strong>cardinalitate</strong> mare) și ar umple memoria. Lucrurile unice per cerere merg în trace-uri și log-uri, nu în etichete de metrici.</p>`,
+  en:`<p>Every distinct label combination is a separate series in Prometheus. Labels like <code>route</code> or <code>status</code> have a few values; one like <code>user_id</code> or <code>order_id</code> would create millions of series (high <strong>cardinality</strong>) and fill memory. Things unique per request belong in traces and logs, not metric labels.</p>`}},
+
+{at:"pay",frame:FL,kind:"log",move:[[["pay","col"]],[["col","sto"]]],log:{ro:"log de eroare → Loki",en:"error log → Loki"},who:"payments",
+ title:{ro:"Log-uri structurate, cu trace_id",en:"Structured logs, with trace_id"},
+ body:{ro:`<p>Payments scrie un log de eroare. Nu e o propoziție liberă, ci un obiect <strong>JSON</strong> cu câmpuri: nivel, serviciu, mesaj, cât a așteptat și, important, <strong>trace_id</strong>-ul cererii curente.</p>
+<p>Aplicația scrie doar la <code>stdout</code>. Un agent de pe fiecare nod (Collector, Promtail, Fluent Bit) citește log-urile containerelor și le trimite la <strong>Loki</strong>.</p>
+<p class="key">Cu trace_id în fiecare log poți sări direct de la un trace lent la exact log-urile acelei cereri, din toate serviciile, în loc să cauți după oră printre milioane de linii.</p>`,
+ en:`<p>Payments writes an error log. It's not a free-form sentence but a <strong>JSON</strong> object with fields: level, service, message, how long it waited and, importantly, the current request's <strong>trace_id</strong>.</p>
+<p>The app only writes to <code>stdout</code>. An agent on each node (Collector, Promtail, Fluent Bit) reads the containers' logs and ships them to <strong>Loki</strong>.</p>
+<p class="key">With the trace_id in every log you can jump straight from a slow trace to exactly that request's logs, across all services, instead of searching by time through millions of lines.</p>`}},
+
+{at:"graf",frame:FA,kind:"alert",move:[[["prom","graf"]]],log:{ro:"alerta pornește",en:"the alert fires"},who:"Alertmanager",
+ title:{ro:"SLO, buget de erori și o alertă care contează",en:"SLO, error budget and an alert that matters"},
+ body:{ro:`<p>Echipa nu alertează la „CPU peste 80%”: asta nu spune dacă suferă clienții. Alertează pe un <strong>SLO</strong> (Service Level Objective): „99% din cererile /checkout răspund în sub 500 ms, pe 30 de zile”.</p>
+<p>Restul de 1% e <strong>bugetul de erori</strong>: cât îți permiți să greșești. Alerta urmărește <strong>burn rate</strong>-ul, adică cât de repede se consumă bugetul. 1× înseamnă exact la limită; acum e 14×, deci în ~2 zile s-ar termina tot bugetul pe o lună. Prometheus evaluează regula, iar <strong>Alertmanager</strong> trimite alerta echipei de gardă.</p>`,
+ en:`<p>The team doesn't alert on "CPU above 80%": that doesn't say whether customers are suffering. It alerts on an <strong>SLO</strong> (Service Level Objective): "99% of /checkout requests respond in under 500 ms, over 30 days".</p>
+<p>The remaining 1% is the <strong>error budget</strong>: how much you can afford to get wrong. The alert tracks the <strong>burn rate</strong>, how fast the budget is being used up. 1× means exactly at the limit; it's 14× now, so the whole month's budget would be gone in ~2 days. Prometheus evaluates the rule and <strong>Alertmanager</strong> pages the on-call team.</p>`}},
+
+{at:["graf","prom","sto"],frame:null,kind:"none",tables:["inv"],who:{ro:"Echipa de gardă",en:"The on-call team"},
+ title:{ro:"Investigația: de la alertă la cauză în 5 minute",en:"The investigation: from alert to cause in 5 minutes"},
+ body:{ro:`<p>Inginerul de gardă deschide Grafana și urmează firul (tabelul din dreapta):</p>
+<ol><li><strong>Metricile</strong> spun <em>ce</em> și <em>când</em>: p99 a crescut brusc la 09:30, doar pentru payments.</li>
+<li>Un <strong>exemplar</strong> (un trace_id atașat unui punct din grafic) duce la un <strong>trace</strong> lent, care spune <em>unde</em>: interogarea SQL.</li>
+<li><strong>Log-urile</strong> acelui trace spun <em>de ce</em>: „lock wait timeout”.</li>
+<li>Metricile bazei de date și lista de deploy-uri arată cine blochează tabela: un job de raportare nou.</li></ol>
+<p>Jobul e oprit, p99 revine la 300 ms, alerta se închide. Urmează un <strong>postmortem</strong> fără vinovați: jobul se mută pe o replică de citire.</p>`,
+ en:`<p>The on-call engineer opens Grafana and follows the thread (table on the right):</p>
+<ol><li><strong>Metrics</strong> say <em>what</em> and <em>when</em>: p99 jumped at 09:30, for payments only.</li>
+<li>An <strong>exemplar</strong> (a trace_id attached to a point on the graph) leads to a slow <strong>trace</strong>, which says <em>where</em>: the SQL query.</li>
+<li>That trace's <strong>logs</strong> say <em>why</em>: "lock wait timeout".</li>
+<li>The database metrics and the deploy list show who's locking the table: a new reporting job.</li></ol>
+<p>The job is stopped, p99 goes back to 300 ms, the alert resolves. Then a blameless <strong>postmortem</strong>: the job moves to a read replica.</p>`}},
+
+{at:["col","prom","sto"],frame:null,kind:"none",who:{ro:"Capcane",en:"Pitfalls"},
+ title:{ro:"Capcane: cost, cardinalitate, date personale",en:"Pitfalls: cost, cardinality, personal data"},
+ body:{ro:`<ul><li><strong>Costul</strong> crește cu volumul: log-urile la nivel DEBUG în producție și trace-urile 100% pot costa mai mult decât aplicația. Folosește niveluri de log, sampling și retenție diferită (metrici 1 an, trace-uri 7 zile, log-uri 30 de zile).</li>
+<li><strong>Cardinalitatea</strong>: o etichetă cu valori unice (ID-uri, URL-uri complete) poate prăbuși Prometheus.</li>
+<li><strong>Date personale</strong>: parole, tokenuri, carduri sau e-mailuri ajunse în log-uri și trace-uri sunt o problemă de securitate și GDPR. Filtrează-le în aplicație și în Collector.</li>
+<li><strong>Alertele zgomotoase</strong>: dacă pagerul sună pentru lucruri care nu afectează clienții, oamenii încep să-l ignore. Alertează pe simptome (SLO), nu pe cauze posibile.</li></ul>`,
+ en:`<ul><li><strong>Cost</strong> grows with volume: DEBUG-level logs in production and 100% traces can cost more than the app. Use log levels, sampling and different retention (metrics 1 year, traces 7 days, logs 30 days).</li>
+<li><strong>Cardinality</strong>: one label with unique values (IDs, full URLs) can bring Prometheus down.</li>
+<li><strong>Personal data</strong>: passwords, tokens, cards or emails that end up in logs and traces are a security and GDPR problem. Filter them in the app and in the Collector.</li>
+<li><strong>Noisy alerts</strong>: if the pager rings for things that don't affect customers, people start ignoring it. Alert on symptoms (SLOs), not on possible causes.</li></ul>`}},
+
+{at:["api","co","pay","graf"],frame:null,kind:"none",summary:true,
+ title:{ro:"Recapitulare",en:"Recap"},
+ body:{ro:`<div class="flow"><span>metrici: ce + când</span><i>→</i><span>trace: unde</span><i>→</i><span>log-uri: de ce</span></div>
+<ul><li>Trei semnale: <strong>metrici</strong> (ieftine, agregate), <strong>trace-uri</strong> (drumul unei cereri), <strong>log-uri</strong> (detaliile).</li>
+<li>Un trace = span-uri cu același <strong>trace_id</strong>, legate prin antetul <strong>traceparent</strong>.</li>
+<li><strong>OpenTelemetry</strong> instrumentează aplicațiile; <strong>Collector</strong>-ul adună, filtrează, eșantionează și trimite mai departe.</li>
+<li>Pentru latență, urmărește <strong>percentile</strong> (p99) din histograme, nu media.</li>
+<li>Pune <strong>trace_id</strong> în log-uri ca să poți trece de la un semnal la altul.</li>
+<li>Alertează pe <strong>SLO</strong> și burn rate, nu pe CPU.</li></ul>
+<p><button type="button" class="btn primary" data-goto="quiz">Mergi la test ↓</button></p>`,
+ en:`<div class="flow"><span>metrics: what + when</span><i>→</i><span>trace: where</span><i>→</i><span>logs: why</span></div>
+<ul><li>Three signals: <strong>metrics</strong> (cheap, aggregated), <strong>traces</strong> (one request's path), <strong>logs</strong> (the details).</li>
+<li>A trace = spans sharing a <strong>trace_id</strong>, linked by the <strong>traceparent</strong> header.</li>
+<li><strong>OpenTelemetry</strong> instruments the apps; the <strong>Collector</strong> gathers, filters, samples and forwards.</li>
+<li>For latency, watch <strong>percentiles</strong> (p99) from histograms, not the average.</li>
+<li>Put the <strong>trace_id</strong> in logs so you can move from one signal to another.</li>
+<li>Alert on <strong>SLOs</strong> and burn rate, not on CPU.</li></ul>
+<p><button type="button" class="btn primary" data-goto="quiz">Go to the quiz ↓</button></p>`}}
+],
+
+reference:(T,lang)=>{
+  const ro=lang==="ro";
+  let h=`<div class="ref-grid"><section class="card refcard"><h2>${ro?"Regulă de alertă pe SLO (Prometheus)":"An SLO alert rule (Prometheus)"}</h2>
+<pre class="yaml">groups:
+- name: checkout-slo
+  rules:
+  - alert: CheckoutLatencySLO
+    <span class="c"># ${ro?"fracția de cereri peste 500 ms, ultima oră":"share of requests over 500 ms, last hour"}</span>
+    expr: |
+      (1 - sum(rate(http_server_request_duration_seconds_bucket{route="/checkout",le="0.5"}[1h]))
+         / sum(rate(http_server_request_duration_seconds_count{route="/checkout"}[1h])))
+      &gt; 14 * 0.01
+    for: 5m
+    labels: { severity: page }
+    annotations:
+      summary: "${ro?"Checkout consumă bugetul de erori de 14× mai repede":"Checkout is burning its error budget 14× too fast"}"</pre></section>`;
+  h+=`<section class="card refcard"><h2>${ro?"LogQL și un Collector minim":"LogQL and a minimal Collector"}</h2>
+<pre class="yaml"><span class="c"># ${ro?"Loki: toate log-urile unei cereri":"Loki: all logs of one request"}</span>
+{namespace="shop"} | json | trace_id="4bf92f3577b34da6a3ce929d0e0e4736"
+<span class="c"># ${ro?"erori pe minut, pe serviciu":"errors per minute, per service"}</span>
+sum by (service) (count_over_time({namespace="shop"} | json | level="error" [1m]))
+
+<span class="c"># otel-collector.yaml</span>
+receivers: { otlp: { protocols: { grpc: {}, http: {} } } }
+processors:
+  batch: {}
+  tail_sampling:
+    policies:
+    - { name: errors, type: status_code, status_code: { status_codes: [ERROR] } }
+    - { name: slow, type: latency, latency: { threshold_ms: 1000 } }
+    - { name: rest, type: probabilistic, probabilistic: { sampling_percentage: 10 } }
+exporters: { otlp/tempo: { endpoint: tempo:4317 } }
+service:
+  pipelines:
+    traces: { receivers: [otlp], processors: [tail_sampling, batch], exporters: [otlp/tempo] }</pre></section></div>`;
+  return h;
+},
+
+gloss:[
+ [{ro:"Observabilitate",en:"Observability"},null,{ro:"Capacitatea de a înțelege ce se întâmplă în sistem doar din datele pe care le produce.",en:"The ability to understand what's happening in a system from the data it produces."}],
+ [{ro:"Metrică",en:"Metric"},null,{ro:"Un număr măsurat în timp, cu etichete (de ex. cereri pe secundă).",en:"A number measured over time, with labels (e.g. requests per second)."}],
+ ["Trace",null,{ro:"Drumul complet al unei cereri prin servicii, format din span-uri.",en:"A request's full path through services, made of spans."}],
+ ["Span",null,{ro:"O operație dintr-un trace: nume, început, durată, atribute, părinte.",en:"One operation in a trace: name, start, duration, attributes, parent."}],
+ ["traceparent",null,{ro:"Antetul HTTP standard (W3C) care duce trace_id-ul și span_id-ul între servicii.",en:"The standard (W3C) HTTP header carrying trace_id and span_id between services."}],
+ ["OpenTelemetry","OTel",{ro:"Standard și biblioteci open-source pentru metrici, trace-uri și log-uri.",en:"An open-source standard and libraries for metrics, traces and logs."}],
+ ["OTLP","OpenTelemetry Protocol",{ro:"Protocolul prin care se trimite telemetria (gRPC sau HTTP).",en:"The protocol telemetry is sent over (gRPC or HTTP)."}],
+ ["Collector",null,{ro:"Proces care primește, procesează și trimite mai departe telemetria.",en:"A process that receives, processes and forwards telemetry."}],
+ ["Sampling",null,{ro:"Păstrarea doar a unei părți din trace-uri; „tail” decide după ce vede trace-ul întreg.",en:"Keeping only part of the traces; \"tail\" decides after seeing the whole trace."}],
+ [{ro:"Histogramă",en:"Histogram"},null,{ro:"Metrică ce numără valorile pe intervale, ca să poți calcula percentile.",en:"A metric counting values in buckets, so you can compute percentiles."}],
+ ["p99",null,{ro:"Valoarea sub care se află 99% din măsurători.",en:"The value 99% of measurements fall below."}],
+ ["RED",null,{ro:"Rate, Errors, Duration: cele trei metrici de bază ale unui serviciu.",en:"Rate, Errors, Duration: a service's three basic metrics."}],
+ [{ro:"Cardinalitate",en:"Cardinality"},null,{ro:"Numărul de serii distincte create de combinațiile de etichete.",en:"The number of distinct series created by label combinations."}],
+ ["SLO / SLI",null,{ro:"SLI: ce măsori. SLO: ținta (de ex. 99% sub 500 ms).",en:"SLI: what you measure. SLO: the target (e.g. 99% under 500 ms)."}],
+ [{ro:"Buget de erori",en:"Error budget"},null,{ro:"Cât îți permite SLO-ul să greșești într-o perioadă.",en:"How much the SLO allows you to fail in a period."}],
+ ["Burn rate",null,{ro:"Cât de repede se consumă bugetul de erori față de ritmul permis.",en:"How fast the error budget is being used compared to the allowed pace."}],
+ ["Exemplar",null,{ro:"Un trace_id atașat unui punct dintr-o metrică, ca să sari de la grafic la trace.",en:"A trace_id attached to a metric data point, to jump from graph to trace."}]
+],
+glossEx:{
+ "Observability":{ro:"afli în 5 minute că un job de raportare blochează tabela payments.",en:"finding out in 5 minutes that a reporting job is locking the payments table."},
+ "Metric":{ro:"http_server_request_duration_seconds_count{service=\"payments\"}",en:"http_server_request_duration_seconds_count{service=\"payments\"}"},
+ "Trace":{ro:"api-gateway → checkout → payments → PostgreSQL, 1 900 ms.",en:"api-gateway → checkout → payments → PostgreSQL, 1,900 ms."},
+ "Span":{ro:"„SQL UPDATE payments”, 1 740 ms, părinte: POST /v1/charge.",en:"\"SQL UPDATE payments\", 1,740 ms, parent: POST /v1/charge."},
+ "traceparent":{ro:"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",en:"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"},
+ "OpenTelemetry":{ro:"java -javaagent:opentelemetry-javaagent.jar -jar app.jar",en:"java -javaagent:opentelemetry-javaagent.jar -jar app.jar"},
+ "OTLP":{ro:"OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317",en:"OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317"},
+ "Collector":{ro:"un DaemonSet pe fiecare nod + un Deployment central pentru tail sampling.",en:"a DaemonSet on each node + a central Deployment for tail sampling."},
+ "Sampling":{ro:"toate erorile, tot ce e peste 1 s, 10% din rest.",en:"all errors, everything over 1 s, 10% of the rest."},
+ "Histogram":{ro:"le=\"0.1\", le=\"0.5\", le=\"1\", le=\"+Inf\".",en:"le=\"0.1\", le=\"0.5\", le=\"1\", le=\"+Inf\"."},
+ "p99":{ro:"p99 = 1,9 s: 1 din 100 de clienți așteaptă cel puțin atât.",en:"p99 = 1.9 s: 1 in 100 customers waits at least that long."},
+ "RED":{ro:"120 cereri/s, 0,3% erori, p99 300 ms.",en:"120 req/s, 0.3% errors, p99 300 ms."},
+ "Cardinality":{ro:"eticheta user_id cu 2 milioane de utilizatori = 2 milioane de serii.",en:"a user_id label with 2 million users = 2 million series."},
+ "SLO / SLI":{ro:"SLI: fracția cererilor sub 500 ms. SLO: ≥ 99% pe 30 de zile.",en:"SLI: the share of requests under 500 ms. SLO: ≥ 99% over 30 days."},
+ "Error budget":{ro:"1% din cereri pe lună pot fi lente fără să încalci SLO-ul.",en:"1% of requests a month may be slow without breaking the SLO."},
+ "Burn rate":{ro:"14× = bugetul lunar s-ar termina în ~2 zile.",en:"14× = the monthly budget would run out in ~2 days."},
+ "Exemplar":{ro:"punctul de 1,9 s de pe grafic duce la trace-ul 4bf92f…",en:"the 1.9 s point on the graph links to trace 4bf92f…"}
+},
+
+quiz:[
+ {q:{ro:"Ce semnal îți spune cel mai bine UNDE se pierde timpul într-o cerere anume?",en:"Which signal best tells you WHERE the time goes in a specific request?"},o:[{ro:"Trace-ul",en:"The trace"},{ro:"Utilizarea CPU",en:"CPU usage"},{ro:"Numărul de cereri pe secundă",en:"Requests per second"},{ro:"Uptime-ul",en:"Uptime"}],a:0,e:{ro:"Waterfall-ul span-urilor arată durata fiecărei operații.",en:"The span waterfall shows each operation's duration."}},
+ {q:{ro:"Ce leagă span-urile din servicii diferite în același trace?",en:"What links spans from different services into one trace?"},o:[{ro:"Același trace_id, transmis prin antetul traceparent",en:"The same trace_id, passed in the traceparent header"},{ro:"Ora la care au avut loc",en:"The time they happened"},{ro:"IP-ul serverului",en:"The server IP"},{ro:"Nimic, se ghicește",en:"Nothing, it's guessed"}],a:0,e:{ro:"Fiecare serviciu citește antetul și creează un span copil.",en:"Each service reads the header and creates a child span."}},
+ {q:{ro:"De ce e înșelătoare media duratei cererilor?",en:"Why is the average request duration misleading?"},o:[{ro:"Ascunde cererile foarte lente ale unei minorități; de aceea se folosesc percentile (p99)",en:"It hides a minority's very slow requests; that's why percentiles (p99) are used"},{ro:"Pentru că e mereu zero",en:"Because it's always zero"},{ro:"Nu e înșelătoare",en:"It isn't misleading"},{ro:"Pentru că se calculează greu",en:"Because it's hard to compute"}],a:0,e:{ro:"98 × 100 ms + 2 × 10 s dau o medie de ~300 ms.",en:"98 × 100 ms + 2 × 10 s average out to ~300 ms."}},
+ {q:{ro:"De ce nu pui user_id ca etichetă pe o metrică Prometheus?",en:"Why don't you put user_id as a label on a Prometheus metric?"},o:[{ro:"Ar crea câte o serie pentru fiecare utilizator: cardinalitate uriașă",en:"It would create a series per user: huge cardinality"},{ro:"Pentru că e secret",en:"Because it's secret"},{ro:"Prometheus nu acceptă numere",en:"Prometheus doesn't accept numbers"},{ro:"Se poate fără probleme",en:"It's fine"}],a:0,e:{ro:"Detaliile per cerere merg în trace-uri și log-uri.",en:"Per-request details belong in traces and logs."}},
+ {q:{ro:"Ce face tail sampling-ul?",en:"What does tail sampling do?"},o:[{ro:"Decide ce trace-uri păstrează după ce le vede întregi (de ex. toate erorile și cele lente)",en:"Decides which traces to keep after seeing them whole (e.g. all errors and slow ones)"},{ro:"Păstrează doar primul span",en:"Keeps only the first span"},{ro:"Șterge log-urile vechi",en:"Deletes old logs"},{ro:"Comprimă metricile",en:"Compresses metrics"}],a:0,e:{ro:"Head sampling decide la început, fără să știe dacă cererea va fi interesantă.",en:"Head sampling decides at the start, without knowing whether the request will be interesting."}},
+ {q:{ro:"De ce scrii trace_id-ul în fiecare linie de log?",en:"Why write the trace_id into every log line?"},o:[{ro:"Ca să găsești direct log-urile unei cereri din toate serviciile",en:"To find one request's logs across all services directly"},{ro:"Ca log-urile să fie mai mari",en:"To make logs bigger"},{ro:"Pentru criptare",en:"For encryption"},{ro:"Nu are rost",en:"There's no point"}],a:0,e:{ro:"Așa treci de la trace la log-uri și invers.",en:"That's how you move from trace to logs and back."}},
+ {q:{ro:"Un SLO e „99% din cereri sub 500 ms pe 30 de zile”. Ce e bugetul de erori?",en:"An SLO is \"99% of requests under 500 ms over 30 days\". What's the error budget?"},o:[{ro:"Cel 1% din cereri care are voie să fie mai lent",en:"The 1% of requests allowed to be slower"},{ro:"Bugetul în bani al echipei",en:"The team's money budget"},{ro:"Numărul de servere",en:"The number of servers"},{ro:"99%",en:"99%"}],a:0,e:{ro:"Burn rate-ul arată cât de repede îl consumi.",en:"The burn rate shows how fast you're using it."}},
+ {q:{ro:"Pe ce e bine să alertezi echipa de gardă?",en:"What's good to page the on-call team about?"},o:[{ro:"Pe simptome care afectează clienții (încălcarea SLO-ului)",en:"Symptoms that affect customers (SLO breaches)"},{ro:"Pe fiecare CPU peste 80%",en:"Every CPU above 80%"},{ro:"Pe fiecare linie de log de eroare",en:"Every error log line"},{ro:"Pe nimic",en:"Nothing"}],a:0,e:{ro:"Alertele zgomotoase ajung să fie ignorate.",en:"Noisy alerts end up being ignored."}}
+]
+};
+})();
+</script>
+<script src="../assets/engine.js"></script>
+<script type="module" src="../assets/auth.js?v=3"></script>
+</body>
+</html>

@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BGP pas cu pas</title>
+<meta name="description" content="Lecție interactivă: cum își anunță rețelele furnizorii cu BGP, cum se alege drumul, ce se întâmplă la o pană și cum se oprește un hijack cu RPKI. / Interactive lesson on BGP.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<script>
+(function(){
+const PF="203.0.113.0/24";
+const OPEN={type:"OPEN",asn:"64501",hold:"90 s",rid:"192.0.2.1"};
+const U1={type:"UPDATE",prefix:PF,asPath:"64501",nextHop:"192.0.2.1",origin:"IGP"};
+const U2={...U1,asPath:"64502 64501",nextHop:"192.0.2.9"};
+const U3={...U1,asPath:"64503 64501",nextHop:"192.0.2.17"};
+const LOOP={...U1,asPath:"64503 64501",nextHop:"192.0.2.17",note:{ro:"conține propriul AS 64501 → respins",en:"contains its own AS 64501 → rejected"}};
+const LEAK={...U1,asPath:"64504 64502 64501",nextHop:"192.0.2.33",note:{ro:"ruta de la un furnizor, trimisă altui furnizor → leak",en:"a route from one provider sent to another provider → leak"}};
+const D1={type:"DATA",srcIp:"198.51.100.25",dstIp:"203.0.113.10",ttl:"64"};
+const D2={...D1,ttl:"60"};
+const WD={type:"UPDATE (withdraw)",prefix:PF,note:{ro:"ruta prin AS64502 nu mai există",en:"the route via AS64502 is gone"}};
+const HJ={type:"UPDATE",prefix:"203.0.113.0/25",asPath:"64505",nextHop:"192.0.2.41",origin:"IGP",note:{ro:"RPKI: originea ar trebui să fie 64501 → INVALID",en:"RPKI: the origin should be 64501 → INVALID"}};
+
+window.LESSON={
+docTitle:{ro:"BGP pas cu pas",en:"BGP Step by Step"},
+eyebrow:{ro:"Lecție interactivă · Internet",en:"Interactive lesson · Internet"},
+title:{ro:"BGP: cum găsește internetul drumul",en:"BGP: how the internet finds its way"},
+sub:{ro:"Internetul e o rețea de rețele, fiecare cu propriul număr AS. Urmărești cum își anunță o firmă de hosting rețeaua prin doi furnizori, cum alege ISP-ul tău drumul, cum se previn buclele și scurgerile de rute, ce se întâmplă când pică o legătură și cum oprește RPKI un anunț fals.",en:"The internet is a network of networks, each with its own AS number. Follow a hosting company announcing its network through two providers, how your ISP picks a path, how loops and route leaks are prevented, what happens when a link fails, and how RPKI stops a bogus announcement."},
+meta:[{ro:"≈ 25 minute",en:"≈ 25 minutes"},{ro:"12 pași",en:"12 steps"},{ro:"8 întrebări",en:"8 questions"},{ro:"Intermediar",en:"Intermediate"}],
+goals:[{ro:"Ce e un sistem autonom (AS) și o sesiune BGP",en:"What an autonomous system (AS) and a BGP session are"},{ro:"Cum circulă un prefix în UPDATE-uri și cum crește AS_PATH",en:"How a prefix travels in UPDATEs and how AS_PATH grows"},{ro:"Cum alege BGP cel mai bun drum (și de ce politica bate distanța)",en:"How BGP picks the best path (and why policy beats distance)"},{ro:"Bucle, route leak, convergență și RPKI",en:"Loops, route leaks, convergence and RPKI"}],
+foot:{ro:"AS 64496–64511 și prefixele 192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24 sunt rezervate pentru documentație.",en:"AS 64496–64511 and the 192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24 prefixes are reserved for documentation."},
+ui:{refT:{ro:"Atribute BGP și comenzi",en:"BGP attributes and commands"},refLead:{ro:"Cele mai folosite atribute, relațiile dintre AS-uri și cum arată configurația pe un router.",en:"The most used attributes, relationships between ASes, and what the configuration looks like on a router."}},
+tryT:{ro:"Încearcă",en:"Try it"},
+legend:[["lg-tcp","BGP",{ro:"mesaj de sesiune",en:"session message"}],["lg-arp","UPDATE",{ro:"anunț sau retragere de rută",en:"route announcement or withdrawal"}],["lg-ip","IP",{ro:"pachet de date",en:"data packet"}]],
+
+nodes:{
+  srv:{type:"server",name:{ro:"Server web",en:"Web server"},lines:["203.0.113.10"]},
+  as1:{type:"router",name:"AS64501",lines:[{ro:"hosting · "+PF,en:"hosting · "+PF}]},
+  t1:{type:"router",name:"AS64502",lines:[{ro:"Tranzit A",en:"Transit A"}]},
+  t2:{type:"router",name:"AS64503",lines:[{ro:"Tranzit B",en:"Transit B"}]},
+  isp:{type:"router",name:"AS64504",lines:[{ro:"ISP-ul tău",en:"Your ISP"}]},
+  usr:{type:"user",name:{ro:"Tu",en:"You"},lines:["198.51.100.25"]},
+  bad:{type:"router",name:"AS64505",lines:[{ro:"greșeală / atac",en:"mistake / attack"}]}
+},
+links:[["srv","as1"],["as1","t1"],["as1","t2"],["t1","isp"],["t2","isp"],["isp","usr"],["bad","t2"]],
+layouts:{
+  wide:{vb:[0,0,1000,500],n:{srv:[70,250],as1:[230,250],t1:[470,110],t2:[470,370],isp:[720,250],usr:[910,250],bad:[720,430]},
+    zones:[{x:10,y:150,w:300,h:200,l:{ro:"AS64501",en:"AS64501"}}]},
+  narrow:{vb:[0,0,360,720],n:{srv:[60,60],as1:[180,150],t1:[80,320],t2:[280,320],isp:[180,480],usr:[80,640],bad:[290,600]},
+    side:{srv:"right",as1:"right",isp:"right"}}
+},
+groups:[
+  {id:"h",color:"l4",fields:["type"],name:{ro:"Mesaj",en:"Message"},short:"BGP",grow:1},
+  {id:"o",color:"l2",fields:["asn","hold","rid"],name:{ro:"OPEN: cine sunt",en:"OPEN: who I am"},short:"OPEN",grow:2},
+  {id:"r",color:"l3",fields:["prefix","asPath","nextHop","origin"],name:{ro:"Ruta anunțată (NLRI + atribute)",en:"The announced route (NLRI + attributes)"},short:{ro:"Rută",en:"Route"},grow:4},
+  {id:"d",color:"l3",fields:["srcIp","dstIp","ttl"],name:{ro:"Antet IP",en:"IP header"},short:"IP",grow:3},
+  {id:"n",color:"arp",fields:["note"],name:{ro:"Ce decide routerul (nu e în mesaj)",en:"What the router decides (not in the message)"},short:{ro:"Decizie",en:"Decision"},grow:2}
+],
+fieldLabels:{type:{ro:"Tip",en:"Type"},asn:{ro:"Numărul meu AS",en:"My AS number"},hold:"Hold time",rid:"Router ID",prefix:{ro:"Prefix (NLRI)",en:"Prefix (NLRI)"},asPath:"AS_PATH",nextHop:"NEXT_HOP",origin:"ORIGIN",srcIp:{ro:"IP sursă",en:"Source IP"},dstIp:{ro:"IP destinație",en:"Destination IP"},ttl:"TTL",note:{ro:"Decizie",en:"Decision"}},
+pdu:f=>f.type==="DATA"?{badge:{ro:"Pachet de date",en:"Data packet"},tok:["IP","k-ip"]}:f.type==="OPEN"?{badge:"BGP OPEN (TCP 179)",tok:["OPEN","k-tcp"]}:{badge:"BGP "+f.type,tok:[/withdraw/.test(f.type)?"WITHDRAW":"UPDATE","k-arp"]},
+
+init:{sess:[],rib:[]},
+tables:{
+  ases:{title:{ro:"Cine e cine în exemplu",en:"Who's who in the example"},cols:["AS",{ro:"Cine",en:"Who"},{ro:"Relația",en:"Relationship"}],plain:[1,2],
+    rows:()=>[["64501",{ro:"firmă de hosting cu "+PF,en:"hosting company with "+PF},{ro:"client al AS64502 și AS64503",en:"customer of AS64502 and AS64503"}],["64502",{ro:"furnizor de tranzit A",en:"transit provider A"},{ro:"vinde acces la tot internetul",en:"sells access to the whole internet"}],["64503",{ro:"furnizor de tranzit B",en:"transit provider B"},{ro:"vinde acces la tot internetul",en:"sells access to the whole internet"}],["64504",{ro:"ISP-ul tău",en:"your ISP"},{ro:"client al AS64502 și AS64503",en:"customer of AS64502 and AS64503"}],["64505",{ro:"altă rețea",en:"another network"},{ro:"client al AS64503",en:"customer of AS64503"}]]},
+  sess:{title:{ro:"Sesiuni BGP",en:"BGP sessions"},cols:[{ro:"Vecini",en:"Neighbours"},{ro:"Tip",en:"Kind"},{ro:"Stare",en:"State"}]},
+  rib:{title:{ro:"Rutele ISP-ului spre "+PF+" (Adj-RIB-In)",en:"The ISP's routes to "+PF+" (Adj-RIB-In)"},cols:[{ro:"Primită de la",en:"Received from"},"AS_PATH","NEXT_HOP","LOCAL_PREF",{ro:"Aleasă?",en:"Chosen?"}]},
+  best:{title:{ro:"Cum alege BGP (în ordine)",en:"How BGP chooses (in order)"},cols:["#",{ro:"Criteriu",en:"Criterion"},{ro:"Câștigă",en:"Wins"}],plain:[1,2],idx:true,
+    rows:()=>[["1","LOCAL_PREF",{ro:"cel mai mare (politica ta)",en:"the highest (your policy)"}],["2",{ro:"AS_PATH",en:"AS_PATH"},{ro:"cel mai scurt",en:"the shortest"}],["3","ORIGIN",{ro:"IGP înaintea EGP / incomplete",en:"IGP before EGP / incomplete"}],["4","MED",{ro:"cel mai mic (de la același vecin AS)",en:"the lowest (from the same neighbour AS)"}],["5",{ro:"eBGP vs iBGP",en:"eBGP vs iBGP"},{ro:"eBGP",en:"eBGP"}],["6",{ro:"cost IGP până la NEXT_HOP",en:"IGP cost to NEXT_HOP"},{ro:"cel mai mic",en:"the lowest"}],["7",{ro:"router ID",en:"router ID"},{ro:"cel mai mic (departajare)",en:"the lowest (tie-break)"}]]},
+  roa:{title:{ro:"RPKI: ROA publicat de AS64501",en:"RPKI: the ROA published by AS64501"},cols:["Prefix",{ro:"Origine permisă",en:"Allowed origin"},"maxLength"],rows:()=>[[PF,"AS64501","/24"]]}
+},
+log:{title:{ro:"Jurnalul mesajelor",en:"Message log"},lead:{ro:"Urmărește cum crește AS_PATH la fiecare AS traversat. Mesajele BGP poartă rute; pachetele de date doar urmează rutele alese.",en:"Watch AS_PATH grow at each AS crossed. BGP messages carry routes; data packets just follow the chosen routes."},first:{ro:"Pas",en:"Step"},minWidth:600,
+  cols:[{h:{ro:"Mesaj",en:"Message"},v:f=>f.type},{h:{ro:"Prefix / destinație",en:"Prefix / destination"},v:f=>f.prefix||f.dstIp||"—",cls:"ip"},{h:"AS_PATH",v:f=>f.asPath||"—",cls:"mac"}]},
+
+steps:[
+{at:["as1","t1","t2","isp"],frame:null,kind:"none",tables:["ases"],
+ title:{ro:"Internetul: o rețea de rețele (AS-uri)",en:"The internet: a network of networks (ASes)"},
+ body:{ro:`<p>Internetul nu are un centru. E format din peste 75.000 de rețele independente, numite <strong>sisteme autonome</strong> (AS): furnizori, cloud-uri, universități, firme mari. Fiecare are un număr unic (<strong>ASN</strong>) și blocuri de adrese (prefixe).</p>
+<p>În interiorul unui AS, routerele folosesc un protocol intern (<strong>IGP</strong>: OSPF, IS-IS). Între AS-uri se folosește un singur protocol: <strong>BGP</strong> (Border Gateway Protocol). Prin el, fiecare AS spune vecinilor: „prin mine ajungeți la prefixele astea”.</p>
+<p>În exemplu (tabelul din dreapta), o firmă de hosting, <strong>AS64501</strong>, are rețeaua <code>${PF}</code> și plătește doi furnizori de tranzit, ca să fie accesibilă chiar dacă unul pică. Tu ești client la <strong>AS64504</strong>.</p>
+<p class="key">BGP nu caută cel mai scurt drum în kilometri sau milisecunde. Alege după <strong>politică</strong>: contracte, costuri, preferințe.</p>`,
+ en:`<p>The internet has no centre. It's made of more than 75,000 independent networks called <strong>autonomous systems</strong> (AS): providers, clouds, universities, large companies. Each has a unique number (<strong>ASN</strong>) and blocks of addresses (prefixes).</p>
+<p>Inside an AS, routers use an internal protocol (<strong>IGP</strong>: OSPF, IS-IS). Between ASes a single protocol is used: <strong>BGP</strong> (Border Gateway Protocol). Through it each AS tells its neighbours: "you can reach these prefixes through me".</p>
+<p>In the example (table on the right), a hosting company, <strong>AS64501</strong>, owns <code>${PF}</code> and pays two transit providers so it stays reachable even if one fails. You're a customer of <strong>AS64504</strong>.</p>
+<p class="key">BGP doesn't look for the shortest path in kilometres or milliseconds. It chooses by <strong>policy</strong>: contracts, costs, preferences.</p>`},
+ try:[{cmd:"https://bgp.he.net",d:{ro:"Caută un IP sau un AS (de ex. AS15169) și vezi vecinii și prefixele lui.",en:"Look up an IP or an AS (e.g. AS15169) and see its neighbours and prefixes."}}]},
+
+{at:"as1",frame:OPEN,kind:"open",move:[[["as1","t1"],["as1","t2"]]],fx:[["sess","AS64501 ↔ AS64502","eBGP","Established"],["sess","AS64501 ↔ AS64503","eBGP","Established"],["sess","AS64504 ↔ AS64502","eBGP","Established"],["sess","AS64504 ↔ AS64503","eBGP","Established"]],tables:["sess"],log:{ro:"deschiderea sesiunilor",en:"opening the sessions"},who:"AS64501",
+ title:{ro:"Sesiunea BGP: TCP 179, OPEN, KEEPALIVE",en:"The BGP session: TCP 179, OPEN, KEEPALIVE"},
+ body:{ro:`<p>BGP nu descoperă vecinii singur: fiecare sesiune e <strong>configurată manual</strong>, cu IP-ul și AS-ul vecinului, de obicei după un contract. Între AS-uri diferite se numește <strong>eBGP</strong>.</p>
+<p>Routerul deschide o conexiune <strong>TCP pe portul 179</strong> și trimite <strong>OPEN</strong>: numărul lui AS, <em>hold time</em> și router ID. Dacă celălalt e de acord, sesiunea ajunge în starea <strong>Established</strong>.</p>
+<p>De acum, vecinii își trimit <strong>KEEPALIVE</strong> la ~30 s. Dacă nu se aude nimic 90 s (hold time), sesiunea cade și toate rutele învățate prin ea sunt șterse.</p>`,
+ en:`<p>BGP doesn't discover neighbours by itself: every session is <strong>configured by hand</strong>, with the neighbour's IP and AS, usually after a contract. Between different ASes it's called <strong>eBGP</strong>.</p>
+<p>The router opens a <strong>TCP connection on port 179</strong> and sends <strong>OPEN</strong>: its AS number, <em>hold time</em> and router ID. If the other side agrees, the session reaches the <strong>Established</strong> state.</p>
+<p>From now on the neighbours send each other <strong>KEEPALIVE</strong> every ~30 s. If nothing is heard for 90 s (the hold time), the session drops and every route learned through it is removed.</p>`},
+ more:{ro:`<p>Stările sesiunii (automatul BGP): <code>Idle → Connect → OpenSent → OpenConfirm → Established</code>. O sesiune blocată în <code>Active</code> sau <code>Idle</code> înseamnă de obicei IP/AS greșit, un firewall care blochează portul 179 sau o parolă MD5/TCP-AO diferită.</p>`,
+  en:`<p>Session states (the BGP state machine): <code>Idle → Connect → OpenSent → OpenConfirm → Established</code>. A session stuck in <code>Active</code> or <code>Idle</code> usually means a wrong IP/AS, a firewall blocking port 179, or a mismatched MD5/TCP-AO password.</p>`}},
+
+{at:"as1",frame:U1,kind:"upd",move:[[["as1","t1"],["as1","t2"]]],log:{ro:"AS64501 își anunță prefixul",en:"AS64501 announces its prefix"},who:"AS64501",
+ title:{ro:"UPDATE: „prin mine ajungeți la "+PF+"”",en:"UPDATE: \"reach "+PF+" through me\""},
+ body:{ro:`<p>AS64501 trimite ambilor furnizori un mesaj <strong>UPDATE</strong>. Conține:</p>
+<ul><li><strong>prefixul</strong> (NLRI): <code>${PF}</code>;</li>
+<li><strong>AS_PATH</strong>: lista AS-urilor prin care a trecut anunțul, deocamdată doar <code>64501</code>, care e <em>originea</em>;</li>
+<li><strong>NEXT_HOP</strong>: IP-ul la care se trimit pachetele pentru prefix, al routerului lui AS64501;</li>
+<li><strong>ORIGIN</strong>: de unde vine ruta (IGP = configurată intenționat).</li></ul>
+<p class="key">BGP trimite doar <strong>schimbările</strong>. După primul schimb de rute nu mai retrimite totul periodic, ca alte protocoale.</p>`,
+ en:`<p>AS64501 sends both providers an <strong>UPDATE</strong> message. It contains:</p>
+<ul><li>the <strong>prefix</strong> (NLRI): <code>${PF}</code>;</li>
+<li><strong>AS_PATH</strong>: the list of ASes the announcement has crossed, for now only <code>64501</code>, the <em>origin</em>;</li>
+<li><strong>NEXT_HOP</strong>: the IP to send packets for the prefix to, AS64501's router;</li>
+<li><strong>ORIGIN</strong>: where the route came from (IGP = configured on purpose).</li></ul>
+<p class="key">BGP only sends <strong>changes</strong>. After the initial exchange it doesn't resend everything periodically like other protocols do.</p>`}},
+
+{at:"t1",frame:U2,kind:"upd",move:[[["t1","isp"]]],fx:[["rib","AS64502","64502 64501","192.0.2.9","—","—"]],tables:["rib"],log:{ro:"Tranzit A → ISP",en:"Transit A → ISP"},who:"AS64502",
+ title:{ro:"Tranzitul A transmite mai departe și își adaugă AS-ul",en:"Transit A passes it on and adds its AS"},
+ body:{ro:`<p>AS64502 acceptă ruta (e de la un client care plătește, deci o anunță oricui). Înainte s-o trimită mai departe, face două schimbări:</p>
+<ul><li><strong>își pune AS-ul în față</strong> în AS_PATH: <code>64502 64501</code>;</li>
+<li>pune ca <strong>NEXT_HOP</strong> adresa propriului router: pachetele vor veni întâi la el.</li></ul>
+<p>ISP-ul tău primește ruta și o pune în <strong>Adj-RIB-In</strong>, lista rutelor primite de la vecini (tabelul din dreapta).</p>`,
+ en:`<p>AS64502 accepts the route (it's from a paying customer, so it announces it to everyone). Before passing it on, it makes two changes:</p>
+<ul><li>it <strong>prepends its own AS</strong> to AS_PATH: <code>64502 64501</code>;</li>
+<li>it sets <strong>NEXT_HOP</strong> to its own router's address: packets will come to it first.</li></ul>
+<p>Your ISP receives the route and puts it in the <strong>Adj-RIB-In</strong>, the list of routes received from neighbours (table on the right).</p>`}},
+
+{at:"t2",frame:U3,kind:"upd",move:[[["t2","isp"]]],fx:[["rib","AS64503","64503 64501","192.0.2.17","—","—"]],tables:["rib"],log:{ro:"Tranzit B → ISP",en:"Transit B → ISP"},who:"AS64503",
+ title:{ro:"Același prefix, pe un al doilea drum",en:"The same prefix, along a second path"},
+ body:{ro:`<p>Tranzitul B face la fel: AS_PATH devine <code>64503 64501</code>, NEXT_HOP e routerul lui.</p>
+<p>ISP-ul are acum <strong>două rute</strong> pentru același prefix. Ambele au AS_PATH de lungime 2. BGP trebuie să aleagă <strong>una singură</strong>, pe care o va folosi pentru trafic și o va anunța mai departe.</p>`,
+ en:`<p>Transit B does the same: AS_PATH becomes <code>64503 64501</code>, NEXT_HOP is its router.</p>
+<p>The ISP now has <strong>two routes</strong> for the same prefix. Both have an AS_PATH of length 2. BGP has to pick <strong>exactly one</strong>, which it will use for traffic and announce onward.</p>`}},
+
+{at:"isp",frame:null,kind:"none",fx:[["rib","AS64502","64502 64501","192.0.2.9","200",{ro:"✓ cea mai bună",en:"✓ best"}],["rib","AS64503","64503 64501","192.0.2.17","100",{ro:"rezervă",en:"backup"}]],tables:["rib","best"],hl:{rib:"AS64502",best:0},who:"AS64504",
+ title:{ro:"Alegerea celui mai bun drum: politica întâi",en:"Choosing the best path: policy first"},
+ body:{ro:`<p>BGP compară rutele pe rând, după criteriile din tabelul de jos, și se oprește la primul care le deosebește.</p>
+<p>Primul criteriu e <strong>LOCAL_PREF</strong>, o valoare pe care ISP-ul o setează singur, după contracte. Tranzitul A e mai ieftin, deci rutelor de la el li se dă <code>200</code>, iar celor de la B <code>100</code>. Câștigă ruta prin AS64502, înainte să mai conteze lungimea AS_PATH.</p>
+<p class="key">De aceea pachetele pe internet nu merg neapărat pe drumul cel mai rapid: merg pe drumul pe care fiecare AS îl preferă din motive de afaceri.</p>`,
+ en:`<p>BGP compares routes criterion by criterion, in the order of the bottom table, and stops at the first one that tells them apart.</p>
+<p>The first criterion is <strong>LOCAL_PREF</strong>, a value the ISP sets itself, based on contracts. Transit A is cheaper, so routes from it get <code>200</code> and routes from B get <code>100</code>. The route via AS64502 wins before AS_PATH length even matters.</p>
+<p class="key">That's why internet packets don't necessarily take the fastest path: they take the path each AS prefers for business reasons.</p>`},
+ more:{ro:`<p>Cum influențează AS64501 traficul care <em>intră</em> la el? Nu poate seta LOCAL_PREF-ul altora, dar poate:</p><ul><li><strong>AS path prepending</strong>: anunță spre B cu <code>64501 64501 64501</code>, ca drumul să pară mai lung;</li><li><strong>MED</strong>: îi spune unui vecin cu care are mai multe legături pe care să o prefere;</li><li><strong>communities</strong>: etichete (de ex. <code>64503:80</code>) prin care cere furnizorului să-i schimbe preferința;</li><li>să anunțe prefixe <strong>mai specifice</strong> pe un singur drum.</li></ul>`,
+  en:`<p>How does AS64501 influence the traffic <em>coming in</em> to it? It can't set others' LOCAL_PREF, but it can:</p><ul><li><strong>AS path prepending</strong>: announce towards B with <code>64501 64501 64501</code> so that path looks longer;</li><li><strong>MED</strong>: tell a neighbour it has several links with which one to prefer;</li><li><strong>communities</strong>: tags (e.g. <code>64503:80</code>) asking the provider to change its preference;</li><li>announce <strong>more specific</strong> prefixes on one path only.</li></ul>`}},
+
+{at:"t2",frame:LOOP,kind:"upd",move:[[["t2","as1"]]],rest:["as1"],marks:{as1:{k:"drop",t:{ro:"✗ buclă",en:"✗ loop"}}},log:{ro:"înapoi la origine",en:"back to the origin"},who:"AS64501",
+ title:{ro:"Cum previne BGP buclele: AS_PATH",en:"How BGP prevents loops: AS_PATH"},
+ body:{ro:`<p>Tranzitul B anunță ruta tuturor vecinilor, deci și înapoi spre AS64501: <code>64503 64501</code>.</p>
+<p>AS64501 vede <strong>propriul număr</strong> în AS_PATH și respinge ruta. Altfel ar putea ajunge să trimită traficul pentru propria rețea spre B, care l-ar trimite înapoi, la nesfârșit.</p>
+<p class="key">AS_PATH are două roluri: <strong>previne buclele</strong> și e un criteriu de alegere (mai scurt = mai bun).</p>`,
+ en:`<p>Transit B announces the route to all its neighbours, including back to AS64501: <code>64503 64501</code>.</p>
+<p>AS64501 sees <strong>its own number</strong> in AS_PATH and rejects the route. Otherwise it could end up sending traffic for its own network to B, which would send it back, forever.</p>
+<p class="key">AS_PATH has two jobs: it <strong>prevents loops</strong> and it's a selection criterion (shorter = better).</p>`}},
+
+{at:"isp",frame:LEAK,kind:"upd",move:[[["isp","t2"]]],rest:["t2"],marks:{t2:{k:"drop",t:{ro:"✗ filtrat",en:"✗ filtered"}}},log:{ro:"route leak, filtrat",en:"route leak, filtered"},who:{ro:"ISP-ul (greșeală)",en:"The ISP (mistake)"},
+ title:{ro:"Cine ce anunță: route leak și filtre",en:"Who announces what: route leaks and filters"},
+ body:{ro:`<p>Regula de afaceri a internetului (<strong>valley-free</strong>):</p>
+<ul><li>rutele <strong>clienților</strong> le anunți tuturor (te plătesc să fie accesibili);</li>
+<li>rutele primite de la <strong>furnizori</strong> sau <strong>parteneri de peering</strong> le anunți <strong>doar clienților</strong>.</li></ul>
+<p>Aici, ISP-ul greșește configurația și anunță spre Tranzitul B ruta primită de la Tranzitul A. Dacă B ar accepta-o, ar putea trimite trafic spre AS64501 <em>prin ISP-ul mic</em>, care s-ar sufoca. Asta e un <strong>route leak</strong>; s-a întâmplat de multe ori la scară mare.</p>
+<p>B are însă <strong>filtre pe client</strong>: de la AS64504 acceptă doar prefixele care îi aparțin lui AS64504 (din registrele IRR). Ruta e aruncată.</p>`,
+ en:`<p>The internet's business rule (<strong>valley-free</strong>):</p>
+<ul><li>routes from <strong>customers</strong> you announce to everyone (they pay you to be reachable);</li>
+<li>routes from <strong>providers</strong> or <strong>peering partners</strong> you announce <strong>only to customers</strong>.</li></ul>
+<p>Here the ISP misconfigures things and announces to Transit B the route it got from Transit A. If B accepted it, it could send traffic for AS64501 <em>through the small ISP</em>, which would be overwhelmed. That's a <strong>route leak</strong>; it has happened many times at large scale.</p>
+<p>But B has <strong>customer filters</strong>: from AS64504 it only accepts prefixes that belong to AS64504 (from the IRR registries). The route is dropped.</p>`}},
+
+{at:"usr",frame:D2,kind:"data",move:[[["usr","isp"]],[["isp","t1"]],[["t1","as1"]],[["as1","srv"]]],log:{ro:"tu → server, pe drumul ales",en:"you → server, along the chosen path"},who:{ro:"Pachetul tău",en:"Your packet"},
+ title:{ro:"Pachetele de date urmează rutele alese",en:"Data packets follow the chosen routes"},
+ body:{ro:`<p>Deschizi site-ul de pe <code>203.0.113.10</code>. Pachetul tău nu conține nimic despre BGP: are doar IP sursă și destinație.</p>
+<p>Fiecare router caută destinația în tabela lui de forwarding (<strong>FIB</strong>), construită din rutele alese de BGP, și trimite pachetul mai departe: ISP → Tranzit A → AS64501 → server. TTL-ul scade la fiecare router.</p>
+<p class="key">Separarea e importantă: <strong>planul de control</strong> (BGP) decide rutele, din când în când; <strong>planul de date</strong> mută milioane de pachete pe secundă după ele.</p>`,
+ en:`<p>You open the site on <code>203.0.113.10</code>. Your packet contains nothing about BGP: just source and destination IPs.</p>
+<p>Each router looks up the destination in its forwarding table (<strong>FIB</strong>), built from the routes BGP chose, and forwards the packet: ISP → Transit A → AS64501 → server. The TTL drops at each router.</p>
+<p class="key">The split matters: the <strong>control plane</strong> (BGP) decides routes, now and then; the <strong>data plane</strong> moves millions of packets per second according to them.</p>`},
+ try:[{cmd:"tracert 1.1.1.1",d:{ro:"Vezi routerele prin care trece pachetul; numele lor arată adesea AS-ul.",en:"See the routers the packet crosses; their names often show the AS."}}]},
+
+{at:"t1",frame:WD,kind:"wd",move:[[["t1","isp"]]],fx:[["rib","AS64502","—","—","—",{ro:"✗ retrasă",en:"✗ withdrawn"}],["rib","AS64503","64503 64501","192.0.2.17","100",{ro:"✓ cea mai bună",en:"✓ best"}]],tables:["rib"],hl:{rib:"AS64503"},marks:{as1:{k:"drop",t:{ro:"✗ legătura A a căzut",en:"✗ link A down"}}},log:{ro:"retragere după pană",en:"withdrawal after a failure"},who:"AS64502",
+ title:{ro:"O legătură pică: retragere și convergență",en:"A link fails: withdrawal and convergence"},
+ body:{ro:`<p>Fibra dintre AS64501 și Tranzitul A e tăiată. Sesiunea BGP cade (imediat, sau după hold time). Tranzitul A nu mai are drum spre <code>${PF}</code> și trimite vecinilor o <strong>retragere</strong> (UPDATE cu prefixul la „withdrawn routes”).</p>
+<p>ISP-ul șterge ruta și reface alegerea: rămâne cea prin AS64503, care devine cea mai bună. Traficul tău merge acum prin Tranzitul B. Asta e <strong>convergența</strong>; pe internet durează de la câteva secunde la câteva minute.</p>
+<p>Ca să afle mai repede de pană, routerele folosesc <strong>BFD</strong> (verificări la câteva sute de milisecunde) în loc să aștepte 90 s.</p>`,
+ en:`<p>The fibre between AS64501 and Transit A is cut. The BGP session drops (immediately, or after the hold time). Transit A no longer has a path to <code>${PF}</code> and sends its neighbours a <strong>withdrawal</strong> (an UPDATE with the prefix under "withdrawn routes").</p>
+<p>The ISP removes the route and re-runs the selection: the one via AS64503 is left and becomes best. Your traffic now goes through Transit B. That's <strong>convergence</strong>; on the internet it takes from a few seconds to a few minutes.</p>
+<p>To notice failures faster, routers use <strong>BFD</strong> (checks every few hundred milliseconds) instead of waiting 90 s.</p>`}},
+
+{at:"bad",frame:HJ,kind:"upd",move:[[["bad","t2"]]],rest:["t2"],tables:["roa"],marks:{t2:{k:"drop",t:{ro:"✗ RPKI invalid",en:"✗ RPKI invalid"}}},log:{ro:"anunț fals (hijack)",en:"bogus announcement (hijack)"},who:"AS64505",
+ title:{ro:"Hijack: un prefix mai specific, oprit de RPKI",en:"Hijack: a more specific prefix, stopped by RPKI"},
+ body:{ro:`<p>AS64505 anunță, din greșeală sau intenționat, <code>203.0.113.0/25</code>, jumătate din rețeaua altcuiva. Routerele aleg mereu <strong>prefixul cel mai specific</strong> (longest prefix match), deci dacă anunțul s-ar propaga, tot internetul ar trimite traficul pentru <code>203.0.113.10</code> la AS64505, oricât de bune ar fi rutele corecte.</p>
+<p>Apărarea e <strong>RPKI</strong>: AS64501 a publicat un certificat semnat (<strong>ROA</strong>, tabelul din dreapta) care spune „<code>${PF}</code> poate fi anunțat doar de AS64501, cel mult ca /24”. Tranzitul B face <strong>Route Origin Validation</strong>: anunțul are originea greșită și e mai specific decât permite ROA-ul, deci e <strong>INVALID</strong> și e aruncat.</p>
+<p class="key">RPKI verifică doar <strong>originea</strong>. Un AS_PATH falsificat în mijloc rămâne o problemă, rezolvată parțial de ASPA și BGPsec.</p>`,
+ en:`<p>AS64505 announces, by mistake or on purpose, <code>203.0.113.0/25</code>, half of someone else's network. Routers always prefer the <strong>most specific prefix</strong> (longest prefix match), so if the announcement spread, the whole internet would send traffic for <code>203.0.113.10</code> to AS64505, however good the legitimate routes are.</p>
+<p>The defence is <strong>RPKI</strong>: AS64501 has published a signed certificate (<strong>ROA</strong>, table on the right) saying "<code>${PF}</code> may only be originated by AS64501, at most as a /24". Transit B performs <strong>Route Origin Validation</strong>: the announcement has the wrong origin and is more specific than the ROA allows, so it's <strong>INVALID</strong> and dropped.</p>
+<p class="key">RPKI only checks the <strong>origin</strong>. A forged AS_PATH in the middle is still a problem, partly addressed by ASPA and BGPsec.</p>`},
+ try:[{cmd:"https://isbgpsafeyet.com",d:{ro:"Verifică dacă furnizorul tău aruncă rutele RPKI invalide.",en:"Check whether your provider drops RPKI-invalid routes."}}]},
+
+{at:["as1","t1","t2","isp"],frame:null,kind:"none",summary:true,
+ title:{ro:"Recapitulare",en:"Recap"},
+ body:{ro:`<div class="flow"><span>64501</span><i>→</i><span>64502 64501</span><i>→</i><span>ISP: alege după LOCAL_PREF</span><i>→</i><span>date pe drumul ales</span></div>
+<ul><li>Internetul e format din <strong>AS-uri</strong>; între ele vorbește <strong>BGP</strong>, pe TCP 179, cu vecini configurați manual.</li>
+<li>Un <strong>UPDATE</strong> poartă un prefix și atribute; fiecare AS își adaugă numărul în <strong>AS_PATH</strong>.</li>
+<li>Alegerea: <strong>LOCAL_PREF</strong> (politica) întâi, apoi AS_PATH mai scurt, ORIGIN, MED și departajări.</li>
+<li>Propriul AS în AS_PATH = buclă → ruta e respinsă. Filtrele opresc <strong>route leak</strong>-urile.</li>
+<li>La o pană vine o <strong>retragere</strong>, iar rețeaua converge pe drumul de rezervă.</li>
+<li><strong>Prefixul cel mai specific</strong> câștigă; <strong>RPKI</strong> (ROA + validare) oprește originile false.</li></ul>
+<p><button type="button" class="btn primary" data-goto="quiz">Mergi la test ↓</button></p>`,
+ en:`<div class="flow"><span>64501</span><i>→</i><span>64502 64501</span><i>→</i><span>ISP: picks by LOCAL_PREF</span><i>→</i><span>data on the chosen path</span></div>
+<ul><li>The internet is made of <strong>ASes</strong>; between them <strong>BGP</strong> runs, over TCP 179, with manually configured neighbours.</li>
+<li>An <strong>UPDATE</strong> carries a prefix and attributes; each AS adds its number to <strong>AS_PATH</strong>.</li>
+<li>Selection: <strong>LOCAL_PREF</strong> (policy) first, then shorter AS_PATH, ORIGIN, MED and tie-breakers.</li>
+<li>Your own AS in AS_PATH = a loop → the route is rejected. Filters stop <strong>route leaks</strong>.</li>
+<li>On a failure a <strong>withdrawal</strong> arrives and the network converges onto the backup path.</li>
+<li>The <strong>most specific prefix</strong> wins; <strong>RPKI</strong> (ROA + validation) stops false origins.</li></ul>
+<p><button type="button" class="btn primary" data-goto="quiz">Go to the quiz ↓</button></p>`}}
+],
+
+reference:(T,lang)=>{
+  const ro=lang==="ro";
+  const attrs=[["AS_PATH",{ro:"AS-urile traversate; previne buclele, mai scurt e mai bun",en:"the ASes crossed; prevents loops, shorter is better"},{ro:"se transmite tuturor",en:"passed to everyone"}],["NEXT_HOP",{ro:"unde se trimit pachetele",en:"where to send packets"},{ro:"schimbat la fiecare eBGP",en:"changed at every eBGP hop"}],["LOCAL_PREF",{ro:"preferința internă a unui AS",en:"an AS's internal preference"},{ro:"doar în interiorul AS-ului",en:"inside the AS only"}],["MED",{ro:"sugestie pentru un vecin: pe ce legătură să intre",en:"a hint to a neighbour: which link to come in on"},{ro:"doar la vecinul direct",en:"to the direct neighbour only"}],["COMMUNITY",{ro:"etichete pentru politici (de ex. „nu anunța mai departe”)",en:"tags for policies (e.g. \"don't announce further\")"},{ro:"opțional, tranzitiv",en:"optional, transitive"}],["ORIGIN",{ro:"cum a apărut ruta: IGP, EGP, incomplete",en:"how the route appeared: IGP, EGP, incomplete"},{ro:"se transmite tuturor",en:"passed to everyone"}]];
+  let h=`<div class="ref-grid"><section class="card refcard"><h2>${ro?"Atributele principale":"The main attributes"}</h2><div class="scroll"><table class="cmp" style="min-width:460px"><thead><tr><th>${ro?"Atribut":"Attribute"}</th><th>${ro?"Ce înseamnă":"What it means"}</th><th>${ro?"Cât de departe":"How far"}</th></tr></thead><tbody>`;
+  attrs.forEach(r=>{h+=`<tr><td><b>${r[0]}</b></td><td>${T(r[1])}</td><td>${T(r[2])}</td></tr>`});
+  h+=`</tbody></table></div><p>${ro?"Relații între AS-uri: <b>client–furnizor</b> (clientul plătește tranzit), <b>peering</b> (două rețele schimbă gratuit traficul propriilor clienți, adesea într-un IXP).":"Relationships between ASes: <b>customer–provider</b> (the customer pays for transit), <b>peering</b> (two networks exchange their own customers' traffic for free, often at an IXP)."}</p></section>`;
+  h+=`<section class="card refcard"><h2>${ro?"Configurația lui AS64501 (FRR / Bird-like)":"AS64501's configuration (FRR-style)"}</h2>
+<pre class="yaml">router bgp 64501
+ bgp router-id 192.0.2.1
+ neighbor 192.0.2.2 remote-as 64502   <span class="c"># ${ro?"Tranzit A":"Transit A"}</span>
+ neighbor 192.0.2.18 remote-as 64503  <span class="c"># ${ro?"Tranzit B":"Transit B"}</span>
+ address-family ipv4 unicast
+  network 203.0.113.0/24
+  <span class="c"># ${ro?"B doar ca rezervă: drum mai lung":"B as backup only: a longer path"}</span>
+  neighbor 192.0.2.18 route-map PREPEND out
+route-map PREPEND permit 10
+ set as-path prepend 64501 64501
+
+<span class="c"># ${ro?"verificare":"checking"}</span>
+show bgp summary
+show bgp ipv4 unicast 203.0.113.0/24</pre></section></div>`;
+  return h;
+},
+
+gloss:[
+ ["AS","Autonomous System",{ro:"O rețea administrată de o singură organizație, cu politică de rutare proprie.",en:"A network run by one organisation, with its own routing policy."}],
+ ["ASN","AS Number",{ro:"Numărul unic al unui AS, dat de un registru regional (RIPE, ARIN…).",en:"An AS's unique number, assigned by a regional registry (RIPE, ARIN…)."}],
+ ["BGP","Border Gateway Protocol",{ro:"Protocolul prin care AS-urile își anunță prefixele.",en:"The protocol ASes use to announce their prefixes."}],
+ ["eBGP / iBGP",null,{ro:"eBGP: între AS-uri diferite. iBGP: între routerele aceluiași AS.",en:"eBGP: between different ASes. iBGP: between routers of the same AS."}],
+ ["IGP","Interior Gateway Protocol",{ro:"Protocol de rutare în interiorul unui AS (OSPF, IS-IS).",en:"A routing protocol inside an AS (OSPF, IS-IS)."}],
+ [{ro:"Prefix",en:"Prefix"},"NLRI",{ro:"Un bloc de adrese anunțat, de ex. 203.0.113.0/24.",en:"An announced block of addresses, e.g. 203.0.113.0/24."}],
+ ["UPDATE",null,{ro:"Mesajul BGP care anunță sau retrage rute.",en:"The BGP message that announces or withdraws routes."}],
+ ["AS_PATH",null,{ro:"Lista AS-urilor prin care a trecut anunțul.",en:"The list of ASes the announcement has crossed."}],
+ ["LOCAL_PREF",null,{ro:"Preferința internă a unui AS pentru o rută; primul criteriu de alegere.",en:"An AS's internal preference for a route; the first selection criterion."}],
+ ["Transit / peering",null,{ro:"Tranzit: plătești ca să ajungi la tot internetul. Peering: schimb gratuit între două rețele.",en:"Transit: you pay to reach the whole internet. Peering: a free exchange between two networks."}],
+ ["IXP","Internet Exchange Point",{ro:"Un loc (switch-uri mari) unde multe rețele fac peering între ele.",en:"A place (big switches) where many networks peer with each other."}],
+ ["Route leak",null,{ro:"O rută anunțată unde nu trebuia, încălcând regulile client/furnizor.",en:"A route announced where it shouldn't be, breaking customer/provider rules."}],
+ [{ro:"Hijack",en:"Hijack"},null,{ro:"Anunțarea unui prefix care nu îți aparține.",en:"Announcing a prefix that isn't yours."}],
+ ["RPKI / ROA",null,{ro:"Certificate care spun ce AS are voie să anunțe un prefix.",en:"Certificates stating which AS may originate a prefix."}],
+ ["ROV","Route Origin Validation",{ro:"Verificarea anunțurilor față de ROA; cele invalide sunt aruncate.",en:"Checking announcements against ROAs; invalid ones are dropped."}],
+ [{ro:"Convergență",en:"Convergence"},null,{ro:"Timpul în care routerele ajung din nou la rute stabile după o schimbare.",en:"The time until routers settle on stable routes again after a change."}],
+ ["BFD","Bidirectional Forwarding Detection",{ro:"Verificare rapidă a unei legături, ca BGP să afle repede de o pană.",en:"A fast link check so BGP learns about failures quickly."}]
+],
+glossEx:{
+ "AS":{ro:"AS15169 e Google; AS13335 e Cloudflare.",en:"AS15169 is Google; AS13335 is Cloudflare."},
+ "ASN":{ro:"AS64501 (rezervat pentru exemple).",en:"AS64501 (reserved for examples)."},
+ "BGP":{ro:"sesiune TCP 179 între 192.0.2.1 și 192.0.2.2.",en:"a TCP 179 session between 192.0.2.1 and 192.0.2.2."},
+ "eBGP / iBGP":{ro:"AS64501 ↔ AS64502 e eBGP.",en:"AS64501 ↔ AS64502 is eBGP."},
+ "IGP":{ro:"OSPF în interiorul AS64504.",en:"OSPF inside AS64504."},
+ "Prefix":{ro:"203.0.113.0/24 = 256 de adrese.",en:"203.0.113.0/24 = 256 addresses."},
+ "UPDATE":{ro:"„203.0.113.0/24, AS_PATH 64502 64501, NEXT_HOP 192.0.2.9”.",en:"\"203.0.113.0/24, AS_PATH 64502 64501, NEXT_HOP 192.0.2.9\"."},
+ "AS_PATH":{ro:"64503 64501: originea e 64501, ultimul AS traversat 64503.",en:"64503 64501: the origin is 64501, the last AS crossed 64503."},
+ "LOCAL_PREF":{ro:"200 pentru Tranzit A, 100 pentru B.",en:"200 for Transit A, 100 for B."},
+ "Transit / peering":{ro:"ISP-ul plătește tranzit la AS64502 și face peering gratuit cu un cloud la un IXP.",en:"The ISP pays AS64502 for transit and peers for free with a cloud at an IXP."},
+ "IXP":{ro:"DE-CIX Frankfurt, AMS-IX, InterLAN București.",en:"DE-CIX Frankfurt, AMS-IX, InterLAN Bucharest."},
+ "Route leak":{ro:"ISP-ul anunță spre B rutele primite de la A.",en:"The ISP announces to B routes it got from A."},
+ "Hijack":{ro:"AS64505 anunță 203.0.113.0/25.",en:"AS64505 announces 203.0.113.0/25."},
+ "RPKI / ROA":{ro:"ROA: 203.0.113.0/24, AS64501, maxLength /24.",en:"ROA: 203.0.113.0/24, AS64501, maxLength /24."},
+ "ROV":{ro:"rezultat: valid, invalid sau not-found.",en:"outcome: valid, invalid or not-found."},
+ "Convergence":{ro:"după retragere, ISP-ul trece pe ruta prin B în câteva secunde.",en:"after the withdrawal the ISP moves to the route via B in a few seconds."},
+ "BFD":{ro:"verificare la 300 ms × 3 → pană detectată în ~1 s.",en:"checks every 300 ms × 3 → failure detected in ~1 s."}
+},
+
+quiz:[
+ {q:{ro:"Ce e un AS?",en:"What is an AS?"},o:[{ro:"O rețea administrată de o organizație, cu politică de rutare proprie și număr unic",en:"A network run by one organisation, with its own routing policy and a unique number"},{ro:"Un tip de cablu",en:"A kind of cable"},{ro:"Un server DNS",en:"A DNS server"},{ro:"Un protocol de criptare",en:"An encryption protocol"}],a:0,e:{ro:"Internetul e format din zeci de mii de AS-uri.",en:"The internet is made of tens of thousands of ASes."}},
+ {q:{ro:"Pe ce funcționează o sesiune BGP?",en:"What does a BGP session run over?"},o:[{ro:"TCP, portul 179",en:"TCP, port 179"},{ro:"UDP 53",en:"UDP 53"},{ro:"Broadcast",en:"Broadcast"},{ro:"ICMP",en:"ICMP"}],a:0,e:{ro:"Vecinii se configurează manual și deschid o conexiune TCP.",en:"Neighbours are configured by hand and open a TCP connection."}},
+ {q:{ro:"Ce face un AS când transmite mai departe o rută?",en:"What does an AS do when passing a route on?"},o:[{ro:"Își adaugă numărul la începutul AS_PATH",en:"Prepends its number to AS_PATH"},{ro:"Șterge AS_PATH",en:"Deletes AS_PATH"},{ro:"Schimbă prefixul",en:"Changes the prefix"},{ro:"Nimic",en:"Nothing"}],a:0,e:{ro:"De aceea AS_PATH arată tot drumul anunțului.",en:"That's why AS_PATH shows the announcement's whole path."}},
+ {q:{ro:"ISP-ul are două rute: AS_PATH scurt cu LOCAL_PREF 100 și AS_PATH lung cu LOCAL_PREF 200. Care câștigă?",en:"The ISP has two routes: a short AS_PATH with LOCAL_PREF 100 and a long AS_PATH with LOCAL_PREF 200. Which wins?"},o:[{ro:"Cea cu LOCAL_PREF 200",en:"The one with LOCAL_PREF 200"},{ro:"Cea cu AS_PATH scurt",en:"The one with the short AS_PATH"},{ro:"Amândouă, alternativ",en:"Both, alternately"},{ro:"Niciuna",en:"Neither"}],a:0,e:{ro:"LOCAL_PREF e verificat înaintea lungimii AS_PATH.",en:"LOCAL_PREF is checked before AS_PATH length."}},
+ {q:{ro:"Un router primește o rută care are propriul lui AS în AS_PATH. Ce face?",en:"A router receives a route with its own AS in AS_PATH. What does it do?"},o:[{ro:"O respinge (ar fi o buclă)",en:"Rejects it (it would be a loop)"},{ro:"O preferă",en:"Prefers it"},{ro:"O anunță mai departe",en:"Announces it onward"},{ro:"Repornește sesiunea",en:"Restarts the session"}],a:0,e:{ro:"Așa previne BGP buclele între AS-uri.",en:"That's how BGP prevents loops between ASes."}},
+ {q:{ro:"Ce e un route leak?",en:"What is a route leak?"},o:[{ro:"O rută primită de la un furnizor, anunțată altui furnizor sau partener",en:"A route from one provider announced to another provider or peer"},{ro:"O pană de curent",en:"A power cut"},{ro:"O sesiune BGP închisă",en:"A closed BGP session"},{ro:"Un cablu tăiat",en:"A cut cable"}],a:0,e:{ro:"Rutele de la furnizori se anunță doar clienților.",en:"Routes from providers are announced only to customers."}},
+ {q:{ro:"Cineva anunță 203.0.113.0/25, iar proprietarul 203.0.113.0/24. Spre cine merge traficul pentru 203.0.113.10, fără RPKI?",en:"Someone announces 203.0.113.0/25 and the owner 203.0.113.0/24. Where does traffic for 203.0.113.10 go, without RPKI?"},o:[{ro:"Spre cel cu /25, pentru că e mai specific",en:"To the /25, because it's more specific"},{ro:"Spre proprietar",en:"To the owner"},{ro:"Se împarte 50/50",en:"Split 50/50"},{ro:"Nicăieri",en:"Nowhere"}],a:0,e:{ro:"Longest prefix match: prefixul mai specific câștigă mereu.",en:"Longest prefix match: the more specific prefix always wins."}},
+ {q:{ro:"Ce verifică RPKI (Route Origin Validation)?",en:"What does RPKI (Route Origin Validation) check?"},o:[{ro:"Că AS-ul de origine are voie să anunțe prefixul, conform ROA",en:"That the origin AS may announce the prefix, per the ROA"},{ro:"Tot AS_PATH-ul",en:"The whole AS_PATH"},{ro:"Viteza legăturii",en:"The link speed"},{ro:"Parola sesiunii",en:"The session password"}],a:0,e:{ro:"RPKI verifică doar originea; restul drumului nu.",en:"RPKI only checks the origin, not the rest of the path."}}
+]
+};
+})();
+</script>
+<script src="../assets/engine.js"></script>
+<script type="module" src="../assets/auth.js?v=3"></script>
+</body>
+</html>

@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>IPv6 pas cu pas</title>
+<meta name="description" content="Lecție interactivă: cum își face un laptop singur o adresă IPv6 (SLAAC), cum află MAC-ul routerului fără ARP (NDP) și cum circulă un pachet IPv6. / Interactive lesson on IPv6: SLAAC, NDP, dual stack.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<script>
+(function(){
+const LM="3c:22:fb:10:00:0a",RM="00:1a:2b:3c:4d:01",LL="fe80::3e22:fbff:fe10:a",RL="fe80::1",PFX="2001:db8:4:1::/64",GA="2001:db8:4:1:8d3a:2c71:9b4e:5f10",WEB="2001:db8:beef::80",DNS6="2001:db8:4::53";
+const E6={ro:"0x86DD (IPv6)",en:"0x86DD (IPv6)"};
+const DAD={srcMac:LM,dstMac:"33:33:ff:10:00:0a",etype:E6,srcIp:"::",dstIp:"ff02::1:ff10:a",next:"58 (ICMPv6)",hop:"255",msg:"Neighbor Solicitation (135)",info:{ro:"cine are "+LL+"?",en:"who has "+LL+"?"}};
+const RS={...DAD,dstMac:"33:33:00:00:00:02",srcIp:LL,dstIp:"ff02::2",msg:"Router Solicitation (133)",info:{ro:"există vreun router aici?",en:"is there a router here?"}};
+const RA={srcMac:RM,dstMac:"33:33:00:00:00:01",etype:E6,srcIp:RL,dstIp:"ff02::1",next:"58 (ICMPv6)",hop:"255",msg:"Router Advertisement (134)",info:{ro:"prefix "+PFX+", router "+RL+", DNS "+DNS6,en:"prefix "+PFX+", router "+RL+", DNS "+DNS6}};
+const DQ={srcMac:LM,dstMac:RM,etype:E6,srcIp:GA,dstIp:DNS6,next:"17 (UDP)",hop:"64",msg:"DNS: AAAA www.example.com?",info:{ro:"și A, în paralel (dual-stack)",en:"and A, in parallel (dual stack)"}};
+const NS={srcMac:LM,dstMac:"33:33:ff:00:00:01",etype:E6,srcIp:GA,dstIp:"ff02::1:ff00:1",next:"58 (ICMPv6)",hop:"255",msg:"Neighbor Solicitation (135)",info:{ro:"cine are "+RL+"? MAC-ul meu: "+LM,en:"who has "+RL+"? my MAC: "+LM}};
+const NA={srcMac:RM,dstMac:LM,etype:E6,srcIp:RL,dstIp:GA,next:"58 (ICMPv6)",hop:"255",msg:"Neighbor Advertisement (136)",info:{ro:RL+" e la "+RM,en:RL+" is at "+RM}};
+const T1={srcMac:LM,dstMac:RM,etype:E6,srcIp:GA,dstIp:WEB,next:"6 (TCP)",hop:"64",msg:"TCP SYN → :443",info:{ro:"antet IPv6 fix de 40 de octeți",en:"fixed 40-byte IPv6 header"}};
+const T2={...T1,srcMac:"00:1a:2b:99:00:02",dstMac:"00:5e:00:aa:00:07",hop:"63",info:{ro:"routerul: Hop Limit − 1, MAC-uri noi, IP-uri neschimbate",en:"the router: Hop Limit − 1, new MACs, same IPs"}};
+const PTB={srcMac:RM,dstMac:LM,etype:E6,srcIp:"2001:db8:4::1",dstIp:GA,next:"58 (ICMPv6)",hop:"64",msg:"Packet Too Big (2)",info:{ro:"MTU pe drum: 1280",en:"MTU on the path: 1280"}};
+
+window.LESSON={
+docTitle:{ro:"IPv6 pas cu pas",en:"IPv6 Step by Step"},
+eyebrow:{ro:"Lecție interactivă · Rețele",en:"Interactive lesson · Networking"},
+title:{ro:"IPv6: un laptop își face singur adresa",en:"IPv6: a laptop builds its own address"},
+sub:{ro:"Urmărești un laptop care intră într-o rețea IPv6: își face o adresă link-local, verifică să nu fie dublură, află prefixul de la router (SLAAC), află MAC-ul routerului cu NDP în loc de ARP, apoi trimite un pachet pe internet. La final: dual-stack, firewall în loc de NAT și ce nu trebuie blocat.",en:"Follow a laptop joining an IPv6 network: it creates a link-local address, checks it isn't a duplicate, learns the prefix from the router (SLAAC), finds the router's MAC with NDP instead of ARP, then sends a packet to the internet. At the end: dual stack, a firewall instead of NAT, and what you must not block."},
+meta:[{ro:"≈ 25 minute",en:"≈ 25 minutes"},{ro:"12 pași",en:"12 steps"},{ro:"8 întrebări",en:"8 questions"},{ro:"Începător+",en:"Beginner+"}],
+goals:[{ro:"Cum se scrie și se scurtează o adresă IPv6",en:"How an IPv6 address is written and shortened"},{ro:"Link-local, global, multicast: ce face fiecare",en:"Link-local, global, multicast: what each does"},{ro:"SLAAC și Router Advertisement",en:"SLAAC and Router Advertisements"},{ro:"NDP în locul ARP și de ce nu mai există broadcast",en:"NDP instead of ARP, and why there's no broadcast"}],
+foot:{ro:"Prefixul 2001:db8::/32 e rezervat pentru documentație și exemple.",en:"The 2001:db8::/32 prefix is reserved for documentation and examples."},
+ui:{refT:{ro:"Adrese IPv6 și comenzi",en:"IPv6 addresses and commands"},refLead:{ro:"Regulile de scriere, antetul IPv6 comparat cu IPv4 și comenzile utile.",en:"The writing rules, the IPv6 header compared with IPv4, and useful commands."}},
+tryT:{ro:"Încearcă pe calculatorul tău",en:"Try it on your computer"},
+legend:[["lg-arp","NDP",{ro:"mesaj ICMPv6 de vecinătate",en:"ICMPv6 neighbour message"}],["lg-ip","IPv6",{ro:"pachet de date",en:"data packet"}],["lg-tcp","DNS",{ro:"interogare DNS",en:"DNS query"}]],
+
+nodes:{
+  lap:{type:"host",name:"Laptop",lines:[LM]},
+  ph:{type:"host",name:{ro:"Telefon",en:"Phone"},lines:["fe80::a8c1:…"]},
+  sw:{type:"switch",name:"Switch",lines:[]},
+  rtr:{type:"router",name:"Router",lines:[RL,"2001:db8:4:1::1"]},
+  dns:{type:"server",name:"DNS",lines:[DNS6]},
+  net:{type:"globe",name:{ro:"Internet IPv6",en:"IPv6 internet"},lines:[]},
+  web:{type:"server",name:{ro:"Server web",en:"Web server"},lines:[WEB]}
+},
+links:[["lap","sw"],["ph","sw"],["sw","rtr"],["rtr","dns"],["rtr","net"],["net","web"]],
+layouts:{
+  wide:{vb:[0,0,1000,500],n:{lap:[90,130],ph:[90,370],sw:[260,250],rtr:[460,250],dns:[460,420],net:[700,250],web:[900,250]},
+    zones:[{x:10,y:40,w:540,h:440,top:true,l:{ro:"Rețeaua locală · "+PFX,en:"Local network · "+PFX}},{x:570,y:40,w:420,h:440,top:true,cls:"virt",l:{ro:"Internet",en:"Internet"}}]},
+  narrow:{vb:[0,0,360,720],n:{lap:[60,60],ph:[60,170],sw:[60,290],rtr:[180,390],dns:[60,500],net:[180,540],web:[180,660]},
+    side:{lap:"right",ph:"right",sw:"right",rtr:"right",dns:"right",net:"right",web:"right"},
+    zones:[{x:4,y:10,w:352,h:530,top:true,l:{ro:"Rețeaua locală",en:"Local network"}}]}
+},
+groups:[
+  {id:"eth",color:"l2",fields:["srcMac","dstMac","etype"],name:{ro:"Antet Ethernet",en:"Ethernet header"},short:"ETH",grow:2},
+  {id:"ip",color:"l3",fields:["srcIp","dstIp","next","hop"],name:{ro:"Antet IPv6 (40 de octeți)",en:"IPv6 header (40 bytes)"},short:"IPv6",grow:4},
+  {id:"pl",color:"l4",fields:["msg","info"],name:{ro:"Conținut",en:"Payload"},short:"ICMPv6 / TCP / UDP",grow:3}
+],
+fieldLabels:{srcMac:{ro:"MAC sursă",en:"Source MAC"},dstMac:{ro:"MAC destinație",en:"Destination MAC"},etype:"EtherType",srcIp:{ro:"IPv6 sursă",en:"Source IPv6"},dstIp:{ro:"IPv6 destinație",en:"Destination IPv6"},next:"Next Header",hop:"Hop Limit",msg:{ro:"Mesaj",en:"Message"},info:{ro:"Pe scurt",en:"In short"}},
+pdu:f=>/^58/.test(f.next)?{badge:"ICMPv6 · "+f.msg.replace(/ \(\d+\)/,""),tok:["NDP","k-arp"]}:/^17/.test(f.next)?{badge:{ro:"Interogare DNS",en:"DNS query"},tok:["DNS","k-tcp"]}:{badge:{ro:"Pachet IPv6",en:"IPv6 packet"},tok:["IPv6","k-ip"]},
+
+init:{addr:[],nc:[],rt:[]},
+tables:{
+  types:{title:{ro:"Felurile de adrese IPv6",en:"Kinds of IPv6 addresses"},cols:[{ro:"Prefix",en:"Prefix"},{ro:"Tip",en:"Kind"},{ro:"Pentru ce",en:"What for"}],
+    rows:()=>[["::1/128","loopback",{ro:"calculatorul însuși (ca 127.0.0.1)",en:"this computer (like 127.0.0.1)"}],["fe80::/10","link-local",{ro:"doar pe segmentul local, nerutată; o are orice interfață",en:"only on the local segment, never routed; every interface has one"}],["2000::/3",{ro:"global unicast",en:"global unicast"},{ro:"adrese publice, rutate pe internet",en:"public addresses, routed on the internet"}],["fc00::/7","ULA",{ro:"adrese private pentru interior (ca 10.0.0.0/8)",en:"private addresses for inside use (like 10.0.0.0/8)"}],["ff00::/8","multicast",{ro:"un grup de destinatari; înlocuiește broadcast-ul",en:"a group of receivers; replaces broadcast"}]]},
+  addr:{title:{ro:"Adresele laptopului",en:"The laptop's addresses"},cols:[{ro:"Adresă",en:"Address"},{ro:"Tip",en:"Kind"},{ro:"Stare",en:"State"}]},
+  nc:{title:{ro:"Neighbor cache (în loc de tabela ARP)",en:"Neighbour cache (instead of the ARP table)"},cols:[{ro:"IPv6",en:"IPv6"},"MAC",{ro:"Stare",en:"State"}]},
+  rt:{title:{ro:"Rutele laptopului",en:"The laptop's routes"},cols:[{ro:"Destinație",en:"Destination"},{ro:"Prin",en:"Via"},{ro:"Aflată din",en:"Learned from"}]},
+  ra:{title:{ro:"Ce conține Router Advertisement-ul",en:"What's in the Router Advertisement"},cols:[{ro:"Câmp",en:"Field"},{ro:"Valoare",en:"Value"},{ro:"Înseamnă",en:"Means"}],plain:[2],
+    rows:()=>[[{ro:"Prefix",en:"Prefix"},PFX,{ro:"rețeaua locală; flag A = poți face SLAAC",en:"the local network; A flag = you may use SLAAC"}],["Router Lifetime","1800 s",{ro:"folosește-mă ca gateway implicit 30 de minute",en:"use me as default gateway for 30 minutes"}],[{ro:"Flag M / O",en:"M / O flags"},"0 / 0",{ro:"fără DHCPv6: adresa și restul le faci singur",en:"no DHCPv6: build the address and the rest yourself"}],["RDNSS",DNS6,{ro:"serverul DNS de folosit",en:"the DNS server to use"}],["MTU","1500",{ro:"dimensiunea maximă pe acest link",en:"the maximum size on this link"}]]},
+  hdr:{title:{ro:"Antetul IPv6 față de IPv4",en:"The IPv6 header vs IPv4"},cols:["IPv4","IPv6",{ro:"De ce",en:"Why"}],plain:[2],
+    rows:()=>[[{ro:"20–60 de octeți, cu opțiuni",en:"20–60 bytes, with options"},{ro:"fix 40 de octeți",en:"fixed 40 bytes"},{ro:"routerele îl procesează mai simplu",en:"simpler for routers to process"}],["TTL","Hop Limit",{ro:"același rol, nume mai cinstit",en:"same role, a more honest name"}],["Protocol","Next Header",{ro:"poate arăta și spre antete de extensie",en:"can also point to extension headers"}],["Header checksum",{ro:"— (nu există)",en:"— (none)"},{ro:"Ethernet și TCP/UDP verifică deja",en:"Ethernet and TCP/UDP already check"}],[{ro:"Fragmentare în routere",en:"Fragmentation in routers"},{ro:"doar la sursă",en:"only at the source"},{ro:"routerul trimite „Packet Too Big”",en:"the router sends \"Packet Too Big\""}],["—","Flow Label",{ro:"marchează pachetele unui flux",en:"marks a flow's packets"}]]}
+},
+log:{title:{ro:"Jurnalul pachetelor",en:"Packet log"},lead:{ro:"Albastru = sursa. Galben = destinația. Observă câte mesaje merg la adrese ff02:: (multicast).",en:"Blue = source. Yellow = destination. Notice how many messages go to ff02:: (multicast) addresses."},first:{ro:"Pas",en:"Step"},minWidth:620,
+  cols:[{h:{ro:"Sursă",en:"Source"},v:f=>f.srcIp,cls:"ip"},{h:{ro:"Destinație",en:"Destination"},v:f=>f.dstIp,cls:"mac"},{h:{ro:"Mesaj",en:"Message"},v:f=>f.msg}]},
+
+steps:[
+{at:["lap","rtr"],frame:null,kind:"none",tables:["types"],
+ title:{ro:"De ce IPv6 și cum arată o adresă",en:"Why IPv6, and what an address looks like"},
+ body:{ro:`<p>IPv4 are 32 de biți: ~4,3 miliarde de adrese, epuizate de mult (de aceea există <a href="../nat/index.html">NAT</a>). <strong>IPv6</strong> are <strong>128 de biți</strong>: destule ca fiecare dispozitiv să aibă adrese publice proprii.</p>
+<p>O adresă se scrie în 8 grupuri de 4 cifre hexazecimale, separate prin „:”. Două reguli o scurtează:</p>
+<ul><li>zerourile de la începutul unui grup se pot omite: <code>0db8</code> → <code>db8</code>;</li>
+<li>o singură dată, un șir de grupuri numai zero se înlocuiește cu <code>::</code>.</li></ul>
+<p class="key"><code>2001:0db8:0004:0001:0000:0000:0000:0001</code> = <code>2001:db8:4:1::1</code></p>
+<p>Primii 64 de biți sunt de obicei <strong>prefixul rețelei</strong> (<code>/64</code>), ultimii 64 identifică interfața. Tabelul din dreapta arată felurile de adrese.</p>`,
+ en:`<p>IPv4 has 32 bits: ~4.3 billion addresses, exhausted long ago (that's why <a href="../nat/index.html">NAT</a> exists). <strong>IPv6</strong> has <strong>128 bits</strong>: enough for every device to have public addresses of its own.</p>
+<p>An address is written as 8 groups of 4 hex digits separated by ":". Two rules shorten it:</p>
+<ul><li>leading zeros in a group can be dropped: <code>0db8</code> → <code>db8</code>;</li>
+<li>once only, a run of all-zero groups is replaced by <code>::</code>.</li></ul>
+<p class="key"><code>2001:0db8:0004:0001:0000:0000:0000:0001</code> = <code>2001:db8:4:1::1</code></p>
+<p>The first 64 bits are usually the <strong>network prefix</strong> (<code>/64</code>); the last 64 identify the interface. The table on the right shows the kinds of addresses.</p>`},
+ try:[{cmd:"ipconfig",d:{ro:"Caută rândurile „IPv6 Address” și „Link-local IPv6 Address”.",en:"Look for the \"IPv6 Address\" and \"Link-local IPv6 Address\" lines."}},{cmd:"ip -6 addr",d:{ro:"Același lucru pe Linux.",en:"The same on Linux."}}]},
+
+{at:"lap",frame:DAD,kind:"ndp",move:[[["lap","sw"]],[["sw","ph"],["sw","rtr"]]],fx:[["addr",LL,"link-local",{ro:"tentativă (verific DAD)",en:"tentative (running DAD)"}]],tables:["addr"],log:{ro:"DAD: e liberă adresa?",en:"DAD: is the address free?"},who:"Laptop",
+ title:{ro:"Prima adresă: link-local, apoi verificarea de dublură",en:"First address: link-local, then the duplicate check"},
+ body:{ro:`<p>Imediat ce cablul e conectat, laptopul își face singur o adresă <strong>link-local</strong>: prefixul <code>fe80::/64</code> + un identificator de interfață. Cu ea poate vorbi pe segmentul local fără router și fără configurare.</p>
+<p>Înainte s-o folosească, verifică să nu o mai aibă cineva: <strong>DAD</strong> (Duplicate Address Detection). Trimite un <strong>Neighbor Solicitation</strong> „cine are adresa asta?”, cu sursa <code>::</code> (încă n-are adresă sigură).</p>
+<p>Atenție la destinație: nu e broadcast. E o adresă <strong>multicast „solicited-node”</strong>, <code>ff02::1:ff10:a</code>, formată din ultimii 24 de biți ai adresei căutate. Doar interfețele care au o adresă terminată la fel o ascultă. IPv6 <strong>nu are broadcast</strong>.</p>`,
+ en:`<p>As soon as the cable is plugged in, the laptop builds a <strong>link-local</strong> address by itself: the <code>fe80::/64</code> prefix + an interface identifier. With it, it can talk on the local segment with no router and no configuration.</p>
+<p>Before using it, it checks nobody else has it: <strong>DAD</strong> (Duplicate Address Detection). It sends a <strong>Neighbor Solicitation</strong> "who has this address?", with source <code>::</code> (it has no confirmed address yet).</p>
+<p>Look at the destination: it's not broadcast. It's a <strong>solicited-node multicast</strong> address, <code>ff02::1:ff10:a</code>, built from the last 24 bits of the address being checked. Only interfaces with an address ending the same way listen to it. IPv6 <strong>has no broadcast</strong>.</p>`},
+ more:{ro:`<p>Identificatorul de interfață poate fi format din MAC (<strong>EUI-64</strong>: <code>3c:22:fb:10:00:0a</code> → se inserează <code>ff:fe</code> la mijloc și se inversează un bit → <code>3e22:fbff:fe10:a</code>), cum vezi aici. Sistemele moderne preferă un identificator <strong>aleator, stabil pe rețea</strong> (RFC 7217), ca să nu poată fi urmărit laptopul după MAC.</p><p>MAC-ul destinație al multicast-ului IPv6 e mereu <code>33:33</code> + ultimii 32 de biți ai adresei: <code>33:33:ff:10:00:0a</code>.</p>`,
+  en:`<p>The interface identifier can come from the MAC (<strong>EUI-64</strong>: <code>3c:22:fb:10:00:0a</code> → insert <code>ff:fe</code> in the middle and flip one bit → <code>3e22:fbff:fe10:a</code>), as here. Modern systems prefer a <strong>random identifier that's stable per network</strong> (RFC 7217), so the laptop can't be tracked by its MAC.</p><p>The destination MAC of IPv6 multicast is always <code>33:33</code> + the last 32 bits of the address: <code>33:33:ff:10:00:0a</code>.</p>`}},
+
+{at:"lap",frame:RS,kind:"ndp",move:[[["lap","sw"]],[["sw","rtr"],["sw","ph"]]],fx:[["addr",LL,"link-local",{ro:"validă",en:"valid"}]],tables:["addr"],log:{ro:"caut un router",en:"looking for a router"},who:"Laptop",
+ title:{ro:"Router Solicitation: „e vreun router aici?”",en:"Router Solicitation: \"is there a router here?\""},
+ body:{ro:`<p>Nu a răspuns nimeni la DAD, deci adresa link-local e a lui. Acum laptopul vrea o adresă cu care să iasă pe internet. Pentru asta îi trebuie <strong>prefixul</strong> rețelei, pe care îl știe routerul.</p>
+<p>Trimite un <strong>Router Solicitation</strong> la <code>ff02::2</code>, grupul multicast „toate routerele de pe link”. Telefonul îl ignoră: nu e în grupul ăsta.</p>`,
+ en:`<p>Nobody answered the DAD, so the link-local address is its own. Now the laptop wants an address it can use on the internet. For that it needs the network's <strong>prefix</strong>, which the router knows.</p>
+<p>It sends a <strong>Router Solicitation</strong> to <code>ff02::2</code>, the "all routers on this link" multicast group. The phone ignores it: it's not in that group.</p>`}},
+
+{at:"rtr",frame:RA,kind:"ndp",move:[[["rtr","sw"]],[["sw","lap"],["sw","ph"]]],tables:["ra"],log:{ro:"routerul se anunță",en:"the router announces itself"},who:"Router",
+ title:{ro:"Router Advertisement: prefixul, gateway-ul, DNS-ul",en:"Router Advertisement: prefix, gateway, DNS"},
+ body:{ro:`<p>Routerul răspunde cu un <strong>Router Advertisement</strong> la <code>ff02::1</code> (toate nodurile). Îl trimite oricum și periodic, la câteva minute, ca să afle de el și cei care n-au întrebat.</p>
+<p>Mesajul spune (tabelul din dreapta): prefixul <code>${PFX}</code>, că poate fi folosit ca gateway implicit, ce DNS să folosești și că nu e nevoie de DHCPv6.</p>
+<p class="key">Gateway-ul implicit e adresa <strong>link-local</strong> a routerului, <code>fe80::1</code>, nu una globală. În IPv6 asta e normal.</p>`,
+ en:`<p>The router replies with a <strong>Router Advertisement</strong> to <code>ff02::1</code> (all nodes). It also sends one periodically, every few minutes, so even devices that didn't ask find out about it.</p>
+<p>The message says (table on the right): the prefix <code>${PFX}</code>, that it can be used as default gateway, which DNS to use, and that DHCPv6 isn't needed.</p>
+<p class="key">The default gateway is the router's <strong>link-local</strong> address, <code>fe80::1</code>, not a global one. That's normal in IPv6.</p>`},
+ more:{ro:`<p>Flag-urile M și O spun cum se configurează rețeaua: <code>M=1</code> = ia adresa de la un server <strong>DHCPv6</strong> (multe firme vor asta ca să țină evidența); <code>O=1</code> = adresa ți-o faci singur, dar alte informații (DNS) le iei din DHCPv6. Android nu suportă DHCPv6 pentru adrese, de aceea în rețelele mixte se folosește SLAAC.</p><p>Un RA fals de la un atacator poate redirecționa tot traficul. Switch-urile de firmă au <strong>RA Guard</strong>, care lasă RA-uri doar pe portul routerului.</p>`,
+  en:`<p>The M and O flags say how the network is configured: <code>M=1</code> = get the address from a <strong>DHCPv6</strong> server (many companies want that for record keeping); <code>O=1</code> = build the address yourself, but get other info (DNS) from DHCPv6. Android doesn't support DHCPv6 for addresses, so mixed networks use SLAAC.</p><p>A fake RA from an attacker can redirect all traffic. Business switches have <strong>RA Guard</strong>, which allows RAs only on the router's port.</p>`}},
+
+{at:"lap",frame:null,kind:"none",fx:[["addr",GA,{ro:"global (SLAAC)",en:"global (SLAAC)"},{ro:"preferată",en:"preferred"}],["addr","2001:db8:4:1:c4f1:77e2:1a0b:9d33",{ro:"global temporară",en:"global temporary"},{ro:"preferată · pentru conexiuni ieșite",en:"preferred · for outgoing connections"}],["rt",PFX,{ro:"direct (on-link)",en:"direct (on-link)"},"RA"],["rt","::/0",RL,"RA"]],tables:["addr","rt"],who:"SLAAC",
+ title:{ro:"SLAAC: laptopul își face singur adresa globală",en:"SLAAC: the laptop builds its own global address"},
+ body:{ro:`<p><strong>SLAAC</strong> (Stateless Address Autoconfiguration): laptopul ia prefixul primit, <code>2001:db8:4:1::/64</code>, și pune în ultimii 64 de biți un identificator ales de el. Rezultă <code>${GA}</code>. Face din nou DAD și o folosește.</p>
+<p>De obicei își face <strong>două</strong> adrese globale:</p>
+<ul><li>una <strong>stabilă</strong>, pentru conexiuni care vin spre el;</li>
+<li>una <strong>temporară</strong> (privacy extensions), schimbată zilnic, pentru conexiunile pe care le deschide el, ca site-urile să nu-l recunoască după adresă.</li></ul>
+<p>Din RA mai pune în tabela de rute: rețeaua locală e direct conectată, iar <strong>tot restul</strong> (<code>::/0</code>) merge prin <code>fe80::1</code>.</p>
+<p class="key">O interfață IPv6 are mereu <strong>mai multe adrese</strong> deodată. E normal.</p>`,
+ en:`<p><strong>SLAAC</strong> (Stateless Address Autoconfiguration): the laptop takes the prefix it got, <code>2001:db8:4:1::/64</code>, and fills the last 64 bits with an identifier of its choosing. The result is <code>${GA}</code>. It runs DAD again and starts using it.</p>
+<p>It usually builds <strong>two</strong> global addresses:</p>
+<ul><li>a <strong>stable</strong> one, for connections coming to it;</li>
+<li>a <strong>temporary</strong> one (privacy extensions), rotated daily, for connections it opens, so websites can't recognise it by its address.</li></ul>
+<p>From the RA it also adds routes: the local network is directly connected, and <strong>everything else</strong> (<code>::/0</code>) goes via <code>fe80::1</code>.</p>
+<p class="key">An IPv6 interface always has <strong>several addresses</strong> at once. That's normal.</p>`},
+ try:[{cmd:"netsh interface ipv6 show addresses",d:{ro:"Vezi adresele „Public”, „Temporary” și „Link”.",en:"See the \"Public\", \"Temporary\" and \"Link\" addresses."}},{cmd:"route print -6",d:{ro:"Ruta ::/0 arată spre adresa fe80:: a routerului.",en:"The ::/0 route points at the router's fe80:: address."}}]},
+
+{at:"lap",frame:DQ,kind:"dns",move:[[["lap","sw"]],[["sw","rtr"]],[["rtr","dns"]]],log:{ro:"întreabă DNS de AAAA",en:"asks DNS for AAAA"},who:"Laptop",
+ title:{ro:"DNS: înregistrarea AAAA și dual-stack",en:"DNS: the AAAA record and dual stack"},
+ body:{ro:`<p>Utilizatorul deschide <code>www.example.com</code>. Pentru IPv6, adresa e într-o înregistrare <strong>AAAA</strong> (pentru IPv4 era <strong>A</strong>). Laptopul cere ambele în paralel, pentru că majoritatea rețelelor sunt <strong>dual-stack</strong>: merg simultan IPv4 și IPv6.</p>
+<p>Dacă primește amândouă, aplică <strong>Happy Eyeballs</strong>: încearcă IPv6 întâi și, dacă nu răspunde în ~250 ms, încearcă și IPv4. Câștigă conexiunea care reușește prima, așa că un IPv6 stricat nu face site-urile să se încarce greu.</p>
+<p>Notă: pachetul spre DNS deja are nevoie de MAC-ul routerului. Pasul următor arată cum îl află.</p>`,
+ en:`<p>The user opens <code>www.example.com</code>. For IPv6 the address is in an <strong>AAAA</strong> record (for IPv4 it was <strong>A</strong>). The laptop asks for both in parallel, because most networks are <strong>dual stack</strong>: IPv4 and IPv6 run at the same time.</p>
+<p>If it gets both, it applies <strong>Happy Eyeballs</strong>: try IPv6 first and, if it doesn't answer within ~250 ms, try IPv4 too. Whichever connects first wins, so a broken IPv6 doesn't make sites load slowly.</p>
+<p>Note: the packet to the DNS server already needs the router's MAC. The next step shows how it's found.</p>`},
+ try:[{cmd:"nslookup -type=AAAA www.google.com",d:{ro:"Adresa IPv6 a unui site mare.",en:"A big site's IPv6 address."}}]},
+
+{at:"lap",frame:NS,kind:"ndp",move:[[["lap","sw"]],[["sw","rtr"]]],fx:[["nc",RL,"?",{ro:"INCOMPLETE (aștept)",en:"INCOMPLETE (waiting)"}]],tables:["nc"],log:{ro:"NDP: MAC-ul routerului?",en:"NDP: the router's MAC?"},who:"Laptop",
+ title:{ro:"NDP: cum află MAC-ul routerului, fără ARP",en:"NDP: finding the router's MAC without ARP"},
+ body:{ro:`<p>În IPv4, laptopul ar fi trimis un <a href="../ethernet/index.html">ARP</a> broadcast la toată rețeaua. În IPv6 nu există ARP: rolul lui îl ia <strong>NDP</strong> (Neighbor Discovery Protocol), care e doar ICMPv6.</p>
+<p>Laptopul trimite un <strong>Neighbor Solicitation</strong> „cine are <code>fe80::1</code>?” la adresa solicited-node a routerului, <code>ff02::1:ff00:1</code>. Pune în mesaj și MAC-ul lui, ca routerul să poată răspunde direct.</p>
+<p class="key">Diferența față de ARP: un broadcast ARP întrerupe <em>toate</em> dispozitivele; multicast-ul solicited-node ajunge practic doar la cel căutat.</p>`,
+ en:`<p>In IPv4 the laptop would have sent an <a href="../ethernet/index.html">ARP</a> broadcast to the whole network. IPv6 has no ARP: its job is done by <strong>NDP</strong> (Neighbor Discovery Protocol), which is just ICMPv6.</p>
+<p>The laptop sends a <strong>Neighbor Solicitation</strong> "who has <code>fe80::1</code>?" to the router's solicited-node address, <code>ff02::1:ff00:1</code>. It includes its own MAC so the router can reply directly.</p>
+<p class="key">The difference from ARP: an ARP broadcast interrupts <em>every</em> device; solicited-node multicast practically reaches only the one being looked for.</p>`}},
+
+{at:"rtr",frame:NA,kind:"ndp",move:[[["rtr","sw"]],[["sw","lap"]]],fx:[["nc",RL,RM,"REACHABLE"]],tables:["nc"],hl:{nc:RL},log:{ro:"NDP: răspunsul routerului",en:"NDP: the router's reply"},who:"Router",
+ title:{ro:"Neighbor Advertisement și neighbor cache",en:"Neighbor Advertisement and the neighbour cache"},
+ body:{ro:`<p>Routerul răspunde direct laptopului (unicast) cu un <strong>Neighbor Advertisement</strong>: „<code>fe80::1</code> e la <code>${RM}</code>”.</p>
+<p>Laptopul scrie perechea în <strong>neighbor cache</strong> (echivalentul tabelei ARP), cu starea <code>REACHABLE</code>. După câteva zeci de secunde fără confirmare trece în <code>STALE</code> și verifică din nou când e nevoie (<strong>NUD</strong>, Neighbor Unreachability Detection).</p>
+<p>Acum poate trimite atât interogarea DNS, cât și restul traficului spre internet.</p>`,
+ en:`<p>The router replies straight to the laptop (unicast) with a <strong>Neighbor Advertisement</strong>: "<code>fe80::1</code> is at <code>${RM}</code>".</p>
+<p>The laptop stores the pair in its <strong>neighbour cache</strong> (the equivalent of the ARP table), in state <code>REACHABLE</code>. After some tens of seconds without confirmation it becomes <code>STALE</code> and is checked again when needed (<strong>NUD</strong>, Neighbor Unreachability Detection).</p>
+<p>Now it can send both the DNS query and all other internet traffic.</p>`},
+ try:[{cmd:"netsh interface ipv6 show neighbors",d:{ro:"Neighbor cache-ul tău (pe Linux: ip -6 neigh).",en:"Your neighbour cache (on Linux: ip -6 neigh)."}}]},
+
+{at:"lap",frame:T1,kind:"data",move:[[["lap","sw"]],[["sw","rtr"]]],tables:["hdr"],log:{ro:"laptop → router",en:"laptop → router"},who:"Laptop",
+ title:{ro:"Pachetul de date: un antet mai simplu",en:"The data packet: a simpler header"},
+ body:{ro:`<p>DNS-ul a răspuns cu <code>${WEB}</code>. Laptopul deschide o conexiune TCP spre portul 443. Pachetul pleacă spre MAC-ul routerului, cu IP-ul destinație al serverului, exact ca în IPv4.</p>
+<p>Antetul IPv6 e însă mai simplu (tabelul din dreapta): are mereu <strong>40 de octeți</strong>, nu are sumă de control, iar opțiunile rare au fost mutate în <strong>antete de extensie</strong>, legate prin câmpul <strong>Next Header</strong>. Routerele îl pot procesa mai repede.</p>`,
+ en:`<p>DNS answered <code>${WEB}</code>. The laptop opens a TCP connection to port 443. The packet goes to the router's MAC with the server's destination IP, exactly as in IPv4.</p>
+<p>The IPv6 header is simpler though (table on the right): it's always <strong>40 bytes</strong>, has no checksum, and rare options moved into <strong>extension headers</strong>, chained through the <strong>Next Header</strong> field. Routers can process it faster.</p>`}},
+
+{at:"rtr",frame:T2,kind:"data",move:[[["rtr","net"]],[["net","web"]]],log:{ro:"după router",en:"after the router"},who:"Router",
+ title:{ro:"Routerul: Hop Limit scade, MAC-urile se schimbă",en:"The router: Hop Limit drops, the MACs change"},
+ body:{ro:`<p>Routerul face exact ce făcea în IPv4: caută destinația în tabela de rutare, scade <strong>Hop Limit</strong> cu 1 (64 → 63) și pune MAC-uri noi pentru următorul link. Adresele IPv6 sursă și destinație rămân <strong>neschimbate</strong> pe tot drumul.</p>
+<p class="key">Și nu există NAT: serverul vede adresa reală a laptopului. Firewall-ul routerului lasă să intre doar răspunsurile la conexiuni pornite din interior.</p>`,
+ en:`<p>The router does exactly what it did in IPv4: looks up the destination in its routing table, decrements <strong>Hop Limit</strong> by 1 (64 → 63) and puts on new MACs for the next link. The source and destination IPv6 addresses stay <strong>unchanged</strong> all the way.</p>
+<p class="key">And there's no NAT: the server sees the laptop's real address. The router's firewall only lets in replies to connections started from inside.</p>`}},
+
+{at:["rtr","lap"],frame:PTB,kind:"ptb",move:[[["rtr","sw"]],[["sw","lap"]]],log:{ro:"Packet Too Big",en:"Packet Too Big"},who:"ICMPv6",
+ title:{ro:"Fragmentare: doar la sursă, și nu bloca ICMPv6",en:"Fragmentation: only at the source, and don't block ICMPv6"},
+ body:{ro:`<p>În IPv4, un router putea tăia un pachet prea mare în fragmente. În IPv6 routerele <strong>nu fragmentează</strong>. Dacă un pachet nu încape pe un link (de ex. un tunel cu MTU 1280), routerul îl aruncă și trimite înapoi un <strong>ICMPv6 Packet Too Big</strong> cu MTU-ul corect. Sursa micșorează pachetele (<strong>Path MTU Discovery</strong>).</p>
+<p class="key">De aceea ICMPv6 <strong>nu trebuie blocat</strong> în firewall. Fără el nu merg nici NDP, nici SLAAC, iar conexiunile cu pachete mari se „blochează” fără eroare (pagini care nu se încarcă până la capăt).</p>`,
+ en:`<p>In IPv4 a router could cut an oversized packet into fragments. In IPv6 routers <strong>don't fragment</strong>. If a packet doesn't fit a link (e.g. a tunnel with MTU 1280), the router drops it and sends back an <strong>ICMPv6 Packet Too Big</strong> with the correct MTU. The source makes its packets smaller (<strong>Path MTU Discovery</strong>).</p>
+<p class="key">That's why ICMPv6 <strong>must not be blocked</strong> in firewalls. Without it neither NDP nor SLAAC works, and connections with large packets "hang" without an error (pages that never finish loading).</p>`}},
+
+{at:["lap","rtr","web"],frame:null,kind:"none",summary:true,
+ title:{ro:"Recapitulare și tranziția de la IPv4",en:"Recap, and the transition from IPv4"},
+ body:{ro:`<div class="flow"><span>fe80:: + DAD</span><i>→</i><span>RS / RA</span><i>→</i><span>SLAAC</span><i>→</i><span>NDP</span><i>→</i><span>${"date"}</span></div>
+<ul><li>Adresele au 128 de biți și se scurtează cu reguli simple; prefixul e de obicei <code>/64</code>.</li>
+<li>Orice interfață are o adresă <strong>link-local</strong>, plus una sau mai multe <strong>globale</strong>.</li>
+<li><strong>Router Advertisement</strong> dă prefixul și gateway-ul; <strong>SLAAC</strong> construiește adresa.</li>
+<li><strong>NDP</strong> (ICMPv6) înlocuiește ARP; <strong>multicast</strong> înlocuiește broadcast-ul.</li>
+<li>Antet fix de 40 de octeți, Hop Limit în loc de TTL, fără fragmentare în routere.</li>
+<li>Fără NAT, dar cu firewall; nu bloca ICMPv6.</li></ul>
+<p>Rețelele care au doar IPv6 ajung la site-urile vechi, doar IPv4, prin <strong>NAT64 + DNS64</strong> (DNS-ul inventează o adresă AAAA din <code>64:ff9b::/96</code>, iar un gateway traduce). Telefoanele mobile folosesc des <strong>464XLAT</strong>.</p>
+<p><button type="button" class="btn primary" data-goto="quiz">Mergi la test ↓</button></p>`,
+ en:`<div class="flow"><span>fe80:: + DAD</span><i>→</i><span>RS / RA</span><i>→</i><span>SLAAC</span><i>→</i><span>NDP</span><i>→</i><span>data</span></div>
+<ul><li>Addresses have 128 bits and are shortened with simple rules; the prefix is usually <code>/64</code>.</li>
+<li>Every interface has a <strong>link-local</strong> address, plus one or more <strong>global</strong> ones.</li>
+<li>The <strong>Router Advertisement</strong> gives the prefix and gateway; <strong>SLAAC</strong> builds the address.</li>
+<li><strong>NDP</strong> (ICMPv6) replaces ARP; <strong>multicast</strong> replaces broadcast.</li>
+<li>A fixed 40-byte header, Hop Limit instead of TTL, no fragmentation in routers.</li>
+<li>No NAT, but a firewall; don't block ICMPv6.</li></ul>
+<p>IPv6-only networks reach old IPv4-only sites through <strong>NAT64 + DNS64</strong> (DNS makes up an AAAA address in <code>64:ff9b::/96</code> and a gateway translates). Mobile phones often use <strong>464XLAT</strong>.</p>
+<p><button type="button" class="btn primary" data-goto="quiz">Go to the quiz ↓</button></p>`}}
+],
+
+reference:(T,lang)=>{
+  const ro=lang==="ro";
+  const ex=[["2001:0db8:0000:0000:0000:0000:0000:0001","2001:db8::1"],["fe80:0000:0000:0000:3e22:fbff:fe10:000a","fe80::3e22:fbff:fe10:a"],["2001:0db8:0004:0001:0000:0000:0000:0000","2001:db8:4:1::"],["0000:0000:0000:0000:0000:0000:0000:0001","::1"]];
+  let h=`<div class="ref-grid"><section class="card refcard"><h2>${ro?"Scrierea scurtă":"Short notation"}</h2><div class="scroll"><table class="cmp" style="min-width:460px"><thead><tr><th>${ro?"Complet":"Full"}</th><th>${ro?"Scurt":"Short"}</th></tr></thead><tbody>`;
+  ex.forEach(r=>{h+=`<tr><td><code>${r[0]}</code></td><td><b><code>${r[1]}</code></b></td></tr>`});
+  h+=`</tbody></table></div><p>${ro?"<code>::</code> poate apărea o singură dată. Într-un URL, adresa stă între paranteze drepte: <code>https://[2001:db8::1]:8443/</code>.":"<code>::</code> may appear only once. In a URL the address goes in square brackets: <code>https://[2001:db8::1]:8443/</code>."}</p></section>`;
+  h+=`<section class="card refcard"><h2>${ro?"Comenzi utile":"Useful commands"}</h2>
+<pre class="yaml"><span class="c"># Windows</span>
+ipconfig
+netsh interface ipv6 show neighbors
+ping -6 www.google.com
+<span class="c"># Linux / macOS</span>
+ip -6 addr
+ip -6 route
+ip -6 neigh
+ping -6 www.google.com
+traceroute -6 www.google.com
+<span class="c"># ${ro?"testează dacă ai IPv6 funcțional":"check whether IPv6 works"}</span>
+curl -6 https://ifconfig.co</pre></section></div>`;
+  return h;
+},
+
+gloss:[
+ ["IPv6","Internet Protocol version 6",{ro:"Versiunea IP cu adrese de 128 de biți.",en:"The IP version with 128-bit addresses."}],
+ [{ro:"Prefix /64",en:"/64 prefix"},null,{ro:"Primii 64 de biți: rețeaua. Ultimii 64: interfața.",en:"The first 64 bits: the network. The last 64: the interface."}],
+ ["Link-local","fe80::/10",{ro:"Adresă valabilă doar pe segmentul local; o are orice interfață IPv6.",en:"An address valid only on the local segment; every IPv6 interface has one."}],
+ ["GUA","Global Unicast Address",{ro:"Adresă publică, rutată pe internet (din 2000::/3).",en:"A public address, routed on the internet (from 2000::/3)."}],
+ ["ULA","Unique Local Address",{ro:"Adresă privată pentru uz intern (fc00::/7).",en:"A private address for internal use (fc00::/7)."}],
+ ["Multicast","ff00::/8",{ro:"Pachet trimis unui grup de interfețe; înlocuiește broadcast-ul.",en:"A packet sent to a group of interfaces; replaces broadcast."}],
+ ["Solicited-node",null,{ro:"Grup multicast ff02::1:ffXX:XXXX format din ultimii 24 de biți ai unei adrese.",en:"The ff02::1:ffXX:XXXX multicast group built from an address's last 24 bits."}],
+ ["NDP","Neighbor Discovery Protocol",{ro:"Mesaje ICMPv6 care înlocuiesc ARP și găsesc routerele.",en:"ICMPv6 messages that replace ARP and find routers."}],
+ ["RS / RA","Router Solicitation / Advertisement",{ro:"Cererea „e vreun router?” și anunțul routerului cu prefixul.",en:"The \"any routers?\" request and the router's announcement with the prefix."}],
+ ["NS / NA","Neighbor Solicitation / Advertisement",{ro:"Întrebarea „cine are adresa X?” și răspunsul cu MAC-ul.",en:"The \"who has address X?\" question and the reply with the MAC."}],
+ ["DAD","Duplicate Address Detection",{ro:"Verificarea că o adresă nouă nu e deja folosită.",en:"Checking that a new address isn't already in use."}],
+ ["SLAAC","Stateless Address Autoconfiguration",{ro:"Calculatorul își construiește singur adresa din prefixul primit.",en:"The computer builds its own address from the prefix it received."}],
+ ["DHCPv6",null,{ro:"Server care dă adrese și setări IPv6, ca DHCP la IPv4.",en:"A server handing out IPv6 addresses and settings, like DHCP in IPv4."}],
+ ["Hop Limit",null,{ro:"Câte routere mai poate traversa pachetul (ca TTL).",en:"How many more routers the packet may cross (like TTL)."}],
+ ["AAAA",null,{ro:"Înregistrarea DNS cu adresa IPv6 a unui nume.",en:"The DNS record holding a name's IPv6 address."}],
+ ["Dual-stack",null,{ro:"IPv4 și IPv6 merg în paralel pe aceeași rețea.",en:"IPv4 and IPv6 running in parallel on the same network."}],
+ ["NAT64 / DNS64",null,{ro:"Permit rețelelor doar IPv6 să ajungă la servere doar IPv4.",en:"Let IPv6-only networks reach IPv4-only servers."}],
+ ["PMTUD","Path MTU Discovery",{ro:"Sursa află cel mai mare pachet care încape pe drum, din mesaje Packet Too Big.",en:"The source learns the largest packet that fits the path, from Packet Too Big messages."}]
+],
+glossEx:{
+ "IPv6":{ro:"2001:db8:4:1::1",en:"2001:db8:4:1::1"},
+ "/64 prefix":{ro:"2001:db8:4:1::/64 conține 2^64 adrese.",en:"2001:db8:4:1::/64 holds 2^64 addresses."},
+ "Link-local":{ro:"fe80::1 e gateway-ul implicit în majoritatea rețelelor.",en:"fe80::1 is the default gateway on most networks."},
+ "GUA":{ro:"2001:db8:4:1:8d3a:2c71:9b4e:5f10",en:"2001:db8:4:1:8d3a:2c71:9b4e:5f10"},
+ "ULA":{ro:"fd12:3456:789a::/48 în rețeaua unei firme.",en:"fd12:3456:789a::/48 in a company network."},
+ "Multicast":{ro:"ff02::1 = toate nodurile de pe link; ff02::2 = toate routerele.",en:"ff02::1 = all nodes on the link; ff02::2 = all routers."},
+ "Solicited-node":{ro:"pentru fe80::1 → ff02::1:ff00:1.",en:"for fe80::1 → ff02::1:ff00:1."},
+ "NDP":{ro:"ip -6 neigh arată ce a aflat NDP.",en:"ip -6 neigh shows what NDP has learned."},
+ "RS / RA":{ro:"RA: „prefixul e 2001:db8:4:1::/64, eu sunt gateway-ul”.",en:"RA: \"the prefix is 2001:db8:4:1::/64, I'm the gateway\"."},
+ "NS / NA":{ro:"NA: „fe80::1 e la 00:1a:2b:3c:4d:01”.",en:"NA: \"fe80::1 is at 00:1a:2b:3c:4d:01\"."},
+ "DAD":{ro:"NS cu sursa :: pentru propria adresă.",en:"An NS with source :: for one's own address."},
+ "SLAAC":{ro:"prefix 2001:db8:4:1:: + identificator 8d3a:2c71:9b4e:5f10.",en:"prefix 2001:db8:4:1:: + identifier 8d3a:2c71:9b4e:5f10."},
+ "DHCPv6":{ro:"flag-ul M=1 din RA cere DHCPv6.",en:"the M=1 flag in the RA asks for DHCPv6."},
+ "Hop Limit":{ro:"pleacă cu 64; după primul router e 63.",en:"starts at 64; after the first router it's 63."},
+ "AAAA":{ro:"www.example.com AAAA 2001:db8:beef::80",en:"www.example.com AAAA 2001:db8:beef::80"},
+ "Dual-stack":{ro:"ipconfig arată și 192.168.1.10, și 2001:db8:…",en:"ipconfig shows both 192.168.1.10 and 2001:db8:…"},
+ "NAT64 / DNS64":{ro:"64:ff9b::c000:221 = 192.0.2.33 văzut din IPv6.",en:"64:ff9b::c000:221 = 192.0.2.33 seen from IPv6."},
+ "PMTUD":{ro:"Packet Too Big cu MTU 1280 → sursa trimite pachete mai mici.",en:"Packet Too Big with MTU 1280 → the source sends smaller packets."}
+},
+
+quiz:[
+ {q:{ro:"Care e forma scurtă corectă pentru 2001:0db8:0000:0000:0000:0000:0000:0001?",en:"What's the correct short form of 2001:0db8:0000:0000:0000:0000:0000:0001?"},o:["2001:db8::1","2001:db8:0:1","2001::db8::1","21:db8::1"],a:0,e:{ro:"Zerourile de la început se omit, iar grupurile zero consecutive devin o singură dată ::.",en:"Leading zeros are dropped and consecutive zero groups become :: once."}},
+ {q:{ro:"Ce adresă își face laptopul imediat, fără router?",en:"Which address does the laptop create right away, without a router?"},o:[{ro:"O adresă link-local fe80::",en:"A link-local fe80:: address"},{ro:"O adresă globală 2001:",en:"A global 2001: address"},{ro:"Niciuna",en:"None"},{ro:"O adresă IPv4",en:"An IPv4 address"}],a:0,e:{ro:"Link-local merge doar pe segmentul local, dar nu are nevoie de nimeni.",en:"Link-local only works on the local segment but needs nobody."}},
+ {q:{ro:"De la cine află laptopul prefixul rețelei în SLAAC?",en:"Where does the laptop learn the network prefix in SLAAC?"},o:[{ro:"Din Router Advertisement",en:"From the Router Advertisement"},{ro:"Din DNS",en:"From DNS"},{ro:"Din ARP",en:"From ARP"},{ro:"Îl ghicește",en:"It guesses"}],a:0,e:{ro:"RA conține prefixul, gateway-ul și adesea DNS-ul.",en:"The RA contains the prefix, the gateway and often the DNS."}},
+ {q:{ro:"Ce înlocuiește ARP în IPv6?",en:"What replaces ARP in IPv6?"},o:[{ro:"NDP: Neighbor Solicitation / Advertisement (ICMPv6)",en:"NDP: Neighbor Solicitation / Advertisement (ICMPv6)"},{ro:"DHCPv6",en:"DHCPv6"},{ro:"Tot ARP",en:"Still ARP"},{ro:"DNS",en:"DNS"}],a:0,e:{ro:"NDP folosește multicast solicited-node, nu broadcast.",en:"NDP uses solicited-node multicast, not broadcast."}},
+ {q:{ro:"Ce face DAD?",en:"What does DAD do?"},o:[{ro:"Verifică să nu mai folosească nimeni adresa nouă",en:"Checks nobody else uses the new address"},{ro:"Criptează adresa",en:"Encrypts the address"},{ro:"Cere adresa de la server",en:"Requests the address from a server"},{ro:"Șterge adresele vechi",en:"Deletes old addresses"}],a:0,e:{ro:"Trimite un NS pentru propria adresă; dacă răspunde cineva, e dublură.",en:"It sends an NS for its own address; if someone answers, it's a duplicate."}},
+ {q:{ro:"Un router IPv6 primește un pachet prea mare pentru următorul link. Ce face?",en:"An IPv6 router gets a packet too big for the next link. What does it do?"},o:[{ro:"Îl aruncă și trimite înapoi ICMPv6 Packet Too Big",en:"Drops it and sends back ICMPv6 Packet Too Big"},{ro:"Îl fragmentează",en:"Fragments it"},{ro:"Îl trimite oricum",en:"Sends it anyway"},{ro:"Îl comprimă",en:"Compresses it"}],a:0,e:{ro:"În IPv6 doar sursa fragmentează; routerele nu.",en:"In IPv6 only the source fragments; routers don't."}},
+ {q:{ro:"De ce nu trebuie blocat ICMPv6 în firewall?",en:"Why must ICMPv6 not be blocked in a firewall?"},o:[{ro:"Fără el nu merg NDP, SLAAC și Path MTU Discovery",en:"Without it NDP, SLAAC and Path MTU Discovery don't work"},{ro:"Pentru că e criptat",en:"Because it's encrypted"},{ro:"Pentru că e doar ping",en:"Because it's only ping"},{ro:"Se poate bloca fără probleme",en:"It can be blocked safely"}],a:0,e:{ro:"ICMPv6 e o parte esențială a IPv6, nu doar ping.",en:"ICMPv6 is an essential part of IPv6, not just ping."}},
+ {q:{ro:"Ce face Happy Eyeballs?",en:"What does Happy Eyeballs do?"},o:[{ro:"Încearcă IPv6 și, dacă întârzie, și IPv4; câștigă prima conexiune reușită",en:"Tries IPv6 and, if it's slow, IPv4 too; the first successful connection wins"},{ro:"Dezactivează IPv4",en:"Disables IPv4"},{ro:"Criptează DNS-ul",en:"Encrypts DNS"},{ro:"Alege cel mai apropiat server",en:"Picks the nearest server"}],a:0,e:{ro:"Așa un IPv6 stricat nu încetinește navigarea.",en:"That way a broken IPv6 doesn't slow browsing."}}
+]
+};
+})();
+</script>
+<script src="../assets/engine.js"></script>
+<script type="module" src="../assets/auth.js?v=3"></script>
+</body>
+</html>

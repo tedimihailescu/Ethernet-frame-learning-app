@@ -43,3 +43,6 @@
 .refcard h3{font-family:var(--head);font-size:1rem;margin:14px 0 6px}
 .refcard h3:first-child{margin-top:0}
 .refcard p{max-width:72ch}
+
+/* long addresses, trace ids and metric names must wrap on phones */
+.q .t,.gl dd,.gl dt,#exp code,.more-body code{overflow-wrap:anywhere}
