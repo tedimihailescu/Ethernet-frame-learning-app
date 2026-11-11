@@ -83,7 +83,7 @@ const UI={
   eyebrow:{ro:"Lecții interactive · gratuite · RO / EN",en:"Interactive lessons · free · RO / EN"},
   h1:{ro:"Înțelege rețelele urmărind pachetele, pas cu pas",en:"Understand networks by following the packets, step by step"},
   sub:{ro:"Fiecare lecție e o simulare animată: vezi ce face fiecare dispozitiv și ce câmpuri se schimbă la fiecare hop. Pornești de la cadrul Ethernet și ajungi la Service-urile din Kubernetes.",en:"Each lesson is an animated simulation: see what every device does and which fields change at every hop. You start with the Ethernet frame and end with Kubernetes Services."},
-  meta:[{ro:"3 lecții",en:"3 lessons"},{ro:"47 de pași",en:"47 steps"},{ro:"36 de întrebări",en:"36 questions"},{ro:"fără cont, fără instalări",en:"no account, no install"}],
+  meta:[{ro:"3 lecții",en:"3 lessons"},{ro:"49 de pași",en:"49 steps"},{ro:"39 de întrebări",en:"39 questions"},{ro:"fără cont, fără instalări",en:"no account, no install"}],
   how:[["▶",{ro:"Simulare pas cu pas",en:"Step-by-step simulation"},{ro:"Înainte, înapoi sau redare automată, cu animația pachetului pe diagramă.",en:"Forward, back or auto-play, with the packet animated on the diagram."}],
        ["≡",{ro:"Pachetul „live”",en:"The \"live\" packet"},{ro:"Câmpurile noi, schimbate sau eliminate sunt colorate la fiecare pas.",en:"New, changed or removed fields are coloured at every step."}],
        [">_",{ro:"Comenzi reale",en:"Real commands"},{ro:"La fiecare lecție: comenzi de încercat pe Windows sau într-un cluster.",en:"In every lesson: commands to try on Windows or in a cluster."}]],
@@ -108,10 +108,10 @@ const LESSONS=[
   t:{ro:"Cum funcționează DNS",en:"How DNS works"},
   d:{ro:"Cum devine www.example.com o adresă IP: resolver, server rădăcină, .com, server autoritar și cache.",en:"How www.example.com becomes an IP address: resolver, root server, .com, authoritative server and caching."},
   topics:[{ro:"Recursiv vs. iterativ",en:"Recursive vs. iterative"},{ro:"Înregistrări A, NS, CNAME, MX, TXT",en:"A, NS, CNAME, MX, TXT records"},{ro:"TTL și cache",en:"TTL and caching"}]},
- {href:"kubernetes/index.html",ill:"k8s",lvl:{ro:"Intermediar",en:"Intermediate"},stats:{ro:"16 pași · ≈ 20 min",en:"16 steps · ≈ 20 min"},
+ {href:"kubernetes/index.html",ill:"k8s",lvl:{ro:"Intermediar",en:"Intermediate"},stats:{ro:"18 pași · ≈ 25 min · simulator DNS",en:"18 steps · ≈ 25 min · DNS simulator"},
   t:{ro:"Kubernetes: Service-uri și DNS în cluster",en:"Kubernetes: Services and cluster DNS"},
   d:{ro:"Un pod cheamă „backend”: CoreDNS, ClusterIP, kube-proxy și DNAT, trecerea între noduri, NodePort și LoadBalancer.",en:"A pod calls \"backend\": CoreDNS, ClusterIP, kube-proxy and DNAT, crossing nodes, NodePort and LoadBalancer."},
-  topics:[{ro:"Cluster, noduri, pod-uri, etichete",en:"Cluster, nodes, pods, labels"},{ro:"ClusterIP, NodePort, LoadBalancer, headless",en:"ClusterIP, NodePort, LoadBalancer, headless"},{ro:"Nume DNS: backend.shop.svc.cluster.local",en:"DNS names: backend.shop.svc.cluster.local"}]}
+  topics:[{ro:"Cluster, noduri, pod-uri, etichete",en:"Cluster, nodes, pods, labels"},{ro:"ClusterIP în detaliu, NodePort, LoadBalancer, headless",en:"ClusterIP in depth, NodePort, LoadBalancer, headless"},{ro:"CoreDNS, lista search și ndots, Corefile, dnsPolicy",en:"CoreDNS, the search list and ndots, Corefile, dnsPolicy"},{ro:"Depanarea DNS-ului din cluster",en:"Troubleshooting cluster DNS"}]}
 ];
 const SOON=[["VLAN",{ro:"Cum împarte un switch mai multe rețele, cu etichete 802.1Q.",en:"How one switch carries several networks with 802.1Q tags."}],
  ["NAT",{ro:"Cum ies mai multe calculatoare pe internet cu un singur IP public.",en:"How many computers share one public IP on the internet."}],
