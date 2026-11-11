@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kubernetes Services</title>
+<meta name="description" content="Lecție interactivă: cum găsește un pod un Service în Kubernetes (CoreDNS), cum rescrie kube-proxy adresele și cum intră traficul din afară. / Interactive lesson on Kubernetes Services, kube-proxy and cluster DNS.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<script>
+(function(){
+const IP={fe:"10.244.1.5",bk1:"10.244.1.8",bk2:"10.244.2.7",dns:"10.244.2.3",sdns:"10.96.0.10",sbk:"10.96.45.10",lb:"198.51.100.20",n1:"10.0.0.11",n2:"10.0.0.12",user:"203.0.113.25"};
+const FQDN="backend.shop.svc.cluster.local";
+const DQ={qname:FQDN,qtype:"A",srcIp:IP.fe,dstIp:IP.sdns,proto:"UDP",srcPort:"53124",dstPort:"53"};
+const DR={qname:FQDN,qtype:"A",answer:"A "+IP.sbk,ttlDns:"30 s",srcIp:IP.dns,dstIp:IP.fe,proto:"UDP",srcPort:"53",dstPort:"53124"};
+const H1={srcIp:IP.fe,dstIp:IP.sbk,proto:"TCP",srcPort:"41000",dstPort:"80",req:"GET /api/products",host:"backend"};
+const R1={srcIp:IP.bk2,dstIp:IP.fe,proto:"TCP",srcPort:"8080",dstPort:"41000",status:"200 OK",body:'[{"id":1,"name":"Laptop"}, …]'};
+const E1={srcIp:IP.user,dstIp:IP.lb,proto:"TCP",srcPort:"52811",dstPort:"80",req:"GET /api/products",host:"shop.example.com"};
+const DIRECT={ro:"direct (pe acest nod)",en:"direct (on this node)"};
+
+window.LESSON={
+docTitle:{ro:"Kubernetes Services",en:"Kubernetes Services"},
+eyebrow:{ro:"Lecție interactivă · Kubernetes",en:"Interactive lesson · Kubernetes"},
+title:{ro:"Kubernetes: cum găsește un pod un Service",en:"Kubernetes: how a pod finds a Service"},
+sub:{ro:"Urmărește o cerere de la podul frontend la backend: întrebarea DNS către CoreDNS, rescrierea adreselor de către kube-proxy, trecerea între noduri și traficul care vine din internet.",en:"Follow a request from the frontend pod to the backend: the DNS question to CoreDNS, address rewriting by kube-proxy, crossing between nodes, and traffic arriving from the internet."},
+meta:[{ro:"≈ 20 minute",en:"≈ 20 minutes"},{ro:"16 pași",en:"16 steps"},{ro:"7 întrebări",en:"7 questions"},{ro:"Intermediar",en:"Intermediate"}],
+goals:[{ro:"Ce sunt cluster-ul, nodurile, pod-urile și Service-urile",en:"What clusters, nodes, pods and Services are"},{ro:"Cum transformă CoreDNS numele „backend” într-un IP",en:"How CoreDNS turns the name \"backend\" into an IP"},{ro:"Cum alege kube-proxy un pod și rescrie destinația (DNAT)",en:"How kube-proxy picks a pod and rewrites the destination (DNAT)"},{ro:"Diferența dintre ClusterIP, NodePort și LoadBalancer",en:"The difference between ClusterIP, NodePort and LoadBalancer"}],
+foot:{ro:"Adresele IP și numele sunt exemple. Comportamentul descris e cel implicit (kube-proxy în modul iptables, CoreDNS, domeniul cluster.local).",en:"IP addresses and names are examples. The behaviour described is the default (kube-proxy in iptables mode, CoreDNS, the cluster.local domain)."},
+ui:{refT:{ro:"Tipuri de Service și DNS în cluster",en:"Service types and DNS in the cluster"},refLead:{ro:"Cele cinci feluri de Service, cum arată în YAML și ce nume DNS primește fiecare.",en:"The five kinds of Service, how they look in YAML, and which DNS names each one gets."}},
+tryT:{ro:"Încearcă într-un cluster (minikube, kind sau Docker Desktop)",en:"Try it in a cluster (minikube, kind or Docker Desktop)"},
+legend:[["lg-arp","DNS",{ro:"întrebare / răspuns DNS",en:"DNS query / answer"}],["lg-app","HTTP",{ro:"cerere HTTP",en:"HTTP request"}],["lg-tcp","HTTP",{ro:"răspuns HTTP",en:"HTTP response"}],["lg-ip","- - -",{ro:"legătură virtuală (prin Service)",en:"virtual link (via a Service)"}]],
+
+nodes:{
+  fe:{type:"pod",name:"frontend",lines:[IP.fe]},
+  bk1:{type:"pod",name:"backend-7d9f",lines:[IP.bk1+":8080"]},
+  sdns:{type:"svc",name:"svc/kube-dns",lines:[IP.sdns+":53"]},
+  sbk:{type:"svc",name:"svc/backend",lines:[IP.sbk+":80"]},
+  cdns:{type:"pod",name:"coredns",lines:[IP.dns+":53"]},
+  bk2:{type:"pod",name:"backend-x2k4",lines:[IP.bk2+":8080"]},
+  user:{type:"user",name:{ro:"Client extern",en:"External client"},lines:[IP.user]},
+  lb:{type:"svc",name:"LoadBalancer",lines:[IP.lb+":80"]}
+},
+links:[["fe","sdns","virt"],["sdns","cdns","virt"],["fe","sbk","virt"],["sbk","bk1","virt"],["sbk","bk2","virt"],["user","lb"],["lb","bk2"]],
+layouts:{
+  wide:{vb:[0,0,1000,490],n:{fe:[175,110],bk1:[175,262],sdns:[500,110],sbk:[500,262],cdns:[825,110],bk2:[825,262],user:[330,418],lb:[660,418]},
+    zones:[{x:10,y:20,w:330,h:330,top:true,l:{ro:"node-1 · 10.0.0.11 · pod-uri 10.244.1.0/24",en:"node-1 · 10.0.0.11 · pods 10.244.1.0/24"}},
+      {x:350,y:20,w:300,h:330,top:true,cls:"virt",l:{ro:"Services · IP-uri virtuale",en:"Services · virtual IPs"}},
+      {x:660,y:20,w:330,h:330,top:true,l:{ro:"node-2 · 10.0.0.12 · pod-uri 10.244.2.0/24",en:"node-2 · 10.0.0.12 · pods 10.244.2.0/24"}}],
+    texts:[{x:500,y:378,t:{ro:"din afara cluster-ului",en:"from outside the cluster"}}]},
+  narrow:{vb:[0,0,360,700],n:{fe:[60,80],bk1:[215,80],sdns:[60,270],sbk:[215,270],cdns:[60,460],bk2:[215,460],user:[60,625],lb:[215,625]},
+    side:{fe:"right",bk1:"right",sdns:"right",sbk:"right",cdns:"right",bk2:"right",lb:"right"},
+    zones:[{x:4,y:10,w:352,h:150,top:true,l:{ro:"node-1 · pod-uri 10.244.1.0/24",en:"node-1 · pods 10.244.1.0/24"}},
+      {x:4,y:200,w:352,h:150,top:true,cls:"virt",l:{ro:"Services · IP-uri virtuale",en:"Services · virtual IPs"}},
+      {x:4,y:390,w:352,h:150,top:true,l:{ro:"node-2 · pod-uri 10.244.2.0/24",en:"node-2 · pods 10.244.2.0/24"}}],
+    texts:[{x:180,y:568,t:{ro:"din afara cluster-ului",en:"from outside the cluster"}}]}
+},
+groups:[
+  {id:"dns",color:"arp",fields:["qname","qtype","answer","ttlDns"],name:{ro:"Mesaj DNS",en:"DNS message"},short:"DNS",grow:4},
+  {id:"ip",color:"l3",fields:["srcIp","dstIp"],name:{ro:"Antet IP (L3)",en:"IP header (L3)"},short:"IP",grow:3},
+  {id:"l4",color:"l4",fields:["proto","srcPort","dstPort"],name:{ro:"Transport (L4)",en:"Transport (L4)"},short:"TCP/UDP",grow:2},
+  {id:"http",color:"l7",fields:["req","host","status","body"],name:{ro:"HTTP (L7)",en:"HTTP (L7)"},short:"HTTP",grow:4}
+],
+fieldLabels:{qname:{ro:"Nume întrebat",en:"Queried name"},qtype:{ro:"Tip înregistrare",en:"Record type"},answer:{ro:"Răspuns",en:"Answer"},ttlDns:{ro:"TTL DNS",en:"DNS TTL"},
+  srcIp:{ro:"IP sursă",en:"Source IP"},dstIp:{ro:"IP destinație",en:"Destination IP"},proto:"Protocol",srcPort:{ro:"Port sursă",en:"Source port"},dstPort:{ro:"Port destinație",en:"Destination port"},
+  req:{ro:"Cerere",en:"Request"},host:{ro:"Antet Host",en:"Host header"},status:{ro:"Stare",en:"Status"},body:{ro:"Conținut",en:"Body"}},
+pdu:f=>f.qname?{badge:f.answer?{ro:"Răspuns DNS",en:"DNS answer"}:{ro:"Întrebare DNS",en:"DNS query"},tok:["DNS","k-arp"]}
+  :f.status?{badge:{ro:"Răspuns HTTP",en:"HTTP response"},tok:["HTTP","k-tcp"]}:{badge:{ro:"Cerere HTTP",en:"HTTP request"},tok:["HTTP","k-app"]},
+
+init:{conntrack:[]},
+tables:{
+  svcs:{title:{ro:"Service-uri (kubectl get svc)",en:"Services (kubectl get svc)"},cols:[{ro:"Nume",en:"Name"},{ro:"Tip",en:"Type"},"ClusterIP",{ro:"IP extern",en:"External IP"},{ro:"Port",en:"Port"},"Selector"],
+    rows:()=>[["kube-dns","ClusterIP",IP.sdns,"—","53/UDP","k8s-app=kube-dns"],["backend","ClusterIP",IP.sbk,"—","80 → 8080","app=backend"],["backend-public","LoadBalancer","10.96.77.3",IP.lb,"80:30080 → 8080","app=backend"]]},
+  eps:{title:{ro:"EndpointSlice pentru „backend”",en:"EndpointSlice for \"backend\""},cols:["Pod",{ro:"IP:port",en:"IP:port"},"Node",{ro:"Gata",en:"Ready"}],
+    rows:()=>[["backend-7d9f",IP.bk1+":8080","node-1","true"],["backend-x2k4",IP.bk2+":8080","node-2","true"]]},
+  resolv:{title:{ro:"/etc/resolv.conf în podul frontend",en:"/etc/resolv.conf in the frontend pod"},cols:[{ro:"Linie",en:"Line"},{ro:"Valoare",en:"Value"}],
+    rows:()=>[["nameserver",IP.sdns],["search","shop.svc.cluster.local svc.cluster.local cluster.local"],["options","ndots:5"]]},
+  rules:{title:{ro:"Reguli kube-proxy pe node-1 (iptables)",en:"kube-proxy rules on node-1 (iptables)"},cols:[{ro:"Dacă destinația e",en:"If the destination is"},{ro:"Rescrie către",en:"Rewrite to"}],
+    rows:()=>[[IP.sdns+":53",IP.dns+":53"],[IP.sbk+":80",{ro:"50% → "+IP.bk1+":8080 · 50% → "+IP.bk2+":8080",en:"50% → "+IP.bk1+":8080 · 50% → "+IP.bk2+":8080"}]]},
+  records:{title:{ro:"Înregistrări servite de CoreDNS",en:"Records served by CoreDNS"},cols:[{ro:"Nume",en:"Name"},{ro:"Tip",en:"Type"},{ro:"Valoare",en:"Value"}],
+    rows:()=>[[FQDN,"A",IP.sbk],["backend-public.shop.svc.cluster.local","A","10.96.77.3"],["kube-dns.kube-system.svc.cluster.local","A",IP.sdns]]},
+  conntrack:{title:{ro:"conntrack pe node-1 (conexiuni ținute minte)",en:"conntrack on node-1 (remembered connections)"},cols:[{ro:"Conexiune originală",en:"Original connection"},{ro:"Rescrisă către",en:"Rewritten to"}]},
+  routes:{title:{ro:"Rute pe node-1",en:"Routes on node-1"},cols:[{ro:"Rețea",en:"Network"},{ro:"Cum ajunge",en:"How it gets there"}],
+    rows:()=>[["10.244.1.0/24",DIRECT],["10.244.2.0/24",{ro:"prin "+IP.n2+" (node-2)",en:"via "+IP.n2+" (node-2)"}],["10.96.0.0/12",{ro:"nu e o rețea reală: kube-proxy rescrie aceste IP-uri",en:"not a real network: kube-proxy rewrites these IPs"}]]}
+},
+log:{title:{ro:"Jurnalul pachetelor",en:"Packet log"},lead:{ro:"Galben = destinația, care e rescrisă de kube-proxy. Albastru = sursa. Podul frontend vede mereu doar IP-ul Service-ului.",en:"Yellow = destination, which kube-proxy rewrites. Blue = source. The frontend pod only ever sees the Service IP."},
+  first:{ro:"Moment",en:"Moment"},minWidth:620,
+  cols:[{h:{ro:"Sursă",en:"Source"},v:f=>f.srcIp+":"+f.srcPort,cls:"ip"},{h:{ro:"Destinație",en:"Destination"},v:f=>f.dstIp+":"+f.dstPort,cls:"mac"},{h:"Proto",v:f=>f.proto},{h:{ro:"Conținut",en:"Content"},v:f=>f.answer||f.status||f.req||f.qname}]},
+
+steps:[
+{at:["fe","sbk"],frame:null,kind:"none",tables:["svcs"],
+ title:{ro:"Scenariul",en:"The scenario"},
+ body:{ro:`<p>Un <strong>cluster Kubernetes</strong> are două mașini (<strong>noduri</strong>): node-1 și node-2. Pe ele rulează <strong>pod-uri</strong>, adică containerele aplicației, fiecare cu IP-ul lui.</p>
+<p>În namespace-ul <code>shop</code>, podul <strong>frontend</strong> vrea lista de produse de la <strong>backend</strong>. Backend-ul rulează în <strong>2 copii</strong> (backend-7d9f și backend-x2k4), pe noduri diferite.</p>
+<p>Problema: pod-urile se mută și se recreează des, iar la fiecare recreare primesc alt IP. Frontend-ul nu poate ține minte IP-uri. Soluția e un <strong>Service</strong>: un nume și un IP care rămân fixe, în fața unui grup de pod-uri.</p>`,
+ en:`<p>A <strong>Kubernetes cluster</strong> has two machines (<strong>nodes</strong>): node-1 and node-2. They run <strong>pods</strong>, the application's containers, each with its own IP.</p>
+<p>In the <code>shop</code> namespace, the <strong>frontend</strong> pod wants the product list from the <strong>backend</strong>. The backend runs as <strong>2 copies</strong> (backend-7d9f and backend-x2k4), on different nodes.</p>
+<p>The problem: pods are moved and recreated often, and each recreation gets a new IP. The frontend can't keep track of IPs. The solution is a <strong>Service</strong>: a name and an IP that stay fixed, in front of a group of pods.</p>`},
+ more:{ro:`<p>Componentele care fac posibilă povestea:</p><ul><li><strong>API server</strong>: „creierul” cluster-ului; toate celelalte componente îi cer informații.</li><li><strong>kubelet</strong>: pe fiecare nod, pornește și supraveghează pod-urile.</li><li><strong>kube-proxy</strong>: pe fiecare nod, transformă Service-urile în reguli de rețea (iptables sau IPVS).</li><li><strong>CoreDNS</strong>: serverul DNS intern al cluster-ului.</li><li><strong>CNI</strong> (de ex. Calico, Flannel, Cilium): dă IP-uri pod-urilor și le leagă între noduri.</li></ul>`,
+  en:`<p>The components that make this story work:</p><ul><li><strong>API server</strong>: the cluster's "brain"; every other component asks it for information.</li><li><strong>kubelet</strong>: on each node, starts and watches the pods.</li><li><strong>kube-proxy</strong>: on each node, turns Services into network rules (iptables or IPVS).</li><li><strong>CoreDNS</strong>: the cluster's internal DNS server.</li><li><strong>CNI</strong> (e.g. Calico, Flannel, Cilium): gives pods their IPs and connects them across nodes.</li></ul>`},
+ try:[{cmd:"kubectl get pods -n shop -o wide",d:{ro:"Listează pod-urile, cu IP-ul și nodul fiecăruia.",en:"Lists the pods, with each one's IP and node."}},{cmd:"kubectl get svc -n shop",d:{ro:"Listează Service-urile din namespace.",en:"Lists the Services in the namespace."}}]},
+
+{at:"sbk",frame:null,kind:"none",tables:["eps"],hl:{eps:["backend-7d9f","backend-x2k4"]},who:"Service backend",
+ title:{ro:"Service-ul și pod-urile lui: etichete și selector",en:"The Service and its pods: labels and selector"},
+ body:{ro:`<p>Cum știe Service-ul <code>backend</code> ce pod-uri să folosească? Prin <strong>etichete</strong> (labels). Fiecare pod backend are eticheta <code>app=backend</code>, iar Service-ul are <strong>selectorul</strong> <code>app=backend</code>.</p>
+<p>Kubernetes caută continuu pod-urile care se potrivesc și sunt <strong>gata</strong> (readiness probe trecut) și le scrie într-un <strong>EndpointSlice</strong>: lista cu IP:port-urile reale.</p>
+<p class="key">Service-ul nu e un program și nu e o mașină. E doar o <strong>înregistrare</strong> în API: un IP virtual + lista de pod-uri din spatele lui.</p>`,
+ en:`<p>How does the <code>backend</code> Service know which pods to use? Through <strong>labels</strong>. Every backend pod has the label <code>app=backend</code>, and the Service has the <strong>selector</strong> <code>app=backend</code>.</p>
+<p>Kubernetes continuously looks for pods that match and are <strong>ready</strong> (readiness probe passed) and writes them into an <strong>EndpointSlice</strong>: the list of real IP:ports.</p>
+<p class="key">A Service is not a program and not a machine. It's just a <strong>record</strong> in the API: a virtual IP + the list of pods behind it.</p>`},
+ more:{ro:`<p>Dacă un pod pică testul de readiness, iese automat din EndpointSlice și nu mai primește trafic, deși încă rulează. Când se recuperează, intră înapoi. Așa faci actualizări fără întreruperi: pod-urile noi primesc trafic doar când sunt pregătite.</p><p>Observă și porturile: Service-ul ascultă pe <code>80</code> (<em>port</em>), dar containerele pe <code>8080</code> (<em>targetPort</em>).</p>`,
+  en:`<p>If a pod fails its readiness check, it automatically leaves the EndpointSlice and stops getting traffic, even though it's still running. When it recovers, it's added back. That's how you do updates without downtime: new pods only receive traffic once they're ready.</p><p>Note the ports too: the Service listens on <code>80</code> (<em>port</em>), but the containers on <code>8080</code> (<em>targetPort</em>).</p>`},
+ try:[{cmd:"kubectl get endpointslices -n shop -l kubernetes.io/service-name=backend",d:{ro:"Arată IP-urile pod-urilor din spatele Service-ului.",en:"Shows the pod IPs behind the Service."}},{cmd:"kubectl get pods -n shop -l app=backend --show-labels",d:{ro:"Pod-urile care au eticheta app=backend.",en:"Pods that have the label app=backend."}}]},
+
+{at:"fe",frame:null,kind:"none",tables:["resolv"],hl:{resolv:["nameserver","search"]},who:{ro:"podul frontend",en:"frontend pod"},
+ title:{ro:"Frontend-ul vrea „http://backend”",en:"The frontend wants \"http://backend\""},
+ body:{ro:`<p>În codul frontend-ului scrie doar <code>http://backend/api/products</code>. Înainte de orice conexiune, podul trebuie să afle <strong>IP-ul</strong> numelui <code>backend</code>, deci face o întrebare <strong>DNS</strong>.</p>
+<p>Kubelet a scris în pod fișierul <code>/etc/resolv.conf</code>:</p>
+<ul><li><code>nameserver 10.96.0.10</code>: serverul DNS de întrebat (Service-ul kube-dns, adică CoreDNS).</li>
+<li><code>search shop.svc.cluster.local …</code>: sufixe adăugate automat la numele scurte.</li></ul>
+<p>Așa, <code>backend</code> devine <code>backend.shop.svc.cluster.local</code>: Service-ul <em>backend</em> din namespace-ul <em>shop</em>.</p>`,
+ en:`<p>The frontend's code just says <code>http://backend/api/products</code>. Before any connection, the pod has to find the <strong>IP</strong> of the name <code>backend</code>, so it makes a <strong>DNS</strong> query.</p>
+<p>The kubelet wrote the file <code>/etc/resolv.conf</code> into the pod:</p>
+<ul><li><code>nameserver 10.96.0.10</code>: the DNS server to ask (the kube-dns Service, i.e. CoreDNS).</li>
+<li><code>search shop.svc.cluster.local …</code>: suffixes added automatically to short names.</li></ul>
+<p>So <code>backend</code> becomes <code>backend.shop.svc.cluster.local</code>: the <em>backend</em> Service in the <em>shop</em> namespace.</p>`},
+ more:{ro:`<p><code>ndots:5</code> înseamnă: dacă numele are mai puțin de 5 puncte, încearcă întâi cu sufixele din <code>search</code>. De aceea un nume extern ca <code>api.github.com</code> (2 puncte) generează mai întâi câteva întrebări inutile (<code>api.github.com.shop.svc.cluster.local</code>…). Pentru performanță, poți scrie nume externe cu punct la final: <code>api.github.com.</code></p><p>Din alt namespace ai scrie <code>backend.shop</code> sau numele complet.</p>`,
+  en:`<p><code>ndots:5</code> means: if the name has fewer than 5 dots, try the <code>search</code> suffixes first. That's why an external name like <code>api.github.com</code> (2 dots) first triggers a few useless queries (<code>api.github.com.shop.svc.cluster.local</code>…). For performance, you can write external names with a trailing dot: <code>api.github.com.</code></p><p>From another namespace you'd write <code>backend.shop</code> or the full name.</p>`},
+ try:[{cmd:"kubectl exec -n shop deploy/frontend -- cat /etc/resolv.conf",d:{ro:"Afișează configurarea DNS din pod.",en:"Shows the DNS configuration inside the pod."}}]},
+
+{at:"fe",frame:DQ,kind:"dns",move:[[["fe","sdns"]]],log:{ro:"pod → kube-dns",en:"pod → kube-dns"},tables:["svcs"],hl:{svcs:"kube-dns"},who:{ro:"podul frontend",en:"frontend pod"},
+ title:{ro:"Întrebarea DNS pleacă spre kube-dns",en:"The DNS query heads to kube-dns"},
+ body:{ro:`<p>Podul trimite un pachet <strong>UDP</strong> pe portul <code>53</code>, cu întrebarea:</p><p class="quote">„Ce adresă (tip A) are backend.shop.svc.cluster.local?”</p>
+<p>Destinația e <code>10.96.0.10</code>, IP-ul <strong>Service-ului</strong> kube-dns. Dar niciun dispozitiv din rețea nu are cu adevărat acest IP: e <strong>virtual</strong>. Să vedem ce se întâmplă cu pachetul.</p>`,
+ en:`<p>The pod sends a <strong>UDP</strong> packet to port <code>53</code> with the question:</p><p class="quote">"What address (type A) does backend.shop.svc.cluster.local have?"</p>
+<p>The destination is <code>10.96.0.10</code>, the IP of the kube-dns <strong>Service</strong>. But no device on the network actually owns this IP: it's <strong>virtual</strong>. Let's see what happens to the packet.</p>`}},
+
+{at:"sdns",frame:{...DQ,dstIp:IP.dns},kind:"dns",move:[[["sdns","cdns"]]],fx:[["conntrack","10.244.1.5:53124 → 10.96.0.10:53","10.244.2.3:53"]],log:{ro:"DNAT → coredns",en:"DNAT → coredns"},
+ tables:["rules","conntrack"],hl:{rules:IP.sdns+":53"},who:"kube-proxy (node-1)",
+ title:{ro:"kube-proxy rescrie destinația (DNAT)",en:"kube-proxy rewrites the destination (DNAT)"},
+ body:{ro:`<p>Pachetul nici nu iese bine din pod: încă în <strong>kernel-ul lui node-1</strong>, trece prin regulile scrise de <strong>kube-proxy</strong>. Regula spune: „ce merge la <code>10.96.0.10:53</code> trimite la podul CoreDNS <code>10.244.2.3:53</code>”.</p>
+<p>Kernel-ul <strong>schimbă IP-ul destinație</strong> (vezi câmpul galben). Asta se numește <strong>DNAT</strong> (Destination NAT). Apoi ține minte conversia în tabela <strong>conntrack</strong>, ca să poată întoarce răspunsul.</p>
+<p class="key">Seamănă cu lecția Ethernet, dar invers: acolo se schimbau MAC-urile și IP-ul rămânea. Aici <strong>chiar IP-ul destinație se schimbă</strong>.</p>`,
+ en:`<p>The packet barely leaves the pod: still inside <strong>node-1's kernel</strong>, it goes through the rules written by <strong>kube-proxy</strong>. The rule says: "anything for <code>10.96.0.10:53</code> goes to the CoreDNS pod <code>10.244.2.3:53</code>".</p>
+<p>The kernel <strong>changes the destination IP</strong> (see the yellow field). This is called <strong>DNAT</strong> (Destination NAT). It then remembers the translation in the <strong>conntrack</strong> table so it can return the reply.</p>
+<p class="key">It's like the Ethernet lesson, but the other way round: there the MACs changed and the IP stayed. Here <strong>the destination IP itself changes</strong>.</p>`},
+ more:{ro:`<p>kube-proxy nu stă în calea pachetelor: el doar <strong>scrie reguli</strong> în kernel (iptables sau IPVS) când se schimbă Service-urile. Kernel-ul face apoi rescrierea, foarte rapid. Unele rețele moderne (de ex. Cilium cu eBPF) înlocuiesc complet kube-proxy, dar ideea e aceeași.</p>`,
+  en:`<p>kube-proxy doesn't sit in the packets' path: it only <strong>writes rules</strong> into the kernel (iptables or IPVS) whenever Services change. The kernel then does the rewriting, very quickly. Some modern networks (e.g. Cilium with eBPF) replace kube-proxy entirely, but the idea is the same.</p>`},
+ try:[{cmd:"sudo iptables -t nat -L KUBE-SERVICES -n | grep 10.96.0.10",d:{ro:"Pe un nod: regulile NAT create de kube-proxy pentru kube-dns.",en:"On a node: the NAT rules kube-proxy created for kube-dns."}}]},
+
+{at:"cdns",frame:DR,kind:"dns",move:[[["cdns","sdns"]]],log:{ro:"coredns → pod",en:"coredns → pod"},tables:["records"],hl:{records:FQDN},who:"CoreDNS",
+ title:{ro:"CoreDNS răspunde: 10.96.45.10",en:"CoreDNS answers: 10.96.45.10"},
+ body:{ro:`<p>CoreDNS urmărește permanent API server-ul și știe toate Service-urile. Găsește imediat:</p>
+<p class="quote">backend.shop.svc.cluster.local → A 10.96.45.10 (TTL 30 s)</p>
+<p>Răspunsul conține <strong>IP-ul Service-ului</strong> (ClusterIP), nu IP-ul vreunui pod. Pod-urile din spate se pot schimba oricât; numele și ClusterIP-ul rămân aceleași.</p>
+<p>Pachetul de răspuns pleacă de la <code>10.244.2.3</code> (CoreDNS) spre <code>10.244.1.5</code> (frontend).</p>`,
+ en:`<p>CoreDNS constantly watches the API server and knows every Service. It finds right away:</p>
+<p class="quote">backend.shop.svc.cluster.local → A 10.96.45.10 (TTL 30 s)</p>
+<p>The answer contains the <strong>Service IP</strong> (ClusterIP), not the IP of any pod. The pods behind it can change as much as they like; the name and the ClusterIP stay the same.</p>
+<p>The reply packet leaves <code>10.244.2.3</code> (CoreDNS) for <code>10.244.1.5</code> (frontend).</p>`},
+ more:{ro:`<p>Pentru nume din afara cluster-ului (de ex. <code>google.com</code>), CoreDNS <strong>trimite întrebarea mai departe</strong> la serverul DNS al nodului (plugin-ul <code>forward</code>). Acela face rezolvarea completă descrisă în <a href="../dns/">lecția DNS</a>.</p><p>TTL-ul mic (30 s) face ca schimbările să se vadă repede.</p>`,
+  en:`<p>For names outside the cluster (e.g. <code>google.com</code>), CoreDNS <strong>forwards the question</strong> to the node's DNS server (the <code>forward</code> plugin). That server does the full resolution described in the <a href="../dns/">DNS lesson</a>.</p><p>The short TTL (30 s) means changes show up quickly.</p>`},
+ try:[{cmd:"kubectl exec -n shop deploy/frontend -- nslookup backend",d:{ro:"Pune aceeași întrebare din interiorul podului.",en:"Asks the same question from inside the pod."}}]},
+
+{at:"sdns",frame:{...DR,srcIp:IP.sdns},kind:"dns",move:[[["sdns","fe"]]],log:{ro:"un-NAT → pod",en:"un-NAT → pod"},tables:["conntrack"],hl:{conntrack:"10.244.1.5:53124 → 10.96.0.10:53"},who:"conntrack (node-1)",
+ title:{ro:"Răspunsul e „deghizat” înapoi",en:"The reply is \"disguised\" back"},
+ body:{ro:`<p>Frontend-ul a întrebat <code>10.96.0.10</code>. Dacă ar primi răspuns de la <code>10.244.2.3</code>, l-ar ignora: nu a vorbit cu acel IP.</p>
+<p>Kernel-ul lui node-1 recunoaște conversația în <strong>conntrack</strong> și <strong>schimbă IP-ul sursă</strong> înapoi în <code>10.96.0.10</code>. Frontend-ul primește răspunsul de la cine se aștepta și află: <code>backend</code> = <code>10.96.45.10</code>.</p>`,
+ en:`<p>The frontend asked <code>10.96.0.10</code>. If it got a reply from <code>10.244.2.3</code>, it would ignore it: it never talked to that IP.</p>
+<p>node-1's kernel recognises the conversation in <strong>conntrack</strong> and <strong>changes the source IP</strong> back to <code>10.96.0.10</code>. The frontend gets the reply from the address it expected and learns: <code>backend</code> = <code>10.96.45.10</code>.</p>`}},
+
+{at:"fe",frame:H1,kind:"http",move:[[["fe","sbk"]]],log:{ro:"pod → backend",en:"pod → backend"},tables:["svcs"],hl:{svcs:"backend"},who:{ro:"podul frontend",en:"frontend pod"},
+ title:{ro:"Cererea HTTP spre ClusterIP",en:"The HTTP request to the ClusterIP"},
+ body:{ro:`<p>Acum frontend-ul deschide o conexiune <strong>TCP</strong> spre <code>10.96.45.10:80</code> și trimite <code>GET /api/products</code>.</p>
+<p>Din punctul lui de vedere, vorbește cu un singur server, „backend”. Nu știe și nici nu-l interesează că în spate sunt două pod-uri pe noduri diferite.</p>`,
+ en:`<p>Now the frontend opens a <strong>TCP</strong> connection to <code>10.96.45.10:80</code> and sends <code>GET /api/products</code>.</p>
+<p>From its point of view it's talking to a single server, "backend". It doesn't know, and doesn't care, that there are two pods on different nodes behind it.</p>`}},
+
+{at:"sbk",frame:{...H1,dstIp:IP.bk2,dstPort:"8080"},kind:"http",move:[[["sbk","bk2"]]],fx:[["conntrack","10.244.1.5:41000 → 10.96.45.10:80","10.244.2.7:8080"]],log:{ro:"DNAT → backend-x2k4",en:"DNAT → backend-x2k4"},
+ tables:["rules","eps"],hl:{rules:IP.sbk+":80",eps:"backend-x2k4"},who:"kube-proxy (node-1)",
+ title:{ro:"Echilibrare: kube-proxy alege un pod",en:"Load balancing: kube-proxy picks a pod"},
+ body:{ro:`<p>Regula pentru <code>10.96.45.10:80</code> are <strong>două ținte</strong>, câte una pentru fiecare pod din EndpointSlice, fiecare cu 50% șanse. Acum a ieșit <strong>backend-x2k4</strong>, pe node-2.</p>
+<p>Kernel-ul rescrie <strong>IP-ul și portul destinație</strong>: <code>10.96.45.10:80</code> → <code>10.244.2.7:8080</code> (portul 80 al Service-ului devine <em>targetPort</em>-ul 8080 al containerului).</p>
+<p>Alegerea se face o singură dată, <strong>la începutul conexiunii</strong>. Toate pachetele acestei conexiuni TCP merg apoi la același pod, datorită conntrack.</p>`,
+ en:`<p>The rule for <code>10.96.45.10:80</code> has <strong>two targets</strong>, one for each pod in the EndpointSlice, each with a 50% chance. This time it picked <strong>backend-x2k4</strong>, on node-2.</p>
+<p>The kernel rewrites the <strong>destination IP and port</strong>: <code>10.96.45.10:80</code> → <code>10.244.2.7:8080</code> (the Service's port 80 becomes the container's <em>targetPort</em> 8080).</p>
+<p>The choice is made only once, <strong>at the start of the connection</strong>. Every packet of this TCP connection then goes to the same pod, thanks to conntrack.</p>`},
+ more:{ro:`<p>În modul iptables alegerea e aleatoare. În modul <strong>IPVS</strong> poți alege algoritmi ca round-robin sau „cele mai puține conexiuni”. Dacă vrei ca același client să ajungă mereu la același pod, setezi <code>sessionAffinity: ClientIP</code> pe Service.</p>`,
+  en:`<p>In iptables mode the choice is random. In <strong>IPVS</strong> mode you can choose algorithms like round-robin or "least connections". If you want the same client to always reach the same pod, set <code>sessionAffinity: ClientIP</code> on the Service.</p>`}},
+
+{at:"bk2",frame:{...H1,dstIp:IP.bk2,dstPort:"8080"},kind:"http",tables:["routes"],hl:{routes:"10.244.2.0/24"},who:{ro:"rețeaua pod-urilor (CNI)",en:"pod network (CNI)"},
+ title:{ro:"Trecerea de pe un nod pe altul",en:"Crossing from one node to another"},
+ body:{ro:`<p>Destinația <code>10.244.2.7</code> e în rețeaua pod-urilor de pe node-2. Ruta de pe node-1 spune: <code>10.244.2.0/24</code> → prin <code>10.0.0.12</code> (node-2).</p>
+<p>Pachetul iese prin placa de rețea a lui node-1, ajunge la node-2 și e livrat podului backend-x2k4. <strong>Pachetul IP nu se mai schimbă</strong> (niciun câmp colorat).</p>
+<p>Dedesubt se întâmplă exact ce ai văzut în <a href="../ethernet/">lecția Ethernet</a>: cadre noi, MAC-uri noi la fiecare hop.</p>`,
+ en:`<p>The destination <code>10.244.2.7</code> is in node-2's pod network. node-1's route says: <code>10.244.2.0/24</code> → via <code>10.0.0.12</code> (node-2).</p>
+<p>The packet leaves through node-1's network card, reaches node-2 and is delivered to the backend-x2k4 pod. <strong>The IP packet doesn't change any more</strong> (no coloured fields).</p>
+<p>Underneath, exactly what you saw in the <a href="../ethernet/">Ethernet lesson</a> happens: new frames, new MACs at every hop.</p>`},
+ more:{ro:`<p>Cum ajung pachetele între noduri depinde de plugin-ul <strong>CNI</strong>:</p><ul><li><strong>Rutare directă</strong> (de ex. Calico BGP): ca aici, nodurile își anunță rețelele de pod-uri.</li><li><strong>Overlay</strong> (de ex. Flannel VXLAN): pachetul pod-ului e pus <em>în interiorul</em> altui pachet, de la node-1 (10.0.0.11) la node-2 (10.0.0.12), apoi despachetat.</li></ul><p>Regula de bază a Kubernetes: orice pod poate vorbi cu orice pod, <strong>fără NAT</strong>, pe IP-ul lui real.</p>`,
+  en:`<p>How packets travel between nodes depends on the <strong>CNI</strong> plugin:</p><ul><li><strong>Direct routing</strong> (e.g. Calico BGP): like here, nodes announce their pod networks.</li><li><strong>Overlay</strong> (e.g. Flannel VXLAN): the pod's packet is placed <em>inside</em> another packet, from node-1 (10.0.0.11) to node-2 (10.0.0.12), then unwrapped.</li></ul><p>Kubernetes' basic rule: any pod can talk to any pod, <strong>without NAT</strong>, on its real IP.</p>`}},
+
+{at:"bk2",frame:R1,kind:"http",move:[[["bk2","sbk"]]],log:{ro:"backend → pod",en:"backend → pod"},who:"backend-x2k4",
+ title:{ro:"Backend-ul răspunde",en:"The backend replies"},
+ body:{ro:`<p>Aplicația din backend-x2k4 citește cererea și răspunde <code>200 OK</code> cu lista de produse în JSON.</p>
+<p>Răspunsul pleacă de la <strong>IP-ul real al podului</strong>, <code>10.244.2.7:8080</code>, spre <code>10.244.1.5:41000</code>. Merge înapoi spre node-1, pe același drum.</p>`,
+ en:`<p>The app in backend-x2k4 reads the request and replies <code>200 OK</code> with the product list in JSON.</p>
+<p>The reply leaves from the <strong>pod's real IP</strong>, <code>10.244.2.7:8080</code>, for <code>10.244.1.5:41000</code>. It travels back to node-1 along the same path.</p>`}},
+
+{at:"sbk",frame:{...R1,srcIp:IP.sbk,srcPort:"80"},kind:"http",move:[[["sbk","fe"]]],log:{ro:"un-DNAT → pod",en:"un-DNAT → pod"},tables:["conntrack"],hl:{conntrack:"10.244.1.5:41000 → 10.96.45.10:80"},who:"conntrack (node-1)",
+ title:{ro:"Frontend-ul vede răspunsul de la Service",en:"The frontend sees the reply from the Service"},
+ body:{ro:`<p>Ca la DNS: conntrack de pe node-1 găsește conexiunea și rescrie <strong>sursa</strong> înapoi: <code>10.244.2.7:8080</code> → <code>10.96.45.10:80</code>.</p>
+<p>Frontend-ul primește răspunsul de la adresa cu care a deschis conexiunea și își afișează produsele. 🎉</p>
+<p class="key">Pentru frontend, Service-ul arată ca un singur server stabil. În realitate, kernel-ul a rescris adresele la dus și la întors.</p>`,
+ en:`<p>Just like with DNS: conntrack on node-1 finds the connection and rewrites the <strong>source</strong> back: <code>10.244.2.7:8080</code> → <code>10.96.45.10:80</code>.</p>
+<p>The frontend gets the reply from the address it opened the connection to and shows its products. 🎉</p>
+<p class="key">To the frontend, the Service looks like one stable server. In reality, the kernel rewrote the addresses on the way there and back.</p>`}},
+
+{at:"sbk",frame:{...H1,srcPort:"41002",dstIp:IP.bk1,dstPort:"8080"},kind:"http2",cmp:8,move:[[["fe","sbk"]],[["sbk","bk1"]]],fx:[["conntrack","10.244.1.5:41002 → 10.96.45.10:80","10.244.1.8:8080"]],log:{ro:"conexiune nouă → backend-7d9f",en:"new connection → backend-7d9f"},
+ tables:["conntrack","eps"],hl:{eps:"backend-7d9f"},who:"kube-proxy (node-1)",
+ title:{ro:"O conexiune nouă poate ajunge la alt pod",en:"A new connection may reach another pod"},
+ body:{ro:`<p>Puțin mai târziu, frontend-ul deschide o <strong>conexiune nouă</strong> (port sursă <code>41002</code>). Regula aruncă din nou „zarul” și de data asta iese <strong>backend-7d9f</strong>, chiar pe node-1.</p>
+<p>Comparat cu pasul 9: s-a schimbat portul sursă și IP-ul destinație. Așa se împarte încărcarea între copii: <strong>pe conexiuni</strong>, nu pe pachete.</p>`,
+ en:`<p>A bit later, the frontend opens a <strong>new connection</strong> (source port <code>41002</code>). The rule "rolls the dice" again and this time picks <strong>backend-7d9f</strong>, right on node-1.</p>
+<p>Compared with step 9: the source port and the destination IP changed. That's how load is shared between copies: <strong>per connection</strong>, not per packet.</p>`},
+ more:{ro:`<p>Consecință practică: conexiunile lungi (HTTP/2, gRPC, WebSocket) rămân lipite de un singur pod. Dacă ai multe astfel de conexiuni, încărcarea poate fi inegală; atunci se folosesc echilibratoare la nivel L7 (de ex. un service mesh).</p>`,
+  en:`<p>Practical consequence: long-lived connections (HTTP/2, gRPC, WebSocket) stay stuck to one pod. With many such connections, load can be uneven; that's when L7 load balancers (e.g. a service mesh) are used.</p>`}},
+
+{at:"user",frame:E1,kind:"ext",move:[[["user","lb"]]],log:{ro:"client → LoadBalancer",en:"client → LoadBalancer"},tables:["svcs"],hl:{svcs:"backend-public"},who:{ro:"client din internet",en:"internet client"},
+ title:{ro:"Trafic din afară: Service de tip LoadBalancer",en:"Outside traffic: a LoadBalancer Service"},
+ body:{ro:`<p>ClusterIP-urile funcționează <strong>doar în interiorul cluster-ului</strong>. Ca să poată intra clienți din internet, s-a creat al doilea Service, <code>backend-public</code>, de tip <strong>LoadBalancer</strong>.</p>
+<p>Furnizorul cloud a pornit un echilibrator cu IP public <code>198.51.100.20</code>. Un client trimite <code>GET /api/products</code> către el.</p>`,
+ en:`<p>ClusterIPs only work <strong>inside the cluster</strong>. To let clients in from the internet, a second Service, <code>backend-public</code>, of type <strong>LoadBalancer</strong> was created.</p>
+<p>The cloud provider started a load balancer with the public IP <code>198.51.100.20</code>. A client sends <code>GET /api/products</code> to it.</p>`},
+ try:[{cmd:"kubectl expose deployment backend -n shop --name=backend-public --type=LoadBalancer --port=80 --target-port=8080",d:{ro:"Creează un Service LoadBalancer pentru backend.",en:"Creates a LoadBalancer Service for the backend."}},{cmd:"minikube service backend-public -n shop --url",d:{ro:"Pe minikube: afișează adresa la care poți accesa Service-ul.",en:"On minikube: prints the address where you can reach the Service."}}]},
+
+{at:"lb",frame:{...E1,dstIp:IP.bk2,dstPort:"8080"},kind:"ext",move:[[["lb","bk2"]]],log:{ro:"LB → NodePort → pod",en:"LB → NodePort → pod"},tables:["eps"],hl:{eps:"backend-x2k4"},who:"LoadBalancer + kube-proxy (node-2)",
+ title:{ro:"Prin NodePort, până la pod",en:"Through the NodePort, to the pod"},
+ body:{ro:`<p>Un Service LoadBalancer e construit în trepte:</p>
+<div class="flow"><span>198.51.100.20:80</span><i>→</i><span>10.0.0.12:30080</span><i>→</i><span>10.244.2.7:8080</span></div>
+<ol><li>Echilibratorul cloud trimite pachetul la unul dintre noduri, pe <strong>NodePort</strong>-ul <code>30080</code> (deschis pe <em>toate</em> nodurile).</li>
+<li>kube-proxy de pe acel nod face DNAT, exact ca înainte, către un pod din EndpointSlice.</li></ol>
+<p>Comparat cu pasul anterior: <strong>destinația</strong> s-a schimbat, iar sursa (clientul) a rămas.</p>`,
+ en:`<p>A LoadBalancer Service is built in layers:</p>
+<div class="flow"><span>198.51.100.20:80</span><i>→</i><span>10.0.0.12:30080</span><i>→</i><span>10.244.2.7:8080</span></div>
+<ol><li>The cloud load balancer sends the packet to one of the nodes, on the <strong>NodePort</strong> <code>30080</code> (open on <em>every</em> node).</li>
+<li>kube-proxy on that node does DNAT, exactly as before, to a pod from the EndpointSlice.</li></ol>
+<p>Compared with the previous step: the <strong>destination</strong> changed, while the source (the client) stayed.</p>`},
+ more:{ro:`<p>Implicit (<code>externalTrafficPolicy: Cluster</code>), nodul care primește pachetul îl poate trimite și unui pod de pe <em>alt</em> nod. Atunci face și <strong>SNAT</strong>: înlocuiește IP-ul clientului cu IP-ul nodului, iar aplicația nu mai vede IP-ul real al clientului. Cu <code>externalTrafficPolicy: Local</code> traficul rămâne pe nodul care are pod-ul, iar IP-ul clientului se păstrează.</p><p>Pentru site-uri cu mai multe domenii și căi (/api, /shop) se folosește de obicei un <strong>Ingress</strong> (sau Gateway API), care rutează după antetul HTTP Host și cale.</p>`,
+  en:`<p>By default (<code>externalTrafficPolicy: Cluster</code>), the node that receives the packet may send it to a pod on <em>another</em> node. It then also does <strong>SNAT</strong>: it replaces the client's IP with the node's IP, so the app no longer sees the client's real IP. With <code>externalTrafficPolicy: Local</code>, traffic stays on the node that has the pod and the client IP is preserved.</p><p>For sites with several domains and paths (/api, /shop) you usually use an <strong>Ingress</strong> (or Gateway API), which routes by the HTTP Host header and path.</p>`}},
+
+{at:["fe","sbk","cdns"],frame:null,kind:"none",summary:true,
+ title:{ro:"Recapitulare",en:"Recap"},
+ body:{ro:`<p>Drumul complet al unei cereri în cluster:</p>
+<div class="flow"><span>backend</span><i>DNS →</i><span>10.96.45.10:80</span><i>DNAT →</i><span>10.244.2.7:8080</span></div>
+<ul><li><strong>Service</strong> = nume stabil + IP virtual (ClusterIP) în fața pod-urilor alese prin <strong>selector</strong>.</li>
+<li><strong>CoreDNS</strong> transformă <code>backend</code> în ClusterIP, folosind sufixele din <code>/etc/resolv.conf</code>.</li>
+<li><strong>kube-proxy</strong> scrie reguli în kernel; kernel-ul face <strong>DNAT</strong> spre un pod, iar <strong>conntrack</strong> întoarce răspunsul.</li>
+<li>Între noduri, pachetul circulă pe rețeaua pod-urilor (<strong>CNI</strong>), cu IP-urile reale.</li>
+<li><strong>NodePort</strong> și <strong>LoadBalancer</strong> deschid Service-ul spre exterior.</li></ul>
+<p><button type="button" class="btn primary" data-goto="quiz">Mergi la test ↓</button></p>`,
+ en:`<p>The full path of a request in the cluster:</p>
+<div class="flow"><span>backend</span><i>DNS →</i><span>10.96.45.10:80</span><i>DNAT →</i><span>10.244.2.7:8080</span></div>
+<ul><li>A <strong>Service</strong> = a stable name + virtual IP (ClusterIP) in front of the pods chosen by a <strong>selector</strong>.</li>
+<li><strong>CoreDNS</strong> turns <code>backend</code> into the ClusterIP, using the suffixes from <code>/etc/resolv.conf</code>.</li>
+<li><strong>kube-proxy</strong> writes rules into the kernel; the kernel does <strong>DNAT</strong> to a pod, and <strong>conntrack</strong> brings the reply back.</li>
+<li>Between nodes, the packet travels on the pod network (<strong>CNI</strong>), with real IPs.</li>
+<li><strong>NodePort</strong> and <strong>LoadBalancer</strong> open the Service to the outside.</li></ul>
+<p><button type="button" class="btn primary" data-goto="quiz">Go to the quiz ↓</button></p>`},
+ more:{ro:`<p>Ce poți învăța mai departe: <strong>Ingress / Gateway API</strong> (rutare HTTP), <strong>NetworkPolicy</strong> (cine are voie să vorbească cu cine), <strong>service mesh</strong> (Istio, Linkerd), <strong>StatefulSet</strong> cu Service headless pentru baze de date.</p>`,
+  en:`<p>What to learn next: <strong>Ingress / Gateway API</strong> (HTTP routing), <strong>NetworkPolicy</strong> (who may talk to whom), <strong>service mesh</strong> (Istio, Linkerd), <strong>StatefulSet</strong> with a headless Service for databases.</p>`}}
+],
+
+reference:(T,lang)=>{
+  const ro=lang==="ro";
+  const types=[
+    ["ClusterIP",{ro:"Doar din interiorul cluster-ului",en:"Only from inside the cluster"},{ro:"IP virtual + nume DNS; kube-proxy face DNAT spre pod-uri. Tipul implicit.",en:"Virtual IP + DNS name; kube-proxy DNATs to pods. The default type."},{ro:"API-uri interne, baze de date",en:"Internal APIs, databases"}],
+    ["NodePort",{ro:"Din afară, prin IP-ul oricărui nod",en:"From outside, via any node's IP"},{ro:"Deschide același port (30000–32767) pe toate nodurile; include un ClusterIP.",en:"Opens the same port (30000–32767) on every node; includes a ClusterIP."},{ro:"Teste, cluster-e fără cloud",en:"Testing, clusters without a cloud"}],
+    ["LoadBalancer",{ro:"Din internet, prin IP public",en:"From the internet, via a public IP"},{ro:"Cere furnizorului cloud un echilibrator care trimite la NodePort.",en:"Asks the cloud provider for a load balancer that sends to the NodePort."},{ro:"Aplicații publice",en:"Public apps"}],
+    ["ExternalName",{ro:"Din cluster, spre un serviciu extern",en:"From the cluster, to an outside service"},{ro:"Doar o înregistrare DNS CNAME; fără IP, fără proxy.",en:"Just a DNS CNAME record; no IP, no proxying."},{ro:"Baze de date gestionate (db.example.com)",en:"Managed databases (db.example.com)"}],
+    ["Headless",{ro:"Din interiorul cluster-ului",en:"From inside the cluster"},{ro:"clusterIP: None. DNS-ul întoarce direct IP-urile pod-urilor.",en:"clusterIP: None. DNS returns the pod IPs directly."},{ro:"StatefulSet-uri, baze de date replicate",en:"StatefulSets, replicated databases"}]
+  ];
+  let h=`<div class="ref-grid"><section class="card refcard"><h2>${ro?"Tipurile de Service":"Service types"}</h2><div class="scroll"><table class="cmp" style="min-width:520px"><thead><tr><th>${ro?"Tip":"Type"}</th><th>${ro?"Cine îl poate accesa":"Who can reach it"}</th><th>${ro?"Cum funcționează":"How it works"}</th><th>${ro?"Folosit pentru":"Used for"}</th></tr></thead><tbody>`;
+  types.forEach(r=>{h+=`<tr><td><span class="pill">${r[0]}</span></td><td>${T(r[1])}</td><td>${T(r[2])}</td><td>${T(r[3])}</td></tr>`});
+  h+=`</tbody></table></div><p class="note">${ro?"NodePort conține un ClusterIP, iar LoadBalancer conține un NodePort: fiecare tip se bazează pe cel dinainte.":"A NodePort contains a ClusterIP, and a LoadBalancer contains a NodePort: each type builds on the one before."}</p></section>`;
+  h+=`<section class="card refcard"><h2>${ro?"Cum arată în YAML":"What it looks like in YAML"}</h2><p>${ro?"Service-ul din lecție. Selectorul alege pod-urile cu eticheta app=backend.":"The Service from the lesson. The selector picks the pods labelled app=backend."}</p>
+<pre class="yaml">apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: shop
+spec:
+  type: ClusterIP        <span class="c"># ${ro?"implicit":"default"}</span>
+  selector:
+    app: backend         <span class="c"># ${ro?"pod-urile din spate":"the pods behind it"}</span>
+  ports:
+    - port: 80           <span class="c"># ${ro?"portul Service-ului":"the Service's port"}</span>
+      targetPort: 8080   <span class="c"># ${ro?"portul containerului":"the container's port"}</span>
+      protocol: TCP</pre>
+<p class="note">${ro?"Salvează ca service.yaml și aplică-l cu":"Save as service.yaml and apply it with"} <code>kubectl apply -f service.yaml</code>.</p></section></div>`;
+  const names=[
+    ["backend",{ro:"Din același namespace (shop)",en:"From the same namespace (shop)"},"10.96.45.10"],
+    ["backend.shop",{ro:"Din orice namespace",en:"From any namespace"},"10.96.45.10"],
+    [FQDN,{ro:"Numele complet (FQDN)",en:"The full name (FQDN)"},"10.96.45.10"],
+    ["db-0.db.shop.svc.cluster.local",{ro:"Un pod anume dintr-un StatefulSet cu Service headless",en:"A specific pod of a StatefulSet with a headless Service"},{ro:"IP-ul podului db-0",en:"the db-0 pod's IP"}],
+    ["_http._tcp.backend.shop.svc.cluster.local",{ro:"Înregistrare SRV: portul numit „http”",en:"SRV record: the port named \"http\""},"80 + "+FQDN],
+    ["10-244-1-5.shop.pod.cluster.local",{ro:"Nume generat pentru IP-ul unui pod",en:"Name generated for a pod's IP"},"10.244.1.5"]
+  ];
+  h+=`<div class="ref-stack" style="margin-top:12px"><section class="card refcard"><h2>${ro?"Nume DNS în cluster":"DNS names in the cluster"}</h2><p>${ro?"Formatul general: <code>&lt;service&gt;.&lt;namespace&gt;.svc.cluster.local</code>. Iată ce poți întreba:":"The general format: <code>&lt;service&gt;.&lt;namespace&gt;.svc.cluster.local</code>. Here's what you can ask for:"}</p>
+<div class="scroll"><table style="min-width:520px"><thead><tr><th>${ro?"Nume":"Name"}</th><th>${ro?"Când îl folosești":"When to use it"}</th><th>${ro?"Răspuns":"Answer"}</th></tr></thead><tbody>`;
+  names.forEach(r=>{h+=`<tr><td class="m">${r[0]}</td><td>${T(r[1])}</td><td class="m">${T(r[2])}</td></tr>`});
+  h+=`</tbody></table></div></section></div>`;
+  return h;
+},
+
+gloss:[
+ ["Cluster",null,{ro:"Grupul de mașini (noduri) administrat de Kubernetes ca un tot.",en:"The group of machines (nodes) that Kubernetes manages as one."}],
+ ["Node",{ro:"nod",en:"node"},{ro:"O mașină (fizică sau virtuală) din cluster pe care rulează pod-uri.",en:"A machine (physical or virtual) in the cluster that runs pods."}],
+ ["Pod",null,{ro:"Cea mai mică unitate din Kubernetes: unul sau mai multe containere cu un singur IP comun.",en:"Kubernetes' smallest unit: one or more containers sharing a single IP."}],
+ ["Namespace",null,{ro:"Un „dosar” logic care grupează resurse (aici: shop, kube-system).",en:"A logical \"folder\" that groups resources (here: shop, kube-system)."}],
+ ["Deployment",null,{ro:"Descrie câte copii ale unui pod vrei; Kubernetes le pornește și le înlocuiește automat.",en:"Describes how many copies of a pod you want; Kubernetes starts and replaces them automatically."}],
+ ["Label / Selector",null,{ro:"Etichete cheie=valoare puse pe resurse; selectorul alege resursele după etichete.",en:"key=value tags on resources; a selector picks resources by their labels."}],
+ ["Service",null,{ro:"Nume și IP stabile în fața unui grup de pod-uri; trimite traficul la unul dintre ele.",en:"A stable name and IP in front of a group of pods; sends traffic to one of them."}],
+ ["ClusterIP",null,{ro:"IP-ul virtual al unui Service, accesibil doar din cluster.",en:"A Service's virtual IP, reachable only inside the cluster."}],
+ ["NodePort",null,{ro:"Port (30000–32767) deschis pe fiecare nod, care duce la un Service.",en:"A port (30000–32767) opened on every node that leads to a Service."}],
+ ["LoadBalancer",null,{ro:"Tip de Service care cere un echilibrator de la furnizorul cloud, cu IP public.",en:"A Service type that requests a load balancer with a public IP from the cloud provider."}],
+ ["EndpointSlice",null,{ro:"Lista cu IP:port-urile pod-urilor gata să primească trafic pentru un Service.",en:"The list of IP:ports of the pods ready to receive traffic for a Service."}],
+ ["kube-proxy",null,{ro:"Program de pe fiecare nod care transformă Service-urile în reguli de rețea în kernel.",en:"A program on each node that turns Services into network rules in the kernel."}],
+ ["CoreDNS",null,{ro:"Serverul DNS din cluster; răspunde la nume ca backend.shop.svc.cluster.local.",en:"The in-cluster DNS server; answers names like backend.shop.svc.cluster.local."}],
+ ["DNAT / SNAT",{ro:"Destination / Source NAT",en:"Destination / Source NAT"},{ro:"Rescrierea adresei destinație, respectiv sursă, a unui pachet.",en:"Rewriting a packet's destination or source address, respectively."}],
+ ["conntrack",{ro:"connection tracking",en:"connection tracking"},{ro:"Tabela din kernel care ține minte conexiunile și rescrierile lor, ca răspunsurile să fie întoarse corect.",en:"The kernel table that remembers connections and their rewrites so replies are translated back correctly."}],
+ ["CNI","Container Network Interface",{ro:"Plugin-ul care dă IP-uri pod-urilor și le leagă între noduri (Calico, Flannel, Cilium…).",en:"The plugin that gives pods IPs and connects them across nodes (Calico, Flannel, Cilium…)."}],
+ ["API server",null,{ro:"Componenta centrală prin care trec toate comenzile și informațiile din cluster.",en:"The central component every command and piece of cluster information goes through."}],
+ ["kubelet",null,{ro:"Agentul de pe fiecare nod care pornește pod-urile și le scrie configurația (inclusiv resolv.conf).",en:"The agent on each node that starts pods and writes their config (including resolv.conf)."}],
+ ["FQDN","Fully Qualified Domain Name",{ro:"Numele complet, cu toate părțile: backend.shop.svc.cluster.local.",en:"The complete name with all parts: backend.shop.svc.cluster.local."}],
+ ["ndots",null,{ro:"Opțiune din resolv.conf: sub câte puncte un nume e tratat ca „scurt” și primește sufixele search.",en:"A resolv.conf option: below how many dots a name counts as \"short\" and gets the search suffixes."}],
+ ["targetPort",null,{ro:"Portul containerului la care Service-ul trimite traficul (aici 8080).",en:"The container port the Service sends traffic to (here 8080)."}],
+ ["Ingress",null,{ro:"Regulă HTTP care trimite cereri către Service-uri după domeniu și cale (/api, /shop).",en:"An HTTP rule that sends requests to Services by domain and path (/api, /shop)."}],
+ ["Readiness probe",null,{ro:"Verificare periodică: doar pod-urile care o trec primesc trafic.",en:"A periodic check: only pods that pass it receive traffic."}],
+ ["kubectl",null,{ro:"Programul în linie de comandă cu care vorbești cu cluster-ul.",en:"The command-line tool you use to talk to the cluster."}]
+],
+
+quiz:[
+ {q:{ro:"Ce IP primește frontend-ul când întreabă DNS de „backend”?",en:"What IP does the frontend get when it asks DNS for \"backend\"?"},
+  o:[{ro:"IP-ul unui pod backend",en:"A backend pod's IP"},{ro:"ClusterIP-ul Service-ului (10.96.45.10)",en:"The Service's ClusterIP (10.96.45.10)"},{ro:"IP-ul nodului",en:"The node's IP"},{ro:"IP-ul lui CoreDNS",en:"CoreDNS's IP"}],a:1,
+  e:{ro:"DNS întoarce IP-ul virtual al Service-ului. Pod-urile din spate se pot schimba fără ca frontend-ul să afle.",en:"DNS returns the Service's virtual IP. The pods behind it can change without the frontend noticing."}},
+ {q:{ro:"Cine schimbă IP-ul destinație din ClusterIP în IP-ul unui pod?",en:"Who changes the destination IP from the ClusterIP to a pod's IP?"},
+  o:[{ro:"CoreDNS",en:"CoreDNS"},{ro:"Podul backend",en:"The backend pod"},{ro:"Kernel-ul nodului, după regulile scrise de kube-proxy",en:"The node's kernel, following rules written by kube-proxy"},{ro:"API server-ul",en:"The API server"}],a:2,
+  e:{ro:"kube-proxy scrie reguli (iptables/IPVS); kernel-ul face DNAT pe fiecare pachet.",en:"kube-proxy writes rules (iptables/IPVS); the kernel does the DNAT on each packet."}},
+ {q:{ro:"Cum află un Service ce pod-uri să folosească?",en:"How does a Service know which pods to use?"},
+  o:[{ro:"După selector și etichetele pod-urilor",en:"By its selector and the pods' labels"},{ro:"După numele pod-urilor",en:"By the pods' names"},{ro:"După nodul pe care rulează",en:"By the node they run on"},{ro:"Le scrie administratorul de mână",en:"An admin types them in by hand"}],a:0,
+  e:{ro:"Pod-urile cu eticheta app=backend, gata să primească trafic, intră automat în EndpointSlice.",en:"Pods labelled app=backend that are ready automatically go into the EndpointSlice."}},
+ {q:{ro:"Din namespace-ul „billing” vrei Service-ul „backend” din „shop”. Ce nume scrii?",en:"From the \"billing\" namespace you want the \"backend\" Service in \"shop\". Which name do you use?"},
+  o:[{ro:"backend",en:"backend"},{ro:"shop",en:"shop"},{ro:"backend.shop",en:"backend.shop"},{ro:"backend.billing",en:"backend.billing"}],a:2,
+  e:{ro:"Numele scurt „backend” s-ar completa cu billing.svc.cluster.local. Cu backend.shop ajungi în namespace-ul corect.",en:"The short name \"backend\" would be completed with billing.svc.cluster.local. backend.shop reaches the right namespace."}},
+ {q:{ro:"De ce rescrie conntrack sursa răspunsului înapoi în ClusterIP?",en:"Why does conntrack rewrite the reply's source back to the ClusterIP?"},
+  o:[{ro:"Ca să fie pachetul mai mic",en:"To make the packet smaller"},{ro:"Pentru că frontend-ul a vorbit cu ClusterIP-ul și ar ignora un răspuns de la alt IP",en:"Because the frontend talked to the ClusterIP and would ignore a reply from another IP"},{ro:"Pentru securitate, ca să ascundă CoreDNS",en:"For security, to hide CoreDNS"},{ro:"Nu o rescrie",en:"It doesn't"}],a:1,
+  e:{ro:"O conexiune e recunoscută după IP-uri și porturi. Răspunsul trebuie să vină de la aceeași adresă la care a fost trimisă cererea.",en:"A connection is identified by IPs and ports. The reply must come from the same address the request was sent to."}},
+ {q:{ro:"Ce tip de Service folosești ca să intre trafic din internet printr-un IP public în cloud?",en:"Which Service type lets internet traffic in through a public IP in the cloud?"},
+  o:[{ro:"ClusterIP",en:"ClusterIP"},{ro:"Headless",en:"Headless"},{ro:"ExternalName",en:"ExternalName"},{ro:"LoadBalancer",en:"LoadBalancer"}],a:3,
+  e:{ro:"LoadBalancer cere un echilibrator cloud cu IP public, care trimite traficul la NodePort, apoi la pod-uri.",en:"LoadBalancer requests a cloud load balancer with a public IP, which sends traffic to the NodePort and then to pods."}},
+ {q:{ro:"Frontend-ul deschide 2 conexiuni TCP spre același Service. Ce se poate întâmpla?",en:"The frontend opens 2 TCP connections to the same Service. What can happen?"},
+  o:[{ro:"Fiecare pachet merge la alt pod",en:"Every packet goes to a different pod"},{ro:"Conexiunile pot ajunge la pod-uri diferite, dar toate pachetele unei conexiuni merg la același pod",en:"The connections may reach different pods, but all packets of one connection go to the same pod"},{ro:"Ambele merg mereu la primul pod",en:"Both always go to the first pod"},{ro:"A doua conexiune e respinsă",en:"The second connection is refused"}],a:1,
+  e:{ro:"Alegerea se face la începutul conexiunii și e ținută minte în conntrack.",en:"The choice is made at the start of the connection and remembered in conntrack."}}
+]
+};
+})();
+</script>
+<script src="../assets/engine.js"></script>
+</body>
+</html>

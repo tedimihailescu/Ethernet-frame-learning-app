@@ -1,48 +1,51 @@
-# Drumul unui cadru Ethernet · Ethernet Frame Journey
+# Rețea pas cu pas · Network step by step
 
 **🇷🇴 Română** · [🇬🇧 English](#english)
 
-O aplicație web interactivă care arată, pas cu pas, cum ajunge un mesaj de la **Host A** la **Host B** printr-o rețea reală: switch → router → router → switch.
+Lecții web interactive despre rețele. Fiecare lecție e o simulare animată: urmărești pachetul pas cu pas și vezi ce câmpuri se schimbă la fiecare dispozitiv.
 
-**▶ Deschide aplicația:** https://tedimihailescu.github.io/Ethernet-frame-learning-app/
+**▶ Deschide site-ul:** https://tedimihailescu.github.io/Ethernet-frame-learning-app/
 
-## Ce conține
+## Lecții
 
-- **Diagramă animată** a rețelei (2 rețele locale, 2 routere, 3 calculatoare), cu butoane Înapoi / Următorul / Redă / De la capăt și tastele ← →.
-- **18 pași explicați**: încapsularea pe straturi, ARP, cum învață și trimite un switch, cum alege drumul un router (TTL, tabela de rutare, cadru nou), inundarea pe un switch și decapsularea pe B.
-- **Cadrul „live”**: fiecare câmp (MAC, EtherType, IP, TTL, porturi, date, FCS) e marcat când apare, se schimbă sau dispare.
-- **Jurnalul legăturilor**: aceleași IP-uri, MAC-uri diferite pe fiecare hop.
-- **„Află mai mult”** la fiecare pas și **comenzi de încercat** pe Windows (`ipconfig`, `arp -a`, `tracert`…).
-- **Anatomia cadrului** octet cu octet, **switch vs. router**, **dicționar** cu 22 de termeni și un **test** cu 7 întrebări.
-- Română și engleză, temă luminoasă și întunecată, funcționează pe telefon.
+| # | Lecție | Ce înveți |
+|---|--------|-----------|
+| 1 | [Drumul unui cadru Ethernet](https://tedimihailescu.github.io/Ethernet-frame-learning-app/ethernet/) | Încapsulare, ARP, switch-uri și tabela MAC, routere, TTL, FCS, de ce MAC-urile se schimbă și IP-urile nu |
+| 2 | [Cum funcționează DNS](https://tedimihailescu.github.io/Ethernet-frame-learning-app/dns/) | Cache local și fișierul hosts, resolver recursiv, server rădăcină → .com → server autoritar, tipuri de înregistrări, TTL și cache |
+| 3 | [Kubernetes: Service-uri și DNS în cluster](https://tedimihailescu.github.io/Ethernet-frame-learning-app/kubernetes/) | Pod-uri, etichete, Service și EndpointSlice, CoreDNS și `backend.shop.svc.cluster.local`, kube-proxy și DNAT, conntrack, CNI, NodePort și LoadBalancer |
 
-## Cum o rulezi local
+Fiecare lecție are: diagramă animată, pachetul „live” cu câmpurile schimbate colorate, tabele (MAC, rutare, ARP, DNS, conntrack…), secțiuni „Află mai mult”, comenzi de încercat, referință, dicționar și test. Totul în română și engleză, temă luminoasă/întunecată, funcționează pe telefon.
 
-Nu are nevoie de instalări: descarcă `index.html` și deschide-l în browser.
+## Structura
+
+```
+index.html          pagina principală cu lista de lecții
+ethernet/index.html lecția Ethernet (de sine stătătoare)
+dns/index.html      lecția DNS (date + assets/engine.js)
+kubernetes/index.html lecția Kubernetes (date + assets/engine.js)
+assets/site.css     stilurile comune
+assets/lesson.css   stiluri în plus pentru lecțiile cu motor comun
+assets/engine.js    motorul comun: diagramă, pași, pachet live, tabele, test
+```
+
+O lecție nouă = un fișier HTML care definește `window.LESSON` (noduri, legături, pași, tabele, dicționar, test) și încarcă `assets/engine.js`.
 
 ---
 
 ## English
 
-An interactive web app that shows, step by step, how a message travels from **Host A** to **Host B** across a real network: switch → router → router → switch.
+Interactive networking lessons. Each one is an animated simulation: follow the packet step by step and see which fields change at every device.
 
-**▶ Open the app:** https://tedimihailescu.github.io/Ethernet-frame-learning-app/
+**▶ Open the site:** https://tedimihailescu.github.io/Ethernet-frame-learning-app/
 
-### What's inside
+| # | Lesson | What you learn |
+|---|--------|----------------|
+| 1 | [The journey of an Ethernet frame](https://tedimihailescu.github.io/Ethernet-frame-learning-app/ethernet/) | Encapsulation, ARP, switches and MAC tables, routers, TTL, FCS, why MACs change and IPs don't |
+| 2 | [How DNS works](https://tedimihailescu.github.io/Ethernet-frame-learning-app/dns/) | Local cache and hosts file, recursive resolver, root → .com → authoritative server, record types, TTL and caching |
+| 3 | [Kubernetes: Services and cluster DNS](https://tedimihailescu.github.io/Ethernet-frame-learning-app/kubernetes/) | Pods, labels, Services and EndpointSlices, CoreDNS and `backend.shop.svc.cluster.local`, kube-proxy and DNAT, conntrack, CNI, NodePort and LoadBalancer |
 
-- **Animated network diagram** (2 LANs, 2 routers, 3 hosts) with Back / Next / Play / Reset and the ← → keys.
-- **18 explained steps**: layer-by-layer encapsulation, ARP, switch learning and forwarding, router routing (TTL, routing table, new frame), switch flooding and decapsulation on B.
-- **Live frame view**: every field (MAC, EtherType, IP, TTL, ports, payload, FCS) is marked when it's added, changed or removed.
-- **Per-link log**: same IPs, different MACs on every hop.
-- **"Learn more"** on each step and **commands to try** on Windows (`ipconfig`, `arp -a`, `tracert`…).
-- **Frame anatomy** byte by byte, **switch vs. router**, a **glossary** of 22 terms and a 7-question **quiz**.
-- Romanian and English, light and dark theme, works on phones.
+Every lesson has an animated diagram, a live packet view with changed fields highlighted, tables, "Learn more" sections, commands to try, a reference section, a glossary and a quiz. Romanian and English, light/dark theme, works on phones.
 
-### Run it locally
+A new lesson is one HTML file that defines `window.LESSON` and loads `assets/engine.js`.
 
-No install needed: download `index.html` and open it in a browser.
-
----
-
-Single self-contained HTML file: no build step, no dependencies (fonts load from Google Fonts, with system-font fallbacks).
-MAC and IP addresses are made up for teaching purposes.
+No build step and no dependencies (fonts load from Google Fonts, with system-font fallbacks). Addresses and names in the lessons are examples.

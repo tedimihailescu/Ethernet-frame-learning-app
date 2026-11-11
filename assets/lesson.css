@@ -1,0 +1,24 @@
+/* Extra styles for lessons built with assets/engine.js */
+.zone.virt{fill:none;stroke:var(--accent);stroke-opacity:.45;stroke-dasharray:3 5}
+.zone-lbl.virt{fill:var(--accent)}
+.link.virt{stroke-dasharray:6 6}
+.dev.virt{stroke-dasharray:4 3}
+.diag-note{font:600 11px var(--sans);fill:var(--muted)}
+
+/* colour classes for packet groups */
+.group.c-l2 h4{color:var(--l2)} .group.c-l3 h4{color:var(--l3)} .group.c-l4 h4{color:var(--l4)} .group.c-l7 h4{color:var(--l7)} .group.c-arp h4{color:var(--arp)}
+.bar .c-l2{background:var(--l2bg);color:var(--l2)} .bar .c-l3{background:var(--l3bg);color:var(--l3)} .bar .c-l4{background:var(--l4bg);color:var(--l4)}
+.bar .c-l7{background:var(--l7bg);color:var(--l7)} .bar .c-arp{background:var(--arpbg);color:var(--arp)}
+
+/* reference blocks */
+.ref-stack{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+.refcard{min-width:0}
+.yaml{margin:0;background:var(--ink);color:var(--surface);border-radius:8px;padding:12px 14px;font:13px/1.5 var(--mono);overflow-x:auto;white-space:pre}
+.yaml .c{opacity:.6}
+.pill{display:inline-block;font:600 .72rem var(--mono);padding:1px 7px;border-radius:999px;background:var(--surface2);border:1px solid var(--border);white-space:nowrap}
+.flow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font:500 .85rem var(--mono);margin:8px 0}
+.flow span{padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface2)}
+.flow i{font-style:normal;color:var(--muted)}
+.refcard h3{font-family:var(--head);font-size:1rem;margin:14px 0 6px}
+.refcard h3:first-child{margin-top:0}
+.refcard p{max-width:72ch}

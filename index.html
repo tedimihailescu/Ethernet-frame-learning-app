@@ -2,1081 +2,135 @@
 <html lang="ro">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Drumul unui cadru</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rețea pas cu pas</title>
+<meta name="description" content="Lecții interactive despre rețele: Ethernet, DNS, Kubernetes. / Interactive networking lessons: Ethernet, DNS, Kubernetes.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
-<meta name="description" content="Aplicație interactivă: cum călătorește un cadru Ethernet de la Host A la Host B prin switch-uri și routere. / Interactive app: how an Ethernet frame travels from Host A to Host B.">
+<link rel="stylesheet" href="assets/site.css">
 <style>
-/* Layout: lab-notebook console - slim top bar, compact hero, diagram as the hero, two working columns, reference sections below */
-:root{
-  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
-  --mono:"IBM Plex Mono",ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;
-  --head:"Space Grotesk","IBM Plex Sans",system-ui,sans-serif;
-  --bg:#f3f5f8; --surface:#ffffff; --surface2:#edf1f6; --text:#0f1b2d; --muted:#52627a; --border:#dae1ea;
-  --accent:#0b62c4; --accent-text:#ffffff; --focus:#0b62c4; --ink:#0f1b2d; --hero:#e8eef6;
-  --l2:#6f42c1; --l2bg:#efe7fb; --l3:#1868c9; --l3bg:#e2eefc; --l4:#12804f; --l4bg:#dff3e8;
-  --l7:#b95a0c; --l7bg:#fcecda; --arp:#9a6b00; --arpbg:#fbf0d2;
-  --newbg:#d9f3e4; --newfg:#0e6b40; --chgbg:#fff0b3; --chgfg:#7a5a00; --rembg:#fbe1de; --remfg:#a8322a;
-  --ok:#12804f; --bad:#c0392b; --zone:#f0f3f9; --link:#9aa4b8; --hot:#2a64d8;
-  --shadow:0 1px 2px rgba(20,30,50,.06),0 4px 14px rgba(20,30,50,.05);
-  color-scheme:light;
-}
-@media (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]){
-    --bg:#0b111c; --surface:#111a28; --surface2:#182336; --text:#e6edf7; --muted:#95a5bf; --border:#24324a;
-    --accent:#5aa7ff; --accent-text:#06101e; --focus:#8cc2ff; --ink:#e6edf7; --hero:#0f1828;
-    --l2:#b893ff; --l2bg:#2a2140; --l3:#6db0ff; --l3bg:#162a43; --l4:#52d394; --l4bg:#133222;
-    --l7:#ffae63; --l7bg:#3a2613; --arp:#f0c44f; --arpbg:#3a3012;
-    --newbg:#143a27; --newfg:#7ee2ad; --chgbg:#4a3d0b; --chgfg:#ffdc6b; --rembg:#43201d; --remfg:#ff9a8f;
-    --ok:#52d394; --bad:#ff7b6e; --zone:#141822; --link:#5b6478; --hot:#6e9cff;
-    --shadow:none; color-scheme:dark;
-  }
-}
-:root[data-theme="dark"]{
-  --bg:#0b111c; --surface:#111a28; --surface2:#182336; --text:#e6edf7; --muted:#95a5bf; --border:#24324a;
-  --accent:#5aa7ff; --accent-text:#06101e; --focus:#8cc2ff; --ink:#e6edf7; --hero:#0f1828;
-  --l2:#b893ff; --l2bg:#2a2140; --l3:#6db0ff; --l3bg:#162a43; --l4:#52d394; --l4bg:#133222;
-  --l7:#ffae63; --l7bg:#3a2613; --arp:#f0c44f; --arpbg:#3a3012;
-  --newbg:#143a27; --newfg:#7ee2ad; --chgbg:#4a3d0b; --chgfg:#ffdc6b; --rembg:#43201d; --remfg:#ff9a8f;
-  --ok:#52d394; --bad:#ff7b6e; --zone:#141822; --link:#5b6478; --hot:#6e9cff;
-  --shadow:none; color-scheme:dark;
-}
-*{box-sizing:border-box}
-html{-webkit-text-size-adjust:100%}
-body{margin:0;background:var(--bg);color:var(--text);font:16px/1.55 var(--sans)}
-code,.mono{font-family:var(--mono);font-size:.92em}
-code{background:var(--surface2);padding:.05em .35em;border-radius:4px;overflow-wrap:anywhere}
-.wrap{max-width:1180px;margin:0 auto;padding-block:16px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
-header.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
-header.top h1{font-size:clamp(1.25rem,2.6vw,1.7rem);margin:0;line-height:1.2}
-header.top p{margin:4px 0 0;color:var(--muted);font-size:.95rem}
-.tools{display:flex;gap:8px;align-items:center}
-.seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--surface)}
-.seg button{border:0;background:transparent;color:var(--text);padding:6px 11px;font:600 .85rem var(--sans);cursor:pointer}
-.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-text)}
-.icon-btn{border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:8px;padding:6px 10px;cursor:pointer;font-size:.95rem}
-button:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);padding:16px}
-.card h2{font-size:1.05rem;margin:0 0 10px}
-.diagram{padding:8px}
-svg#net{width:100%;height:auto;display:block}
-.zone{fill:var(--zone);stroke:var(--border);stroke-dasharray:5 4}
-.zone-lbl{font:600 12px var(--sans);fill:var(--muted)}
-.link{stroke:var(--link);stroke-width:3;stroke-linecap:round}
-.link.hot{stroke:var(--hot);stroke-width:4}
-.port{font:10px var(--mono);fill:var(--muted)}
-.dev{fill:var(--surface);stroke:var(--text);stroke-width:1.8}
-.dev-ink{stroke:var(--text);stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round}
-.dev-fill{fill:var(--text)}
-.nm{font:700 13px var(--sans);fill:var(--text)}
-.lbl{font:11px var(--mono);fill:var(--muted)}
-.narrow .nm{font-size:12px}.narrow .lbl{font-size:9.5px}
-.ring{fill:none;stroke:var(--accent);stroke-width:2.5;opacity:0}
-.node.active .ring{opacity:1;animation:pulse 1.6s ease-in-out infinite}
-@keyframes pulse{0%,100%{stroke-opacity:1}50%{stroke-opacity:.3}}
-.token rect{stroke-width:1.5}
-.token text{font:700 10px var(--sans);text-anchor:middle;dominant-baseline:central}
-.token.k-data rect{fill:var(--l2bg);stroke:var(--l2)} .token.k-data text{fill:var(--l2)}
-.token.k-ip rect{fill:var(--l3bg);stroke:var(--l3)} .token.k-ip text{fill:var(--l3)}
-.token.k-tcp rect{fill:var(--l4bg);stroke:var(--l4)} .token.k-tcp text{fill:var(--l4)}
-.token.k-app rect{fill:var(--l7bg);stroke:var(--l7)} .token.k-app text{fill:var(--l7)}
-.token.k-arp rect{fill:var(--arpbg);stroke:var(--arp)} .token.k-arp text{fill:var(--arp)}
-.mark{font:700 12px var(--sans)}
-.mark.ok{fill:var(--ok)} .mark.drop{fill:var(--bad)}
-
-.controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:12px 0;padding:10px 12px}
-.controls .btns{display:flex;gap:6px;flex-wrap:wrap}
-.btn{border:1px solid var(--border);background:var(--surface2);color:var(--text);border-radius:8px;padding:8px 14px;font:600 .92rem var(--sans);cursor:pointer;min-height:40px}
-.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-text)}
-.btn:disabled{opacity:.45;cursor:not-allowed}
-.progress{flex:1;min-width:180px;display:flex;flex-direction:column;gap:6px}
-.stepno{font-size:.85rem;color:var(--muted)}
-.dots{display:flex;gap:4px;flex-wrap:wrap}
-.dots button{width:14px;height:14px;border-radius:50%;border:1.5px solid var(--muted);background:transparent;padding:0;cursor:pointer}
-.dots button.done{background:var(--muted);opacity:.55}
-.dots button.cur{background:var(--accent);border-color:var(--accent);opacity:1}
-
-.main{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:12px;align-items:start}
-.col{display:flex;flex-direction:column;gap:12px}
-.chip{display:inline-block;font:600 .78rem var(--sans);padding:2px 9px;border-radius:999px;background:var(--surface2);color:var(--muted);margin-bottom:6px}
-#exp h2{font-size:1.2rem;margin:0 0 8px}
-#exp p,#exp li{margin:.45em 0}
-#exp ul,#exp ol{padding-left:1.3em;margin:.4em 0}
-.quote{border-left:3px solid var(--arp);padding:4px 10px;background:var(--arpbg);border-radius:0 6px 6px 0;font-style:italic}
-.key{border-left:3px solid var(--accent);padding:6px 10px;background:var(--surface2);border-radius:0 6px 6px 0}
-.note{color:var(--muted);font-size:.9rem}
-
-.stack{margin-top:14px;border-top:1px solid var(--border);padding-top:12px}
-.stack h3{font-size:.9rem;margin:0 0 8px;color:var(--muted);font-weight:600}
-.layer{display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:8px;border:1px solid var(--border);margin-bottom:4px;font-size:.9rem;background:var(--surface)}
-.layer .n{font:700 .8rem var(--mono);width:26px;text-align:center;border-radius:5px;padding:1px 0;background:var(--surface2)}
-.layer .pdu{margin-left:auto;color:var(--muted);font-size:.82rem}
-.layer.off{opacity:.35;border-style:dashed}
-.layer.on{border-width:2px}
-.layer.on.L7{border-color:var(--l7);background:var(--l7bg)} .layer.on.L4{border-color:var(--l4);background:var(--l4bg)}
-.layer.on.L3{border-color:var(--l3);background:var(--l3bg)} .layer.on.L2{border-color:var(--l2);background:var(--l2bg)}
-.layer.on.L1{border-color:var(--muted);background:var(--surface2)}
-
-.pdu-badge{display:inline-block;font:600 .8rem var(--sans);padding:2px 9px;border-radius:6px;background:var(--surface2);margin-left:6px;vertical-align:middle}
-.bar{display:flex;border-radius:8px;overflow:hidden;border:1px solid var(--border);margin:10px 0 6px;min-height:34px;font:600 .72rem var(--sans)}
-.bar div{display:flex;align-items:center;justify-content:center;text-align:center;padding:4px 3px;line-height:1.15;min-width:0;overflow-wrap:anywhere}
-.bar .g-eth,.bar .g-fcs{background:var(--l2bg);color:var(--l2)} .bar .g-arp{background:var(--arpbg);color:var(--arp)}
-.bar .g-ip{background:var(--l3bg);color:var(--l3)} .bar .g-tcp{background:var(--l4bg);color:var(--l4)} .bar .g-app{background:var(--l7bg);color:var(--l7)}
-.bar div+div{border-left:1px solid var(--border)}
-.bar .gone{background:repeating-linear-gradient(45deg,transparent 0 5px,var(--surface2) 5px 10px);color:var(--muted);text-decoration:line-through}
-.bar .touched{box-shadow:inset 0 0 0 2px var(--chgfg)}
-.legend{display:flex;gap:10px;flex-wrap:wrap;font-size:.78rem;color:var(--muted);margin-bottom:6px}
-.legend span{display:inline-flex;align-items:center;gap:4px}
-.sw{width:12px;height:12px;border-radius:3px;display:inline-block}
-.group{margin-top:10px}
-.group h4{margin:0 0 4px;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em}
-.group.g-eth h4,.group.g-fcs h4{color:var(--l2)} .group.g-arp h4{color:var(--arp)} .group.g-ip h4{color:var(--l3)} .group.g-tcp h4{color:var(--l4)} .group.g-app h4{color:var(--l7)}
-.f{display:grid;grid-template-columns:minmax(0,9.5em) minmax(0,1fr);gap:8px;align-items:baseline;padding:4px 8px;border-radius:6px;font-size:.88rem}
-.f+.f{margin-top:2px}
-.f .k{color:var(--muted)}
-.f .v{font-family:var(--mono);overflow-wrap:anywhere}
-.f .old{text-decoration:line-through;opacity:.7;margin-right:4px}
-.f .tag{font:700 .68rem var(--sans);border-radius:4px;padding:0 5px;margin-left:6px;vertical-align:1px;white-space:nowrap}
-.f.new{background:var(--newbg)} .f.new .tag{background:var(--newfg);color:var(--surface)}
-.f.chg{background:var(--chgbg)} .f.chg .tag{background:var(--chgfg);color:var(--surface)}
-.f.rem{background:var(--rembg)} .f.rem .v{text-decoration:line-through;opacity:.75} .f.rem .tag{background:var(--remfg);color:var(--surface)}
-.empty{color:var(--muted);font-style:italic}
-
-table{border-collapse:collapse;width:100%;font-size:.86rem}
-th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--border);vertical-align:top}
-th{font-size:.76rem;color:var(--muted);font-weight:600}
-td.m{font-family:var(--mono);font-size:.84rem;overflow-wrap:anywhere}
-tr.hit td{background:var(--l3bg);font-weight:600}
-tr.added td{background:var(--newbg)}
-.tbl{margin-bottom:14px}.tbl:last-child{margin-bottom:0}
-.tbl h3{font-size:.88rem;margin:0 0 4px}
-.tnote{font-size:.82rem;color:var(--bad);margin-top:4px;font-weight:600}
-.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
-#log table{min-width:560px}
-#log td.mac{background:var(--chgbg)}
-#log td.ip{background:var(--l3bg)}
-.lead{color:var(--muted);font-size:.9rem;margin:0 0 8px}
-
-.full{margin-top:12px}
-.q{border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px}
-.q p.t{margin:0 0 8px;font-weight:600}
-.opts{display:grid;gap:6px}
-.opt{text-align:left;border:1px solid var(--border);background:var(--surface2);color:var(--text);border-radius:8px;padding:9px 12px;font:inherit;font-size:.93rem;cursor:pointer}
-.opt:disabled{cursor:default}
-.opt.right{border-color:var(--ok);background:var(--newbg);font-weight:600}
-.opt.wrong{border-color:var(--bad);background:var(--rembg)}
-.fb{margin:8px 0 0;font-size:.9rem}
-.fb.ok b{color:var(--ok)} .fb.no b{color:var(--bad)}
-.score{display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-weight:600}
-.gl{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:8px 16px;margin:0}
-.gl div{padding:8px 10px;border:1px solid var(--border);border-radius:8px;min-width:0}
-.gl dt{font-weight:700}
-.gl dt small{font-weight:400;color:var(--muted);margin-left:6px}
-.gl dd{margin:2px 0 0;font-size:.9rem}
-.glink{color:var(--accent);font-size:.82rem}
-footer{color:var(--muted);font-size:.8rem;text-align:center;padding:18px 0 8px}
-
-@media (max-width:860px){.main{grid-template-columns:minmax(0,1fr)}}
-@media (max-width:640px){
-  .wrap{padding-block:12px}
-  .controls{position:sticky;bottom:8px;z-index:5;box-shadow:0 4px 18px rgba(0,0,0,.18)}
-  .btn{padding:8px 12px}
-  .controls{padding:8px 10px;gap:6px}
-  .controls .btns{width:100%;display:grid;grid-template-columns:auto auto auto 1fr;gap:6px}
-  #b-reset .bt,#b-back .bt,#b-play .bt{display:none}
-  #b-reset,#b-back,#b-play{min-width:44px;font-size:1rem}
-  .progress{min-width:0;flex-direction:row;align-items:center;gap:8px;width:100%}
-  .stepno{white-space:nowrap;font-size:.78rem}
-  .dots{gap:3px;flex-wrap:nowrap}
-  .dots button{width:10px;height:10px}
-  .f{grid-template-columns:minmax(0,1fr)}
-  .f{gap:0}
-  .card{padding:14px}
-}
-@media (prefers-reduced-motion: reduce){.node.active .ring{animation:none}}
-
-/* ---------- professional layer ---------- */
-html{scroll-behavior:smooth;scroll-padding-top:16px}
-@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
-body{font-size:16px;-webkit-font-smoothing:antialiased}
-h1,h2,h3,.card h2,#exp h2{font-family:var(--head);letter-spacing:-.01em;text-wrap:balance}
-a{color:var(--accent)}
-.gutter{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
-.topbar{background:var(--surface);border-bottom:1px solid var(--border)}
-.topbar-in{max-width:1180px;margin:0 auto;display:flex;align-items:center;gap:16px;padding-block:10px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
-.brand{display:flex;align-items:center;gap:10px;color:var(--text);text-decoration:none;font:700 1rem var(--head);white-space:nowrap}
-.nav{display:flex;gap:4px;margin-left:auto;overflow-x:auto;min-width:0;scrollbar-width:none}
-.nav a{color:var(--muted);text-decoration:none;font-weight:500;font-size:.9rem;padding:6px 10px;border-radius:6px;white-space:nowrap}
-.nav a:hover{color:var(--text);background:var(--surface2)}
-.nav a:focus-visible,.brand:focus-visible,.glink:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
-.hero{background:var(--hero);border-bottom:1px solid var(--border)}
-.hero-in{max-width:1180px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:24px;align-items:start;padding-block:28px 24px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
-.eyebrow{font:600 .74rem var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin:0 0 6px}
-.hero h1{font-size:clamp(1.6rem,3.4vw,2.4rem);line-height:1.12;margin:0 0 10px}
-.hero .sub{font-size:1.05rem;color:var(--muted);margin:0 0 14px;max-width:60ch}
-.meta{list-style:none;display:flex;flex-wrap:wrap;gap:8px;margin:0;padding:0}
-.meta li{font:500 .8rem var(--mono);padding:4px 10px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--muted)}
-.goals{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
-.goals h2{font-size:.95rem;margin:0 0 8px}
-.goals ul{margin:0;padding:0;list-style:none;display:grid;gap:6px}
-.goals li{display:grid;grid-template-columns:20px minmax(0,1fr);gap:6px;font-size:.92rem}
-.goals li::before{content:"✓";color:var(--ok);font-weight:700}
-.wrap{padding-block:20px}
-.card{border-radius:10px;box-shadow:none}
-.diagram{padding:10px 10px 6px}
-.dlegend{display:flex;flex-wrap:wrap;gap:6px 14px;padding:8px 8px 4px;border-top:1px solid var(--border);margin-top:4px;font-size:.78rem;color:var(--muted)}
-.dlegend span{display:inline-flex;align-items:center;gap:6px}
-.dlegend b{font:700 .66rem var(--sans);padding:1px 6px;border-radius:4px;border:1.5px solid}
-.lg-eth{color:var(--l2);background:var(--l2bg)}.lg-arp{color:var(--arp);background:var(--arpbg)}.lg-ip{color:var(--l3);background:var(--l3bg)}.lg-tcp{color:var(--l4);background:var(--l4bg)}.lg-app{color:var(--l7);background:var(--l7bg)}
-.lg-ring{width:12px;height:12px;border-radius:50%;border:2px solid var(--accent);display:inline-block}
-.btn{border-radius:7px;font-weight:600}
-.btn:not(:disabled):hover{border-color:var(--accent)}
-#exp .eyebrow{margin-bottom:4px}
-#exp{font-size:1rem}
-#exp > p,#exp > ul,#exp > ol{max-width:68ch}
-details.more{margin-top:14px;border:1px solid var(--border);border-radius:8px;background:var(--surface2)}
-details.more summary{cursor:pointer;padding:9px 12px;font-weight:600;font-size:.92rem;list-style:none;display:flex;align-items:center;gap:8px}
-details.more summary::-webkit-details-marker{display:none}
-details.more summary::before{content:"+";font:700 1rem var(--mono);color:var(--accent);width:14px}
-details.more[open] summary::before{content:"−"}
-details.more summary:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:8px}
-details.more .more-body{padding:0 14px 12px;font-size:.93rem}
-details.more .more-body p,details.more .more-body li{margin:.4em 0}
-details.more .more-body ul{padding-left:1.2em;margin:.3em 0}
-.try{margin-top:12px;border:1px solid var(--border);border-radius:8px;overflow:hidden}
-.try h4{margin:0;padding:7px 12px;font:600 .74rem var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);background:var(--surface2);border-bottom:1px solid var(--border)}
-.cmdrow{padding:8px 12px;display:grid;gap:4px}
-.cmdrow+.cmdrow{border-top:1px solid var(--border)}
-.cmd{display:flex;align-items:center;gap:8px;min-width:0}
-.cmd code{flex:1;min-width:0;background:var(--ink);color:var(--surface);padding:6px 10px;border-radius:6px;font-size:.86rem;overflow-x:auto;white-space:nowrap}
-.cmd button{border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:6px;padding:5px 9px;font:600 .75rem var(--sans);cursor:pointer;white-space:nowrap}
-.cmdrow p{margin:0;font-size:.86rem;color:var(--muted)}
-.sec-head{margin:28px 0 12px}
-.sec-head:first-child{margin-top:4px}
-.sec-head h2{font-size:clamp(1.3rem,2.4vw,1.7rem);margin:0 0 6px}
-.sec-head .lead{max-width:70ch;font-size:.98rem}
-.ref{padding-top:8px}
-.ref-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:12px;align-items:start}
-.fbar{display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin:6px 0 4px;font:600 .7rem var(--sans);min-height:44px}
-.fbar div{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:4px 2px;line-height:1.15;min-width:0;overflow:hidden;white-space:nowrap}
-@media (max-width:640px){.fbar{font-size:.6rem}.fbar div small{font-size:.56rem}}
-.fbar div small{font:500 .64rem var(--mono);opacity:.85}
-.fbar div+div{border-left:1px solid var(--border)}
-.fb-pre{background:var(--surface2);color:var(--muted)}
-.fb-l2{background:var(--l2bg);color:var(--l2)}
-.fb-pay{background:var(--l3bg);color:var(--l3)}
-.ruler{display:flex;justify-content:space-between;font:500 .68rem var(--mono);color:var(--muted);margin-bottom:12px}
-.facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px}
-.fact{border:1px solid var(--border);border-radius:8px;padding:8px 10px;min-width:0}
-.fact b{display:block;font:600 1.15rem var(--head);font-variant-numeric:tabular-nums}
-.fact span{font-size:.8rem;color:var(--muted)}
-td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
-.cmp th:first-child,.cmp td:first-child{color:var(--muted);font-weight:600;font-size:.8rem}
-.cmp td{font-size:.86rem}
-.foot{border-top:1px solid var(--border);background:var(--surface);margin-top:32px}
-.foot-in{max-width:1180px;margin:0 auto;display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 20px;padding-block:16px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));color:var(--muted);font-size:.82rem}
-.foot-in p{margin:0;max-width:75ch}
-footer{text-align:left;padding:0}
-@media (max-width:860px){.hero-in,.ref-grid{grid-template-columns:minmax(0,1fr)}.facts{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media (max-width:640px){
-  .brand span{display:none}
-  .topbar-in{gap:8px}
-  .nav{margin-left:0}
-  .hero-in{padding-block:20px 18px}
-  .wrap{padding-block:14px}
-}
+.home-hero .hero-in{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);padding-block:40px 34px}
+.home-hero h1{font-size:clamp(1.9rem,4.4vw,3rem)}
+.how{display:grid;gap:10px;margin:0;padding:0;list-style:none}
+.how li{display:grid;grid-template-columns:34px minmax(0,1fr);gap:10px;align-items:start;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+.how b{display:block;font-family:var(--head)}
+.how span{font-size:.9rem;color:var(--muted)}
+.how i{width:34px;height:34px;border-radius:8px;background:var(--surface2);display:grid;place-items:center;font-style:normal;font-size:1.05rem}
+.path{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.lesson{display:flex;flex-direction:column;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;color:var(--text);text-decoration:none;min-width:0;transition:border-color .15s,transform .15s}
+.lesson:hover{border-color:var(--accent);transform:translateY(-2px)}
+.lesson:focus-visible{outline:2px solid var(--focus);outline-offset:3px}
+@media (prefers-reduced-motion: reduce){.lesson{transition:none}.lesson:hover{transform:none}}
+.lesson .top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.lesson .num{font:600 .74rem var(--mono);color:var(--accent);letter-spacing:.08em}
+.lesson .lvl{font:500 .74rem var(--mono);padding:2px 8px;border-radius:999px;border:1px solid var(--border);color:var(--muted)}
+.lesson svg{width:100%;height:auto;max-height:110px;background:var(--surface2);border-radius:8px}
+.lesson h3{font:700 1.25rem var(--head);margin:0}
+.lesson p{margin:0;color:var(--muted);font-size:.93rem}
+.lesson ul{margin:0;padding-left:1.1em;font-size:.88rem}
+.lesson li{margin:2px 0}
+.lesson .go{margin-top:auto;font-weight:600;color:var(--accent);font-size:.92rem}
+.lesson .stats{font:500 .78rem var(--mono);color:var(--muted)}
+.soon{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.soon div{border:1px dashed var(--border);border-radius:10px;padding:12px 14px;min-width:0}
+.soon b{font-family:var(--head)}
+.soon p{margin:4px 0 0;font-size:.86rem;color:var(--muted)}
+.ill-line{stroke:var(--link);stroke-width:2.5}
+.ill-dev{fill:var(--surface);stroke:var(--text);stroke-width:1.6}
+.ill-acc{fill:var(--accent)}
+.ill-tok{fill:var(--l2bg);stroke:var(--l2);stroke-width:1.4}
+.ill-dns{fill:var(--arpbg);stroke:var(--arp);stroke-width:1.4}
+.ill-txt{font:700 9px var(--sans)}
+@media (max-width:900px){.path{grid-template-columns:minmax(0,1fr)}.soon{grid-template-columns:repeat(2,minmax(0,1fr))}.home-hero .hero-in{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:420px){.soon{grid-template-columns:minmax(0,1fr)}}
 </style>
 </head>
 <body>
-<header class="topbar" id="top">
-  <div class="topbar-in">
-    <a class="brand" href="#top">
-      <svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="var(--accent)"/><path d="M7 16h18M19 11l6 5-6 5" fill="none" stroke="var(--accent-text)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="16" r="2.6" fill="var(--accent-text)"/></svg>
-      <span data-t="brand"></span>
-    </a>
-    <nav class="nav" aria-label="Secțiuni / Sections">
-      <a href="#sim" data-t="navSim"></a><a href="#anatomy" data-t="navAnat"></a><a href="#gloss" data-t="navGloss"></a><a href="#quiz" data-t="navQuiz"></a>
-    </nav>
-    <div class="tools">
-      <div class="seg" role="group" aria-label="Limba / Language">
-        <button type="button" data-lang="ro">RO</button>
-        <button type="button" data-lang="en">EN</button>
-      </div>
-      <button type="button" class="icon-btn" id="theme" aria-label="Light/dark">◐</button>
-    </div>
+<header class="topbar" id="top"><div class="topbar-in">
+  <a class="brand" href="./"><svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="var(--accent)"/><path d="M7 16h18M19 11l6 5-6 5" fill="none" stroke="var(--accent-text)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="16" r="2.6" fill="var(--accent-text)"/></svg><span data-t="brand"></span></a>
+  <nav class="nav" aria-label="Secțiuni / Sections"><a href="#lectii" data-t="navLessons"></a><a href="#curand" data-t="navSoon"></a></nav>
+  <div class="tools"><div class="seg" role="group" aria-label="Limba / Language"><button type="button" data-lang="ro">RO</button><button type="button" data-lang="en">EN</button></div><button type="button" class="icon-btn" id="theme">◐</button></div>
+</div></header>
+
+<section class="hero home-hero"><div class="hero-in">
+  <div class="hero-text">
+    <p class="eyebrow" data-t="eyebrow"></p>
+    <h1 data-t="h1"></h1>
+    <p class="sub" data-t="sub"></p>
+    <ul class="meta" id="meta"></ul>
   </div>
-</header>
+  <ul class="how" id="how"></ul>
+</div></section>
 
-<section class="hero">
-  <div class="hero-in">
-    <div class="hero-text">
-      <p class="eyebrow" data-t="heroEyebrow"></p>
-      <h1 id="t-title"></h1>
-      <p class="sub" id="t-sub"></p>
-      <ul class="meta" id="meta"></ul>
-    </div>
-    <div class="goals">
-      <h2 data-t="goalsT"></h2>
-      <ul id="goals"></ul>
-    </div>
-  </div>
-</section>
+<div class="wrap">
+  <div class="sec-head" id="lectii"><p class="eyebrow" data-t="pathEyebrow"></p><h2 data-t="pathT"></h2><p class="lead" data-t="pathLead"></p></div>
+  <div class="path" id="path"></div>
 
-<div class="wrap" id="sim">
-  <section class="card diagram" aria-label="Diagrama rețelei / Network diagram">
-    <svg id="net" role="img" aria-labelledby="t-title"></svg>
-    <div class="dlegend" id="dlegend"></div>
-  </section>
-
-  <section class="card controls" aria-label="Controale / Controls">
-    <div class="btns">
-      <button type="button" class="btn" id="b-reset"></button>
-      <button type="button" class="btn" id="b-back"></button>
-      <button type="button" class="btn" id="b-play"></button>
-      <button type="button" class="btn primary" id="b-next"></button>
-    </div>
-    <div class="progress">
-      <div class="stepno" id="stepno" aria-live="polite"></div>
-      <div class="dots" id="dots"></div>
-    </div>
-  </section>
-
-  <div class="main">
-    <div class="col">
-      <section class="card" id="exp" aria-live="polite"></section>
-    </div>
-    <div class="col">
-      <section class="card" id="frame"></section>
-      <section class="card" id="tables" hidden></section>
-    </div>
-  </div>
-
-  <section class="card full" id="log"></section>
+  <div class="sec-head" id="curand"><p class="eyebrow" data-t="soonEyebrow"></p><h2 data-t="soonT"></h2></div>
+  <div class="soon" id="soon"></div>
 </div>
-
-<div class="wrap ref">
-  <div class="sec-head" id="anatomy"><p class="eyebrow" data-t="anatEyebrow"></p><h2 data-t="anatT"></h2><p class="lead" data-t="anatLead"></p></div>
-  <div class="ref-grid">
-    <section class="card" id="anat-frame"></section>
-    <section class="card" id="anat-cmp"></section>
-  </div>
-  <div class="sec-head"><p class="eyebrow" data-t="glossEyebrow"></p></div>
-  <section class="card" id="gloss"></section>
-  <div class="sec-head"><p class="eyebrow" data-t="quizEyebrow"></p></div>
-  <section class="card" id="quiz"></section>
-</div>
-<footer class="foot">
-  <div class="foot-in">
-    <p id="foot"></p>
-    <p><a href="https://github.com/tedimihailescu/Ethernet-frame-learning-app" data-t="src"></a></p>
-  </div>
-</footer>
-<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<footer class="foot"><div class="foot-in"><p data-t="foot"></p><p><a href="https://github.com/tedimihailescu/Ethernet-frame-learning-app" data-t="src"></a></p></div></footer>
 
 <script>
 (function(){
 "use strict";
-/* ---------- helpers ---------- */
-const $=s=>document.querySelector(s);
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
 let lang=store.get("cadru-lang")==="en"?"en":"ro";
-const T=v=>(v&&typeof v==="object")?v[lang]:v;
-
-const CRC_TABLE=(()=>{const t=[];for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();
-function crc32(str){let c=0xFFFFFFFF;for(let i=0;i<str.length;i++)c=CRC_TABLE[(c^str.charCodeAt(i))&0xFF]^(c>>>8);return ((c^0xFFFFFFFF)>>>0).toString(16).toUpperCase().padStart(8,"0")}
-function ipChecksum(ttl){
-  // real IPv4 header checksum for: 45 00 | len 0x0036 | id 0x1c46 | DF | ttl,proto=6 | 192.168.1.10 -> 192.168.2.20
-  const w=[0x4500,0x0036,0x1c46,0x4000,(ttl<<8)|6,0,0xc0a8,0x010a,0xc0a8,0x0214];
-  let s=w.reduce((a,b)=>a+b,0);while(s>>16)s=(s&0xffff)+(s>>16);
-  return "0x"+((~s)&0xffff).toString(16).toUpperCase().padStart(4,"0");
-}
-
-/* ---------- addresses ---------- */
-const MAC={A:"02:AA:00:00:00:0A",R1a:"02:11:00:00:00:01",R1b:"02:11:00:00:00:02",R2a:"02:22:00:00:00:01",R2b:"02:22:00:00:00:02",B:"02:BB:00:00:00:0B",C:"02:CC:00:00:00:0C",BC:"FF:FF:FF:FF:FF:FF",Z:"00:00:00:00:00:00"};
-const IP={A:"192.168.1.10",R1a:"192.168.1.1",R1b:"10.0.0.1",R2b:"10.0.0.2",R2a:"192.168.2.1",B:"192.168.2.20",C:"192.168.2.30"};
-
-/* ---------- frames ---------- */
-const ET_IP="0x0800 (IPv4)",ET_ARP="0x0806 (ARP)";
-const APP={payload:"GET / HTTP/1.1"};
-const TCP={srcPort:"49152",dstPort:"80 (HTTP)"};
-const ipHdr=ttl=>({srcIp:IP.A,dstIp:IP.B,ttl:String(ttl),proto:"6 (TCP)",ipChk:ipChecksum(ttl)});
-function eth(dst,src,type,inner){const f=Object.assign({dstMac:dst,srcMac:src,etherType:type},inner);delete f.fcs;f.fcs="0x"+crc32(JSON.stringify(f));return f}
-const F={
-  app:{...APP}, seg:{...TCP,...APP}, pkt:{...ipHdr(64),...TCP,...APP},
-  arpReq:eth(MAC.BC,MAC.A,ET_ARP,{arpOp:{ro:"1 (cerere)",en:"1 (request)"},sMac:MAC.A,sIp:IP.A,tMac:{ro:MAC.Z+" (necunoscut)",en:MAC.Z+" (unknown)"},tIp:IP.R1a}),
-  arpRep:eth(MAC.A,MAC.R1a,ET_ARP,{arpOp:{ro:"2 (răspuns)",en:"2 (reply)"},sMac:MAC.R1a,sIp:IP.R1a,tMac:MAC.A,tIp:IP.A}),
-};
-F.fA=eth(MAC.R1a,MAC.A,ET_IP,F.pkt);
-F.pR1={...ipHdr(63),...TCP,...APP};
-F.fR1=eth(MAC.R2b,MAC.R1b,ET_IP,F.pR1);
-F.fR2=eth(MAC.B,MAC.R2a,ET_IP,{...ipHdr(62),...TCP,...APP});
-F.pB={...ipHdr(62),...TCP,...APP};
-
-const GROUPS=[
-  {id:"eth",fields:["dstMac","srcMac","etherType"],name:{ro:"Antet Ethernet (L2)",en:"Ethernet header (L2)"},short:{ro:"Antet Ethernet",en:"Ethernet hdr"}},
-  {id:"arp",fields:["arpOp","sMac","sIp","tMac","tIp"],name:{ro:"Mesaj ARP",en:"ARP message"},short:{ro:"ARP",en:"ARP"}},
-  {id:"ip",fields:["srcIp","dstIp","ttl","proto","ipChk"],name:{ro:"Antet IP (L3)",en:"IP header (L3)"},short:{ro:"Antet IP",en:"IP hdr"}},
-  {id:"tcp",fields:["srcPort","dstPort"],name:{ro:"Antet TCP (L4)",en:"TCP header (L4)"},short:{ro:"TCP",en:"TCP"}},
-  {id:"app",fields:["payload"],name:{ro:"Date aplicație (L7)",en:"Application data (L7)"},short:{ro:"Date",en:"Data"}},
-  {id:"fcs",fields:["fcs"],name:{ro:"Trailer Ethernet (L2)",en:"Ethernet trailer (L2)"},short:{ro:"FCS",en:"FCS"}}
-];
-const FL={
-  dstMac:{ro:"MAC destinație",en:"Destination MAC"},srcMac:{ro:"MAC sursă",en:"Source MAC"},etherType:"EtherType",
-  arpOp:{ro:"Operație ARP",en:"ARP operation"},sMac:{ro:"MAC expeditor",en:"Sender MAC"},sIp:{ro:"IP expeditor",en:"Sender IP"},tMac:{ro:"MAC țintă",en:"Target MAC"},tIp:{ro:"IP țintă",en:"Target IP"},
-  srcIp:{ro:"IP sursă",en:"Source IP"},dstIp:{ro:"IP destinație",en:"Destination IP"},ttl:"TTL",proto:"Protocol",ipChk:{ro:"Checksum IP",en:"IP checksum"},
-  srcPort:{ro:"Port sursă",en:"Source port"},dstPort:{ro:"Port destinație",en:"Destination port"},
-  payload:{ro:"Date (payload)",en:"Payload (data)"},fcs:"FCS (CRC-32)"
-};
-
-/* ---------- topology ---------- */
-const NODES={
-  A:{type:"host",name:"Host A",lines:[IP.A,MAC.A]},
-  SW1:{type:"switch",name:"SW1",lines:[]},
-  R1:{type:"router",name:"R1",lines:["Gi0 "+IP.R1a,"Gi1 "+IP.R1b]},
-  R2:{type:"router",name:"R2",lines:["Gi1 "+IP.R2b,"Gi0 "+IP.R2a]},
-  SW2:{type:"switch",name:"SW2",lines:[],lblLeft:true},
-  B:{type:"host",name:"Host B",lines:[IP.B,MAC.B]},
-  C:{type:"host",name:"Host C",lines:[IP.C,MAC.C],side:true}
-};
-const LINKS=[["A","SW1"],["SW1","R1"],["R1","R2"],["R2","SW2"],["SW2","B"],["SW2","C"]];
-const PORTS=[["SW1","A","p1"],["SW1","R1","p2"],["SW2","R2","p1"],["SW2","B","p2"],["SW2","C","p3"]];
-const LAYOUTS={
-  wide:{vb:[0,0,1000,330],n:{A:[70,130],SW1:[230,130],R1:[400,130],R2:[600,130],SW2:[770,130],B:[930,130],C:[770,262]},
-    zones:[{x:10,y:24,w:390,h:206,l:"LAN 1 · 192.168.1.0/24"},{x:600,y:24,w:390,h:300,l:"LAN 2 · 192.168.2.0/24"}],
-    wan:{x:500,y:100,a:"middle"},cls:""},
-  narrow:{vb:[0,0,360,450],n:{A:[62,72],SW1:[178,72],R1:[296,72],R2:[296,282],SW2:[178,282],B:[62,282],C:[178,392]},
-    zones:[{x:4,y:16,w:292,h:148,l:"LAN 1 · 192.168.1.0/24"},{x:4,y:226,w:292,h:220,l:"LAN 2 · 192.168.2.0/24"}],
-    wan:{x:286,y:197,a:"end"},cls:"narrow"}
-};
-
-/* ---------- steps ---------- */
-const DC={ro:"direct conectată",en:"directly connected"};
-const S=[
-{at:["A","B"],frame:null,kind:"data",
- title:{ro:"Scenariul",en:"The scenario"},
- body:{ro:`<p><strong>Host A</strong> (un laptop, IP <code>192.168.1.10</code>) vrea să deschidă o pagină web de pe <strong>Host B</strong> (un server, IP <code>192.168.2.20</code>).</p>
-<p>Cele două calculatoare sunt în <strong>rețele diferite</strong>, legate prin două routere (R1 și R2). Fiecare rețea locală are câte un switch.</p>
-<p>Vom urmări un singur mesaj, pas cu pas. Apasă <strong>Următorul</strong> (sau tasta →). În panoul <em>Cadrul</em>, câmpurile colorate sunt cele care s-au schimbat la pasul curent.</p>`,
- en:`<p><strong>Host A</strong> (a laptop, IP <code>192.168.1.10</code>) wants to open a web page on <strong>Host B</strong> (a server, IP <code>192.168.2.20</code>).</p>
-<p>The two computers are on <strong>different networks</strong>, connected by two routers (R1 and R2). Each local network has a switch.</p>
-<p>We'll follow a single message, step by step. Press <strong>Next</strong> (or the → key). In the <em>Frame</em> panel, coloured fields are the ones that changed in the current step.</p>`},
- tables:["cfgA"]},
-
-{at:"A",frame:F.app,kind:"data",stack:{dev:"A",max:7,on:[7],dir:"down"},
- title:{ro:"Pe A: stratul Aplicație",en:"On A: the Application layer"},
- body:{ro:`<p>Browserul de pe A creează cererea HTTP <code>GET / HTTP/1.1</code> – adică „dă-mi pagina principală”.</p>
-<p>Deocamdată sunt doar <strong>date</strong>: nicăieri nu scrie unde trebuie să ajungă. Urmează <strong>încapsularea</strong>: fiecare strat de dedesubt adaugă propriul antet, ca niște plicuri puse unul peste altul.</p>`,
- en:`<p>The browser on A creates the HTTP request <code>GET / HTTP/1.1</code> – meaning "give me the home page".</p>
-<p>For now it's just <strong>data</strong>: nothing says where it should go. Next comes <strong>encapsulation</strong>: each layer below adds its own header, like envelopes placed one inside another.</p>`}},
-
-{at:"A",frame:F.seg,kind:"data",stack:{dev:"A",max:7,on:[4],dir:"down"},
- title:{ro:"Pe A: stratul Transport (TCP)",en:"On A: the Transport layer (TCP)"},
- body:{ro:`<p>TCP adaugă un antet cu <strong>porturi</strong>. Portul destinație <code>80</code> înseamnă „serviciul web” de pe B. Portul sursă <code>49152</code> e ales la întâmplare de A, ca răspunsul să ajungă înapoi la fila potrivită din browser.</p>
-<p>Date + antet TCP = <strong>segment</strong>.</p>
-<p class="note">În realitate, TCP face întâi o „strângere de mână” în 3 pași (SYN, SYN-ACK, ACK). O sărim aici, ca să ne concentrăm pe drum.</p>`,
- en:`<p>TCP adds a header with <strong>ports</strong>. Destination port <code>80</code> means "the web service" on B. Source port <code>49152</code> is picked at random by A, so the reply finds its way back to the right browser tab.</p>
-<p>Data + TCP header = <strong>segment</strong>.</p>
-<p class="note">In reality TCP first does a 3-way handshake (SYN, SYN-ACK, ACK). We skip it here to focus on the journey.</p>`}},
-
-{at:"A",frame:F.pkt,kind:"data",stack:{dev:"A",max:7,on:[3],dir:"down"},
- title:{ro:"Pe A: stratul Rețea (IP)",en:"On A: the Network layer (IP)"},
- body:{ro:`<p>IP adaugă <strong>IP-ul sursă</strong> (<code>192.168.1.10</code>) și <strong>IP-ul destinație</strong> (<code>192.168.2.20</code>). Sunt adresele <strong>de la un capăt la altul</strong>: rămân la fel pe tot drumul.</p>
-<p><strong>TTL = 64</strong> („time to live”): fiecare router scade 1. Dacă ajunge la 0, pachetul e aruncat – așa nu se învârte la nesfârșit dacă există o buclă.</p>
-<p>Segment + antet IP = <strong>pachet</strong>.</p>`,
- en:`<p>IP adds the <strong>source IP</strong> (<code>192.168.1.10</code>) and the <strong>destination IP</strong> (<code>192.168.2.20</code>). These are the <strong>end-to-end</strong> addresses: they stay the same for the whole trip.</p>
-<p><strong>TTL = 64</strong> ("time to live"): every router subtracts 1. If it reaches 0 the packet is discarded – so it can't loop forever if there's a loop.</p>
-<p>Segment + IP header = <strong>packet</strong>.</p>`}},
-
-{at:"A",frame:F.pkt,kind:"data",stack:{dev:"A",max:7,on:[3],dir:"down"},
- title:{ro:"Pe A: local sau la distanță?",en:"On A: local or remote?"},
- body:{ro:`<p>A trebuie să decidă cui predă pachetul. Își compară rețeaua cu a lui B folosind masca <code>/24</code> (255.255.255.0):</p>
-<ul><li>rețeaua lui A: <code>192.168.1</code>.0</li><li>rețeaua lui B: <code>192.168.2</code>.0</li></ul>
-<p>Sunt diferite ⇒ B nu e în rețeaua locală. A trimite pachetul la <strong>gateway-ul implicit</strong>: routerul R1 (<code>192.168.1.1</code>).</p>
-<p>Problemă: pe cablu, cadrele se adresează după adresa <strong>MAC</strong>, nu după IP. A știe IP-ul lui R1, dar nu și MAC-ul lui.</p>`,
- en:`<p>A has to decide who to hand the packet to. It compares its network with B's using the <code>/24</code> mask (255.255.255.0):</p>
-<ul><li>A's network: <code>192.168.1</code>.0</li><li>B's network: <code>192.168.2</code>.0</li></ul>
-<p>They differ ⇒ B is not on the local network. A sends the packet to its <strong>default gateway</strong>: router R1 (<code>192.168.1.1</code>).</p>
-<p>Problem: on the wire, frames are addressed by <strong>MAC</strong> address, not by IP. A knows R1's IP but not its MAC.</p>`},
- tables:["cfgA","arpA"],hl:{cfgA:2}},
-
-{at:"A",frame:F.arpReq,kind:"arp",stack:{dev:"A",max:7,on:[2],dir:"down"},
- move:[[["A","SW1"]],[["SW1","R1"]]],
- fx:[["sw1",MAC.A,"p1"],["arpR1",IP.A,MAC.A]],
- title:{ro:"ARP: „Cine are 192.168.1.1?”",en:"ARP: \"Who has 192.168.1.1?\""},
- body:{ro:`<p>A caută în <strong>cache-ul ARP</strong> și nu găsește nimic pentru <code>192.168.1.1</code>. Pachetul IP așteaptă, iar A trimite o <strong>cerere ARP</strong>:</p>
-<p class="quote">„Cine are 192.168.1.1? Spune-i lui 192.168.1.10.”</p>
-<p>MAC destinație <code>FF:FF:FF:FF:FF:FF</code> = <strong>broadcast</strong>, adică „pentru toți din rețeaua locală”. ARP nu folosește IP: stă direct în cadrul Ethernet (EtherType <code>0x0806</code>).</p>
-<p><strong>SW1 învață</strong>: MAC-ul sursă <code>02:AA:00:00:00:0A</code> a intrat pe portul p1, deci îl notează în tabela MAC. Fiind broadcast, trimite cadrul pe toate celelalte porturi. R1 își recunoaște IP-ul (și, în treacăt, notează MAC-ul lui A).</p>`,
- en:`<p>A looks in its <strong>ARP cache</strong> and finds nothing for <code>192.168.1.1</code>. The IP packet waits while A sends an <strong>ARP request</strong>:</p>
-<p class="quote">"Who has 192.168.1.1? Tell 192.168.1.10."</p>
-<p>Destination MAC <code>FF:FF:FF:FF:FF:FF</code> = <strong>broadcast</strong>, i.e. "for everyone on the local network". ARP doesn't use IP: it sits directly inside the Ethernet frame (EtherType <code>0x0806</code>).</p>
-<p><strong>SW1 learns</strong>: source MAC <code>02:AA:00:00:00:0A</code> came in on port p1, so it writes that into its MAC table. Since it's a broadcast, it sends the frame out of all other ports. R1 recognises its own IP (and also notes A's MAC along the way).</p>`},
- tables:["arpA","sw1"]},
-
-{at:"R1",frame:F.arpRep,kind:"arp",stack:{dev:"A",max:7,on:[2],dir:"up"},
- move:[[["R1","SW1"]],[["SW1","A"]]],
- fx:[["sw1",MAC.R1a,"p2"],["arpA",IP.R1a,MAC.R1a]],
- title:{ro:"ARP: răspunsul lui R1",en:"ARP: R1's reply"},
- body:{ro:`<p>R1 îi răspunde direct lui A (<strong>unicast</strong>, nu broadcast):</p>
-<p class="quote">„192.168.1.1 este la 02:11:00:00:00:01.”</p>
-<p>SW1 învață din nou: MAC-ul lui R1 e pe portul p2. Știe deja că A e pe p1, așa că trimite răspunsul <strong>doar</strong> acolo.</p>
-<p>A salvează perechea IP → MAC în cache-ul ARP (pentru câteva minute), ca să nu mai întrebe la fiecare pachet.</p>`,
- en:`<p>R1 replies directly to A (<strong>unicast</strong>, not broadcast):</p>
-<p class="quote">"192.168.1.1 is at 02:11:00:00:00:01."</p>
-<p>SW1 learns again: R1's MAC is on port p2. It already knows A is on p1, so it sends the reply <strong>only</strong> there.</p>
-<p>A saves the IP → MAC pair in its ARP cache (for a few minutes) so it doesn't have to ask for every packet.</p>`},
- tables:["sw1","arpA"]},
-
-{at:"A",frame:F.fA,kind:"data",stack:{dev:"A",max:7,on:[2],dir:"down"},
- title:{ro:"Pe A: stratul Legătură de date (Ethernet)",en:"On A: the Data link layer (Ethernet)"},
- body:{ro:`<p>Acum A poate construi <strong>cadrul Ethernet</strong> în jurul pachetului:</p>
-<ul><li><strong>MAC destinație</strong> = R1 (<code>02:11:00:00:00:01</code>) – <em>nu</em> B!</li>
-<li><strong>MAC sursă</strong> = A (<code>02:AA:00:00:00:0A</code>)</li>
-<li><strong>EtherType</strong> <code>0x0800</code> = „înăuntru e un pachet IPv4”</li>
-<li>la final, <strong>FCS</strong> – o sumă de control (CRC-32) cu care destinatarul verifică dacă cadrul s-a stricat pe drum.</li></ul>
-<p class="key">Ideea cheie: <strong>IP-ul</strong> arată destinația finală (B). <strong>MAC-ul</strong> arată doar următorul pas pe drum (R1).</p>`,
- en:`<p>Now A can build the <strong>Ethernet frame</strong> around the packet:</p>
-<ul><li><strong>Destination MAC</strong> = R1 (<code>02:11:00:00:00:01</code>) – <em>not</em> B!</li>
-<li><strong>Source MAC</strong> = A (<code>02:AA:00:00:00:0A</code>)</li>
-<li><strong>EtherType</strong> <code>0x0800</code> = "there's an IPv4 packet inside"</li>
-<li>at the end, the <strong>FCS</strong> – a checksum (CRC-32) the receiver uses to check whether the frame got damaged on the way.</li></ul>
-<p class="key">Key idea: the <strong>IP</strong> address points to the final destination (B). The <strong>MAC</strong> address only points to the next stop (R1).</p>`},
- tables:["arpA"],hl:{arpA:IP.R1a}},
-
-{at:"A",frame:F.fA,kind:"data",stack:{dev:"A",max:7,on:[1],dir:"down"},
- move:[[["A","SW1"]]],log:"A → R1",
- title:{ro:"Pe A: stratul Fizic",en:"On A: the Physical layer"},
- body:{ro:`<p>Placa de rețea transformă cadrul în <strong>biți</strong> – semnale electrice pe cablu (sau lumină pe fibră, unde radio pe Wi-Fi) – și îi trimite spre switch.</p>
-<p>Am notat cadrul în <em>Jurnalul legăturilor</em> de mai jos: așa arată pe porțiunea A → R1.</p>`,
- en:`<p>The network card turns the frame into <strong>bits</strong> – electrical signals on the cable (or light on fibre, radio waves on Wi-Fi) – and sends them to the switch.</p>
-<p>We've recorded the frame in the <em>Per-link log</em> below: this is how it looks on the A → R1 stretch.</p>`}},
-
-{at:"SW1",frame:F.fA,kind:"data",stack:{dev:"SW1",max:2,on:[2],dir:"updown"},
- move:[[["SW1","R1"]]],
- title:{ro:"SW1: învață și trimite mai departe",en:"SW1: learn and forward"},
- body:{ro:`<p>Switch-ul se uită doar la antetul Ethernet (stratul 2):</p>
-<ol><li><strong>Învățare:</strong> MAC-ul sursă <code>…:0A</code> e pe portul p1 – știa deja, doar reîmprospătează intrarea.</li>
-<li><strong>Redirecționare:</strong> caută MAC-ul destinație <code>02:11:00:00:00:01</code> în tabelă → portul p2. Trimite cadrul <strong>numai</strong> pe p2.</li></ol>
-<p>Switch-ul <strong>nu modifică</strong> cadrul – de aceea niciun câmp nu e colorat la acest pas.</p>`,
- en:`<p>The switch only looks at the Ethernet header (layer 2):</p>
-<ol><li><strong>Learning:</strong> source MAC <code>…:0A</code> is on port p1 – it already knew that, so it just refreshes the entry.</li>
-<li><strong>Forwarding:</strong> it looks up destination MAC <code>02:11:00:00:00:01</code> in the table → port p2. It sends the frame <strong>only</strong> out of p2.</li></ol>
-<p>The switch <strong>does not change</strong> the frame – that's why no field is coloured in this step.</p>`},
- tables:["sw1"],hl:{sw1:MAC.R1a}},
-
-{at:"R1",frame:F.pR1,kind:"data",stack:{dev:"R1",max:3,on:[1,2,3],dir:"up"},
- title:{ro:"R1: despachetează și alege drumul",en:"R1: unwrap and choose the route"},
- body:{ro:`<p>R1 verifică FCS-ul (e corect) și vede că MAC-ul destinație e al lui, deci acceptă cadrul.</p>
-<ol><li><strong>Scoate antetul și trailerul Ethernet</strong> – și-au făcut treaba pe legătura asta.</li>
-<li>Citește <strong>IP-ul destinație</strong> <code>192.168.2.20</code> și caută în <strong>tabela de rutare</strong>: cea mai bună potrivire e <code>192.168.2.0/24</code> → următorul hop <code>10.0.0.2</code> (R2), pe interfața Gi1.</li>
-<li><strong>Scade TTL-ul</strong>: 64 → 63. Pentru că antetul IP s-a schimbat, recalculează și <strong>checksum-ul IP</strong>.</li></ol>`,
- en:`<p>R1 checks the FCS (it's fine) and sees the destination MAC is its own, so it accepts the frame.</p>
-<ol><li><strong>It removes the Ethernet header and trailer</strong> – they've done their job on this link.</li>
-<li>It reads the <strong>destination IP</strong> <code>192.168.2.20</code> and looks in its <strong>routing table</strong>: the best match is <code>192.168.2.0/24</code> → next hop <code>10.0.0.2</code> (R2), via interface Gi1.</li>
-<li><strong>It decrements the TTL</strong>: 64 → 63. Because the IP header changed, it also recalculates the <strong>IP checksum</strong>.</li></ol>`},
- tables:["rtR1"],hl:{rtR1:"192.168.2.0/24"}},
-
-{at:"R1",frame:F.fR1,kind:"data",stack:{dev:"R1",max:3,on:[2,1],dir:"down"},
- move:[[["R1","R2"]]],log:"R1 → R2",
- title:{ro:"R1: un cadru nou pentru legătura următoare",en:"R1: a new frame for the next link"},
- body:{ro:`<p>R1 pune pachetul într-un <strong>cadru Ethernet complet nou</strong>:</p>
-<ul><li>MAC sursă = interfața Gi1 a lui R1 (<code>02:11:00:00:00:02</code>)</li>
-<li>MAC destinație = R2 (<code>02:22:00:00:00:02</code>), luat din cache-ul ARP al lui R1. Dacă nu l-ar fi avut, ar fi făcut ARP, exact ca A.</li>
-<li>FCS nou, calculat pentru noul cadru.</li></ul>
-<p class="key">IP-urile sursă și destinație <strong>nu se schimbă</strong>. Se schimbă doar MAC-urile (și TTL-ul).</p>
-<p class="note">Pe internetul real, legăturile dintre routere nu sunt mereu Ethernet (pot fi fibră, PPP etc.). Principiul e același: la fiecare legătură se construiește un antet nou de stratul 2.</p>`,
- en:`<p>R1 puts the packet into a <strong>brand-new Ethernet frame</strong>:</p>
-<ul><li>Source MAC = R1's Gi1 interface (<code>02:11:00:00:00:02</code>)</li>
-<li>Destination MAC = R2 (<code>02:22:00:00:00:02</code>), taken from R1's ARP cache. If it weren't there, R1 would ARP for it, just like A did.</li>
-<li>A new FCS, calculated for the new frame.</li></ul>
-<p class="key">The source and destination IPs <strong>do not change</strong>. Only the MACs (and the TTL) change.</p>
-<p class="note">On the real internet, links between routers aren't always Ethernet (they may be fibre, PPP, etc.). The principle is the same: a new layer-2 header is built for every link.</p>`},
- tables:["arpR1"],hl:{arpR1:IP.R2b}},
-
-{at:"R2",frame:F.fR2,kind:"data",stack:{dev:"R2",max:3,on:[1,2,3],dir:"updown"},
- move:[[["R2","SW2"]]],log:"R2 → B",
- title:{ro:"R2: aceeași rutină, încă o dată",en:"R2: the same routine again"},
- body:{ro:`<p>R2 face exact ce a făcut R1:</p>
-<ol><li>Verifică FCS-ul; MAC-ul destinație e al lui → scoate antetul Ethernet.</li>
-<li>Tabela de rutare: <code>192.168.2.0/24</code> e <strong>direct conectată</strong> pe Gi0 → B e chiar în rețeaua de alături, deci livrează direct.</li>
-<li>TTL 63 → 62, checksum IP recalculat.</li>
-<li>Cadru nou: MAC sursă = R2 Gi0 (<code>02:22:00:00:00:01</code>), MAC destinație = B (<code>02:BB:00:00:00:0B</code>, din cache-ul ARP).</li></ol>
-<p>Compară câmpurile colorate cu pasul anterior: din nou s-au schimbat MAC-urile și TTL-ul; IP-urile au rămas la fel.</p>`,
- en:`<p>R2 does exactly what R1 did:</p>
-<ol><li>Checks the FCS; the destination MAC is its own → removes the Ethernet header.</li>
-<li>Routing table: <code>192.168.2.0/24</code> is <strong>directly connected</strong> on Gi0 → B is right on the attached network, so it delivers directly.</li>
-<li>TTL 63 → 62, IP checksum recalculated.</li>
-<li>New frame: source MAC = R2 Gi0 (<code>02:22:00:00:00:01</code>), destination MAC = B (<code>02:BB:00:00:00:0B</code>, from the ARP cache).</li></ol>
-<p>Compare the coloured fields with the previous step: again the MACs and the TTL changed; the IPs stayed the same.</p>`},
- tables:["rtR2","arpR2"],hl:{rtR2:"192.168.2.0/24",arpR2:IP.B}},
-
-{at:"SW2",frame:F.fR2,kind:"data",stack:{dev:"SW2",max:2,on:[2],dir:"updown"},
- move:[[["SW2","B"],["SW2","C"]]],rest:["B","C"],marks:{B:"ok",C:"drop"},
- fx:[["sw2",MAC.R2a,"p1"]],
- title:{ro:"SW2: destinație necunoscută → inundare",en:"SW2: unknown destination → flooding"},
- body:{ro:`<p>SW2 învață că MAC-ul <code>02:22:00:00:00:01</code> (R2) e pe portul p1.</p>
-<p>Apoi caută MAC-ul destinație al lui B… și <strong>nu îl găsește</strong> în tabelă (intrările se șterg după ~5 minute fără trafic). Ce face un switch când nu știe? <strong>Inundă</strong> (flooding): trimite cadrul pe <strong>toate porturile</strong>, mai puțin pe cel pe care a venit.</p>
-<p>Host C primește și el cadrul, vede că MAC-ul destinație nu e al lui și îl <strong>aruncă</strong>. B îl recunoaște și îl acceptă.</p>
-<p class="note">Când B va răspunde, SW2 va învăța și MAC-ul lui B, iar data viitoare va trimite direct pe portul p2.</p>`,
- en:`<p>SW2 learns that MAC <code>02:22:00:00:00:01</code> (R2) is on port p1.</p>
-<p>Then it looks up B's destination MAC… and <strong>doesn't find it</strong> in the table (entries are removed after ~5 minutes without traffic). What does a switch do when it doesn't know? It <strong>floods</strong>: it sends the frame out of <strong>every port</strong> except the one it came in on.</p>
-<p>Host C receives the frame too, sees the destination MAC isn't its own and <strong>drops</strong> it. B recognises it and accepts it.</p>
-<p class="note">When B replies, SW2 will learn B's MAC as well, and next time it will send straight out of port p2.</p>`},
- tables:["sw2"],miss:{sw2:MAC.B}},
-
-{at:"B",frame:F.pB,kind:"data",stack:{dev:"B",max:7,on:[1,2],dir:"up"},
- title:{ro:"Pe B: Legătură de date",en:"On B: Data link"},
- body:{ro:`<p>Începe <strong>decapsularea</strong> – drumul în sus prin straturi.</p>
-<p>Placa de rețea a lui B verifică <strong>FCS</strong>-ul (cadrul nu e stricat) și <strong>MAC-ul destinație</strong> (e al lui). EtherType <code>0x0800</code> spune că înăuntru e IPv4, deci scoate antetul Ethernet și predă pachetul stratului Rețea.</p>`,
- en:`<p><strong>Decapsulation</strong> begins – the trip back up through the layers.</p>
-<p>B's network card checks the <strong>FCS</strong> (the frame isn't damaged) and the <strong>destination MAC</strong> (it's its own). EtherType <code>0x0800</code> says there's IPv4 inside, so it removes the Ethernet header and hands the packet to the Network layer.</p>`}},
-
-{at:"B",frame:F.seg,kind:"data",stack:{dev:"B",max:7,on:[3],dir:"up"},
- title:{ro:"Pe B: stratul Rețea",en:"On B: the Network layer"},
- body:{ro:`<p>IP-ul destinație <code>192.168.2.20</code> e al lui B → pachetul a ajuns. Nu mai trebuie rutat nicăieri.</p>
-<p>Avea <strong>TTL = 62</strong>: a pornit cu 64, deci a trecut prin 2 routere.</p>
-<p>Câmpul Protocol = 6 înseamnă TCP, așa că B scoate antetul IP și predă segmentul lui TCP.</p>`,
- en:`<p>The destination IP <code>192.168.2.20</code> is B's own → the packet has arrived. It doesn't need routing any further.</p>
-<p>It had <strong>TTL = 62</strong>: it started at 64, so it went through 2 routers.</p>
-<p>The Protocol field = 6 means TCP, so B removes the IP header and hands the segment to TCP.</p>`}},
-
-{at:"B",frame:F.app,kind:"data",stack:{dev:"B",max:7,on:[4,7],dir:"up"},
- title:{ro:"Pe B: Transport și Aplicație",en:"On B: Transport and Application"},
- body:{ro:`<p>TCP vede portul destinație <code>80</code> și predă datele <strong>serverului web</strong> care ascultă pe acel port.</p>
-<p>Serverul primește exact ce a trimis browserul: <code>GET / HTTP/1.1</code>. 🎉</p>
-<p>Răspunsul (pagina web) va face același drum înapoi, cu cadre noi la fiecare legătură: IP-urile sursă și destinație inversate, porturile inversate (80 → 49152).</p>`,
- en:`<p>TCP sees destination port <code>80</code> and hands the data to the <strong>web server</strong> listening on that port.</p>
-<p>The server receives exactly what the browser sent: <code>GET / HTTP/1.1</code>. 🎉</p>
-<p>The reply (the web page) will make the same trip back, with new frames on every link: source and destination IPs swapped, ports swapped (80 → 49152).</p>`}},
-
-{at:["A","B"],frame:null,kind:"data",summary:true,
- title:{ro:"Recapitulare",en:"Recap"},
- body:{ro:`<p>Uită-te la <strong>Jurnalul legăturilor</strong>: același pachet IP a călătorit în 3 cadre Ethernet diferite.</p>
-<ul><li><strong>MAC-urile</strong> se schimbă la fiecare router – arată doar <em>următorul pas</em>.</li>
-<li><strong>IP-urile</strong> rămân aceleași – arată <em>capetele</em> drumului.</li>
-<li><strong>TTL-ul</strong> scade cu 1 la fiecare router; <strong>FCS</strong>-ul se recalculează pentru fiecare cadru nou.</li>
-<li><strong>Switch-urile</strong> nu modifică cadrul: învață MAC-urile sursă și trimit după MAC-ul destinație (sau inundă dacă nu-l știu).</li>
-<li><strong>ARP</strong> află MAC-ul pentru un IP din rețeaua locală.</li></ul>
-<p><button type="button" class="btn primary" id="toQuiz">Mergi la test ↓</button></p>`,
- en:`<p>Look at the <strong>Per-link log</strong>: the same IP packet travelled inside 3 different Ethernet frames.</p>
-<ul><li><strong>MACs</strong> change at every router – they only point to the <em>next stop</em>.</li>
-<li><strong>IPs</strong> stay the same – they point to the <em>two ends</em> of the trip.</li>
-<li>The <strong>TTL</strong> drops by 1 at every router; the <strong>FCS</strong> is recalculated for every new frame.</li>
-<li><strong>Switches</strong> don't change the frame: they learn source MACs and forward by destination MAC (or flood if they don't know it).</li>
-<li><strong>ARP</strong> finds the MAC for an IP on the local network.</li></ul>
-<p><button type="button" class="btn primary" id="toQuiz">Go to the quiz ↓</button></p>`}}
-];
-/* ---------- deeper explanations ("Learn more") and commands to try, one entry per step ---------- */
-const MORE=[
- {more:{ro:`<p>De ce straturi? Fiecare strat are <strong>o singură treabă</strong> și nu trebuie să știe cum lucrează celelalte. Browserul nu știe nimic despre cabluri, iar placa de rețea nu știe ce e o pagină web.</p><p>O analogie: scrii o scrisoare (aplicația), o pui într-un plic cu numele destinatarului (TCP), plicul intră într-un colet cu adresa poștală (IP), iar curierul lipește o etichetă pentru drumul până la următorul depozit (Ethernet). La fiecare depozit se schimbă eticheta curierului, dar adresa poștală rămâne aceeași.</p>`,
-   en:`<p>Why layers? Each layer has <strong>one job</strong> and doesn't need to know how the others work. The browser knows nothing about cables, and the network card doesn't know what a web page is.</p><p>An analogy: you write a letter (the application), put it in an envelope with the recipient's name (TCP), the envelope goes into a parcel with the postal address (IP), and the courier sticks on a label for the trip to the next depot (Ethernet). At each depot the courier label is replaced, but the postal address stays the same.</p>`},
-  try:[{cmd:"ipconfig /all",d:{ro:"Arată IP-ul, masca, gateway-ul și adresa MAC („Physical Address”) ale calculatorului tău.",en:"Shows your computer's IP, mask, gateway and MAC address (\"Physical Address\")."}}]},
- {more:{ro:`<p>În realitate, înainte de acest pas browserul face o interogare <strong>DNS</strong>: transformă un nume (de ex. <code>server-b.ro</code>) în IP-ul <code>192.168.2.20</code>.</p><p>Azi aproape toate site-urile folosesc <strong>HTTPS</strong> (portul 443), care criptează datele. Aici folosim HTTP simplu ca să poți citi conținutul. Criptarea schimbă doar datele; drumul cadrului e identic.</p>`,
-   en:`<p>In reality, before this step the browser makes a <strong>DNS</strong> query: it turns a name (e.g. <code>server-b.com</code>) into the IP <code>192.168.2.20</code>.</p><p>Almost every site today uses <strong>HTTPS</strong> (port 443), which encrypts the data. We use plain HTTP here so you can read the content. Encryption only changes the data; the frame's journey is identical.</p>`},
-  try:[{cmd:"nslookup example.com",d:{ro:"Întreabă DNS-ul ce IP are un nume de site.",en:"Asks DNS which IP a site name has."}}]},
- {more:{ro:`<p>Antetul TCP are minimum <strong>20 de octeți</strong>. Pe lângă porturi conține: număr de secvență, număr de confirmare (ACK), indicatori (SYN, ACK, FIN…) și o „fereastră” care spune câte date pot veni fără confirmare.</p><p>Porturile sursă temporare sunt de obicei între <code>49152</code> și <code>65535</code>. Alternativa la TCP este <strong>UDP</strong>: fără conexiune și fără confirmări, mai rapid, folosit pentru DNS, jocuri, apeluri video.</p>`,
-   en:`<p>The TCP header is at least <strong>20 bytes</strong>. Besides ports it holds: a sequence number, an acknowledgement number (ACK), flags (SYN, ACK, FIN…) and a "window" saying how much data may arrive without acknowledgement.</p><p>Temporary source ports are usually between <code>49152</code> and <code>65535</code>. The alternative to TCP is <strong>UDP</strong>: no connection and no acknowledgements, faster, used for DNS, games and video calls.</p>`},
-  try:[{cmd:"netstat -an",d:{ro:"Listează conexiunile deschise, cu IP-uri și porturi.",en:"Lists open connections, with IPs and ports."}}]},
- {more:{ro:`<p>Antetul IPv4 are minimum <strong>20 de octeți</strong>: versiune, lungime, identificator, indicatori (de ex. „nu fragmenta”), TTL, protocol, checksum, IP sursă și IP destinație.</p><p>Valoarea inițială a TTL-ului depinde de sistem: <strong>Windows pornește de la 128</strong>, Linux și macOS de la 64.</p><p class="note">Adresele <code>192.168.x.x</code> și <code>10.x.x.x</code> sunt <strong>private</strong>. Pe internetul real, routerul de acasă le înlocuiește cu IP-ul public (<strong>NAT</strong>), deci IP-ul sursă se schimbă acolo. În exemplul nostru nu există NAT.</p>`,
-   en:`<p>The IPv4 header is at least <strong>20 bytes</strong>: version, length, identifier, flags (e.g. "don't fragment"), TTL, protocol, checksum, source IP and destination IP.</p><p>The starting TTL depends on the system: <strong>Windows starts at 128</strong>, Linux and macOS at 64.</p><p class="note">Addresses like <code>192.168.x.x</code> and <code>10.x.x.x</code> are <strong>private</strong>. On the real internet, your home router replaces them with its public IP (<strong>NAT</strong>), so the source IP does change there. Our example has no NAT.</p>`}},
- {more:{ro:`<p>Calculul se face bit cu bit, cu operația <strong>AND</strong> între IP și mască:</p><ul><li><code>192.168.1.10 AND 255.255.255.0 = 192.168.1.0</code></li><li><code>192.168.2.20 AND 255.255.255.0 = 192.168.2.0</code></li></ul><p>Rezultatele diferă ⇒ rețele diferite. Și calculatorul are o mică tabelă de rutare: ruta <code>0.0.0.0/0</code> („orice altceva”) duce la gateway.</p>`,
-   en:`<p>The calculation is done bit by bit, with an <strong>AND</strong> between the IP and the mask:</p><ul><li><code>192.168.1.10 AND 255.255.255.0 = 192.168.1.0</code></li><li><code>192.168.2.20 AND 255.255.255.0 = 192.168.2.0</code></li></ul><p>The results differ ⇒ different networks. The computer has a small routing table too: the route <code>0.0.0.0/0</code> ("everything else") leads to the gateway.</p>`},
-  try:[{cmd:"route print -4",d:{ro:"Arată tabela de rutare a calculatorului tău; caută linia 0.0.0.0 cu gateway-ul.",en:"Shows your computer's routing table; look for the 0.0.0.0 line with the gateway."}}]},
- {more:{ro:`<p>Mesajul ARP are 28 de octeți. Pentru că un cadru Ethernet trebuie să aibă minimum 64 de octeți, placa de rețea adaugă <strong>umplutură</strong> (padding).</p><p>Un broadcast ajunge doar până la router: <strong>routerele nu trimit broadcast-uri mai departe</strong>. De aceea ARP funcționează numai în rețeaua locală, iar A nu poate afla direct MAC-ul lui B.</p>`,
-   en:`<p>The ARP message is 28 bytes. Because an Ethernet frame must be at least 64 bytes, the network card adds <strong>padding</strong>.</p><p>A broadcast only goes as far as the router: <strong>routers don't forward broadcasts</strong>. That's why ARP only works on the local network, and A can't directly learn B's MAC.</p>`},
-  try:[{cmd:"arp -a",d:{ro:"Afișează cache-ul ARP al calculatorului tău (IP → MAC).",en:"Shows your computer's ARP cache (IP → MAC)."}}]},
- {more:{ro:`<p>Intrările din cache-ul ARP expiră: pe Windows după zeci de secunde fără folosire, pe multe routere după 4 ore. Așa se adaptează rețeaua dacă un dispozitiv își schimbă placa de rețea.</p><p class="note">Securitate: ARP nu verifică cine răspunde. Un atacator din rețeaua locală poate pretinde că e gateway-ul (<strong>ARP spoofing</strong>). Switch-urile profesionale au protecții precum <em>Dynamic ARP Inspection</em>.</p>`,
-   en:`<p>ARP cache entries expire: on Windows after tens of seconds unused, on many routers after 4 hours. That way the network adapts if a device changes its network card.</p><p class="note">Security: ARP doesn't verify who replies. An attacker on the local network can claim to be the gateway (<strong>ARP spoofing</strong>). Professional switches have protections such as <em>Dynamic ARP Inspection</em>.</p>`},
-  try:[{cmd:"Get-NetNeighbor -AddressFamily IPv4",d:{ro:"Varianta PowerShell: vecinii cunoscuți și starea lor (Reachable, Stale…).",en:"PowerShell version: known neighbours and their state (Reachable, Stale…)."}}]},
- {more:{ro:`<p>Un cadru Ethernet are între <strong>64 și 1518 octeți</strong>. Datele din el pot avea cel mult <strong>1500 de octeți</strong> (MTU). Cadrul nostru are 72 de octeți: 14 antet + 20 IP + 20 TCP + 14 date + 4 FCS.</p><p>Adresa MAC are 6 octeți. Primii 3 identifică de obicei <strong>producătorul</strong> plăcii (OUI). Adresele din exemplu încep cu <code>02</code>, ceea ce înseamnă „administrată local”, adică inventată pentru exemplu.</p><p>Vezi secțiunea <a href="#anatomy">Anatomia cadrului</a> pentru harta completă, octet cu octet.</p>`,
-   en:`<p>An Ethernet frame is between <strong>64 and 1518 bytes</strong>. The data inside can be at most <strong>1500 bytes</strong> (the MTU). Our frame is 72 bytes: 14 header + 20 IP + 20 TCP + 14 data + 4 FCS.</p><p>A MAC address is 6 bytes. The first 3 usually identify the card's <strong>manufacturer</strong> (OUI). The addresses here start with <code>02</code>, meaning "locally administered", i.e. made up for the example.</p><p>See the <a href="#anatomy">Frame anatomy</a> section for the full byte-by-byte map.</p>`}},
- {more:{ro:`<p>Înainte de cadru, placa trimite un <strong>preambul</strong> de 7 octeți și un octet SFD („începe cadrul”), ca receptorul să se sincronizeze. După fiecare cadru urmează o mică pauză obligatorie.</p><p>Legăturile moderne sunt <strong>full-duplex</strong>: se poate trimite și primi în același timp, deci nu mai există coliziuni. Pe Wi-Fi cadrele au alt format (802.11), iar access point-ul le transformă în cadre Ethernet.</p>`,
-   en:`<p>Before the frame, the card sends a 7-byte <strong>preamble</strong> and a 1-byte SFD ("frame starts here") so the receiver can synchronise. A short mandatory gap follows every frame.</p><p>Modern links are <strong>full-duplex</strong>: sending and receiving happen at the same time, so there are no collisions any more. On Wi-Fi, frames have a different format (802.11), and the access point converts them into Ethernet frames.</p>`},
-  try:[{cmd:"Get-NetAdapter",d:{ro:"Arată plăcile de rețea, adresa MAC și viteza legăturii (de ex. 1 Gbps).",en:"Shows network adapters, MAC address and link speed (e.g. 1 Gbps)."}}]},
- {more:{ro:`<p>Majoritatea switch-urilor lucrează <strong>store-and-forward</strong>: primesc tot cadrul, verifică FCS-ul și aruncă cadrele stricate. Altele (<em>cut-through</em>) încep să trimită după ce au citit doar MAC-ul destinație, pentru viteză.</p><p>O intrare din tabela MAC expiră de obicei după <strong>300 de secunde</strong> fără trafic. Toate porturile unui switch formează un singur <strong>domeniu de broadcast</strong>; ca să-l împarți ai nevoie de VLAN-uri sau de un router.</p>`,
-   en:`<p>Most switches work <strong>store-and-forward</strong>: they receive the whole frame, check the FCS and drop damaged frames. Others (<em>cut-through</em>) start forwarding after reading only the destination MAC, for speed.</p><p>A MAC table entry usually expires after <strong>300 seconds</strong> without traffic. All ports of a switch form one <strong>broadcast domain</strong>; to split it you need VLANs or a router.</p>`}},
- {more:{ro:`<p>Regula de alegere este <strong>cea mai lungă potrivire</strong> (longest prefix match). Dacă tabela ar avea și <code>192.168.0.0/16</code>, și <code>192.168.2.0/24</code>, ar câștiga <code>/24</code>, pentru că e mai specifică. Ruta <code>0.0.0.0/0</code> se potrivește cu orice și se folosește doar când nu există alta.</p><p>Dacă TTL-ul ajunge la 0, routerul aruncă pachetul și îi trimite lui A un mesaj ICMP „Time Exceeded”. Pe asta se bazează comanda <code>tracert</code>: trimite pachete cu TTL 1, 2, 3… și află astfel fiecare router de pe drum.</p>`,
-   en:`<p>The selection rule is <strong>longest prefix match</strong>. If the table had both <code>192.168.0.0/16</code> and <code>192.168.2.0/24</code>, <code>/24</code> would win because it's more specific. The route <code>0.0.0.0/0</code> matches anything and is used only when nothing else does.</p><p>If the TTL reaches 0, the router drops the packet and sends A an ICMP "Time Exceeded" message. That's what the <code>tracert</code> command relies on: it sends packets with TTL 1, 2, 3… and so discovers every router on the way.</p>`},
-  try:[{cmd:"tracert -d 1.1.1.1",d:{ro:"Arată fiecare router (hop) până la un server de pe internet.",en:"Shows every router (hop) on the way to a server on the internet."}}]},
- {more:{ro:`<p>Dacă pachetul e mai mare decât MTU-ul legăturii următoare, routerul fie îl <strong>fragmentează</strong>, fie (dacă e setat „nu fragmenta”) îl aruncă și îi spune expeditorului să trimită pachete mai mici.</p><p>Pe drumul real prin internet, un pachet trece de obicei prin <strong>10–20 de routere</strong>. La fiecare se întâmplă exact pașii pe care i-ai văzut la R1.</p>`,
-   en:`<p>If the packet is larger than the next link's MTU, the router either <strong>fragments</strong> it or (if "don't fragment" is set) drops it and tells the sender to send smaller packets.</p><p>On a real trip across the internet, a packet usually passes through <strong>10–20 routers</strong>. At each one, exactly the steps you saw at R1 happen.</p>`}},
- {more:{ro:`<p>„Direct conectată” înseamnă că routerul are o interfață chiar în acea rețea. Atunci următorul hop este <strong>destinația însăși</strong>, iar routerul caută în cache-ul ARP MAC-ul lui B, nu al altui router.</p><p>Dacă R2 nu ar fi avut MAC-ul lui B, ar fi făcut ARP în LAN 2, iar pachetul ar fi așteptat, exact ca la pasul 6.</p>`,
-   en:`<p>"Directly connected" means the router has an interface right on that network. Then the next hop is <strong>the destination itself</strong>, and the router looks up B's MAC in its ARP cache, not another router's.</p><p>If R2 didn't have B's MAC, it would ARP on LAN 2 and the packet would wait, exactly as in step 6.</p>`}},
- {more:{ro:`<p>Inundarea unui MAC necunoscut (<em>unknown unicast flooding</em>) seamănă cu un broadcast, dar MAC-ul destinație e unul anume, nu <code>FF:FF:FF:FF:FF:FF</code>. Doar B îl păstrează.</p><p>Apare des când cache-ul ARP al routerului trăiește mai mult (ore) decât tabela MAC a switch-ului (minute): routerul încă știe MAC-ul, switch-ul l-a uitat.</p>`,
-   en:`<p>Flooding an unknown MAC (<em>unknown unicast flooding</em>) looks like a broadcast, but the destination MAC is a specific one, not <code>FF:FF:FF:FF:FF:FF</code>. Only B keeps it.</p><p>It often happens when the router's ARP cache lives longer (hours) than the switch's MAC table (minutes): the router still knows the MAC, the switch has forgotten it.</p>`}},
- {more:{ro:`<p>Placa de rețea filtrează direct în hardware: acceptă cadrele pentru MAC-ul ei, broadcast-urile și grupurile multicast la care e abonată. Restul sunt ignorate fără să deranjeze procesorul.</p><p>Programe ca <strong>Wireshark</strong> pun placa în <em>modul promiscuu</em>, ca să vezi toate cadrele, exact cu câmpurile din această aplicație.</p>`,
-   en:`<p>The network card filters in hardware: it accepts frames for its own MAC, broadcasts and the multicast groups it has joined. Everything else is ignored without bothering the CPU.</p><p>Tools like <strong>Wireshark</strong> put the card into <em>promiscuous mode</em>, so you can see every frame, with exactly the fields shown in this app.</p>`}},
- {more:{ro:`<p>Câmpul Protocol spune cui îi dă IP-ul conținutul: <code>1</code> = ICMP (ping), <code>6</code> = TCP, <code>17</code> = UDP.</p><p>Dacă IP-ul destinație nu ar fi fost al lui, B ar fi aruncat pachetul: calculatoarele obișnuite nu rutează pachete pentru alții.</p>`,
-   en:`<p>The Protocol field says who IP hands the content to: <code>1</code> = ICMP (ping), <code>6</code> = TCP, <code>17</code> = UDP.</p><p>If the destination IP hadn't been its own, B would have dropped the packet: ordinary computers don't route packets for others.</p>`},
-  try:[{cmd:"ping -n 2 1.1.1.1",d:{ro:"Trimite pachete ICMP; răspunsul arată și TTL-ul cu care au ajuns înapoi.",en:"Sends ICMP packets; the reply also shows the TTL they came back with."}}]},
- {more:{ro:`<p>O conexiune TCP e identificată de patru valori: <strong>IP sursă, port sursă, IP destinație, port destinație</strong>. Așa poate serverul să servească mii de browsere în același timp pe portul 80.</p><p>Pentru răspuns, B folosește propriul gateway (<code>192.168.2.1</code>) și propriul cache ARP, apoi totul se repetă în sens invers.</p>`,
-   en:`<p>A TCP connection is identified by four values: <strong>source IP, source port, destination IP, destination port</strong>. That's how a server can serve thousands of browsers at once on port 80.</p><p>For the reply, B uses its own gateway (<code>192.168.2.1</code>) and its own ARP cache, and everything repeats in the opposite direction.</p>`}},
- {more:{ro:`<p>Ce poți învăța mai departe:</p><ul><li><strong>VLAN-uri</strong>: împart un switch în mai multe rețele separate.</li><li><strong>NAT</strong>: cum ies mai multe calculatoare pe internet cu un singur IP public.</li><li><strong>DHCP și DNS</strong>: cum primește un calculator IP-ul și cum află IP-ul unui site.</li><li><strong>IPv6</strong>: adrese mai lungi; în loc de ARP folosește NDP.</li></ul><p>Cel mai bun exercițiu: instalează Wireshark, pornește o captură, rulează <code>ping</code> spre gateway și găsește cererea ARP și răspunsul.</p>`,
-   en:`<p>What to learn next:</p><ul><li><strong>VLANs</strong>: split one switch into several separate networks.</li><li><strong>NAT</strong>: how many computers share a single public IP on the internet.</li><li><strong>DHCP and DNS</strong>: how a computer gets its IP and how it finds a site's IP.</li><li><strong>IPv6</strong>: longer addresses; uses NDP instead of ARP.</li></ul><p>Best exercise: install Wireshark, start a capture, run <code>ping</code> to your gateway and find the ARP request and reply.</p>`}}
-];
-MORE.forEach((m,i)=>Object.assign(S[i],m));
-const N=S.length;
-
-/* ---------- tables ---------- */
-const INIT={arpA:[],arpR1:[[IP.R2b,MAC.R2b]],arpR2:[[IP.B,MAC.B],[IP.R1b,MAC.R1b]],sw1:[],sw2:[[MAC.C,"p3"]]};
-function stateAt(i){
-  const s=JSON.parse(JSON.stringify(INIT));const added={};
-  for(let j=0;j<=i;j++)(S[j].fx||[]).forEach(([t,k,v])=>{const r=s[t].find(x=>x[0]===k);if(r){r[1]=v}else{s[t].push([k,v]);if(j===i)(added[t]=added[t]||[]).push(k)}});
-  return {s,added};
-}
-const TABLES={
-  cfgA:{title:{ro:"Configurația de rețea a lui A",en:"A's network settings"},cols:[{ro:"Setare",en:"Setting"},{ro:"Valoare",en:"Value"}],
-    rows:()=>[[{ro:"Adresă IP",en:"IP address"},IP.A],[{ro:"Mască",en:"Subnet mask"},"255.255.255.0 (/24)"],[{ro:"Gateway implicit",en:"Default gateway"},IP.R1a]],idx:true},
-  arpA:{title:{ro:"Cache ARP – A",en:"ARP cache – A"},cols:["IP","MAC"],rows:s=>s.arpA},
-  arpR1:{title:{ro:"Cache ARP – R1",en:"ARP cache – R1"},cols:["IP","MAC"],rows:s=>s.arpR1},
-  arpR2:{title:{ro:"Cache ARP – R2",en:"ARP cache – R2"},cols:["IP","MAC"],rows:s=>s.arpR2},
-  sw1:{title:{ro:"Tabela MAC – SW1",en:"MAC table – SW1"},cols:["MAC","Port"],rows:s=>s.sw1},
-  sw2:{title:{ro:"Tabela MAC – SW2",en:"MAC table – SW2"},cols:["MAC","Port"],rows:s=>s.sw2},
-  rtR1:{title:{ro:"Tabela de rutare – R1",en:"Routing table – R1"},cols:[{ro:"Rețea",en:"Network"},{ro:"Următorul hop",en:"Next hop"},{ro:"Interfață",en:"Interface"}],
-    rows:()=>[["192.168.1.0/24",DC,"Gi0"],["10.0.0.0/30",DC,"Gi1"],["192.168.2.0/24",IP.R2b,"Gi1"]]},
-  rtR2:{title:{ro:"Tabela de rutare – R2",en:"Routing table – R2"},cols:[{ro:"Rețea",en:"Network"},{ro:"Următorul hop",en:"Next hop"},{ro:"Interfață",en:"Interface"}],
-    rows:()=>[["192.168.2.0/24",DC,"Gi0"],["10.0.0.0/30",DC,"Gi1"],["192.168.1.0/24",IP.R1b,"Gi1"]]}
-};
-
-/* ---------- UI strings ---------- */
+const T=v=>(v&&typeof v==="object"&&!Array.isArray(v))?v[lang]:v;
 const UI={
-  title:{ro:"Drumul unui cadru Ethernet",en:"The journey of an Ethernet frame"},
-  sub:{ro:"Urmărește pas cu pas cum ajunge un mesaj de la Host A la Host B prin switch-uri și routere.",en:"Follow, step by step, how a message gets from Host A to Host B through switches and routers."},
-  reset:{ro:"⟲ De la capăt",en:"⟲ Reset"},back:{ro:"← Înapoi",en:"← Back"},next:{ro:"Următorul →",en:"Next →"},
-  play:{ro:"▶ Redă",en:"▶ Play"},pause:{ro:"❚❚ Pauză",en:"❚❚ Pause"},
-  step:{ro:"Pasul",en:"Step"},of:{ro:"din",en:"of"},
-  frame:{ro:"Cadrul (live)",en:"The frame (live)"},
-  noFrame:{ro:"Încă nu există niciun mesaj.",en:"There's no message yet."},
-  sumFrame:{ro:"Vezi Jurnalul legăturilor de mai jos pentru comparația completă.",en:"See the Per-link log below for the full comparison."},
-  nochange:{ro:"Nimic nu s-a schimbat la acest pas.",en:"Nothing changed in this step."},
-  lgNew:{ro:"nou",en:"new"},lgChg:{ro:"schimbat",en:"changed"},lgRem:{ro:"eliminat",en:"removed"},
-  tables:{ro:"Tabele folosite la acest pas",en:"Tables used in this step"},
-  empty:{ro:"(goală)",en:"(empty)"},
-  miss:{ro:"Caut {m} → negăsit ⇒ inundare",en:"Looking up {m} → not found ⇒ flood"},
-  logT:{ro:"Jurnalul legăturilor",en:"Per-link log"},
-  logLead:{ro:"Același pachet IP, în cadre diferite. Galben = MAC-uri (se schimbă la fiecare router). Albastru = IP-uri (rămân la fel).",en:"Same IP packet, different frames. Yellow = MACs (change at every router). Blue = IPs (stay the same)."},
-  logEmpty:{ro:"Se completează pe măsură ce cadrul trece prin legături.",en:"Fills in as the frame crosses each link."},
-  link:{ro:"Legătura",en:"Link"},
-  stackT:{ro:"Straturile pe {d}",en:"Layers on {d}"},
-  down:{ro:"↓ încapsulare (se adaugă antete)",en:"↓ encapsulation (headers added)"},
-  up:{ro:"↑ decapsulare (se scot antete)",en:"↑ decapsulation (headers removed)"},
-  updown:{ro:"↑↓ urcă până unde are nevoie, apoi coboară la loc",en:"↑↓ goes up only as far as it needs, then back down"},
-  notUsed:{ro:"nefolosit de acest dispozitiv",en:"not used by this device"},
-  stackNote:{ro:"Modelul TCP/IP; numerele sunt cele din modelul OSI.",en:"TCP/IP model; numbers are the OSI layer numbers."},
-  quizT:{ro:"Verifică-ți cunoștințele",en:"Check your understanding"},
-  score:{ro:"Scor",en:"Score"},retry:{ro:"Încearcă din nou",en:"Try again"},
-  right:{ro:"Corect!",en:"Correct!"},wrong:{ro:"Nu chiar.",en:"Not quite."},
-  pdu:{eth:{ro:"Cadru Ethernet",en:"Ethernet frame"},arp:{ro:"Cadru ARP",en:"ARP frame"},ip:{ro:"Pachet IP",en:"IP packet"},tcp:{ro:"Segment TCP",en:"TCP segment"},app:{ro:"Date",en:"Data"}},
-  dropped:{ro:"✗ aruncat",en:"✗ dropped"},accepted:{ro:"✓ acceptat",en:"✓ accepted"},
-  foot:{ro:"Adrese MAC și IP fictive, alese pentru claritate. FCS-ul e calculat simplificat; checksum-ul IP e calculat real.",en:"MAC and IP addresses are made up for clarity. The FCS is simplified; the IP checksum is computed for real."},
-  theme:{ro:"Comută tema luminoasă / întunecată",en:"Toggle light / dark theme"},
-  brand:{ro:"Rețea pas cu pas",en:"Network step by step"},
-  navSim:{ro:"Simulare",en:"Simulation"},navAnat:{ro:"Anatomia cadrului",en:"Frame anatomy"},navGloss:{ro:"Dicționar",en:"Glossary"},navQuiz:{ro:"Test",en:"Quiz"},
-  heroEyebrow:{ro:"Lecție interactivă · Rețelistică",en:"Interactive lesson · Networking"},
-  goalsT:{ro:"Ce vei învăța",en:"What you'll learn"},
-  goals:[{ro:"Cum se încapsulează datele, strat cu strat",en:"How data is encapsulated, layer by layer"},{ro:"De ce MAC-urile se schimbă la fiecare hop, iar IP-urile nu",en:"Why MACs change at every hop while IPs don't"},{ro:"Cum învață și trimite un switch, cum alege drumul un router",en:"How a switch learns and forwards, how a router picks a route"},{ro:"Ce fac ARP, TTL și FCS",en:"What ARP, TTL and FCS do"}],
-  meta:[{ro:"≈ 15 minute",en:"≈ 15 minutes"},{ro:"18 pași",en:"18 steps"},{ro:"7 întrebări",en:"7 questions"},{ro:"Începător",en:"Beginner"}],
-  lgRing:{ro:"dispozitivul activ",en:"active device"},lgEth:{ro:"cadru Ethernet",en:"Ethernet frame"},lgArp:{ro:"cadru ARP",en:"ARP frame"},lgIp:{ro:"pachet IP",en:"IP packet"},lgTcp:{ro:"segment",en:"segment"},lgApp:{ro:"date",en:"data"},
-  more:{ro:"Află mai mult",en:"Learn more"},tryT:{ro:"Încearcă pe calculatorul tău (PowerShell sau Command Prompt)",en:"Try it on your computer (PowerShell or Command Prompt)"},
-  copy:{ro:"Copiază",en:"Copy"},copied:{ro:"Copiat ✓",en:"Copied ✓"},
-  anatEyebrow:{ro:"Referință",en:"Reference"},anatT:{ro:"Anatomia cadrului Ethernet",en:"Anatomy of an Ethernet frame"},
-  anatLead:{ro:"Harta octet cu octet a unui cadru Ethernet II și diferențele dintre switch și router.",en:"A byte-by-byte map of an Ethernet II frame, and how switches and routers differ."},
-  glossEyebrow:{ro:"Dicționar",en:"Glossary"},quizEyebrow:{ro:"Test final",en:"Final quiz"},
-  src:{ro:"Codul sursă pe GitHub ↗",en:"Source code on GitHub ↗"},
-  glossT:{ro:"Dicționar de termeni",en:"Glossary"},
-  glossLead:{ro:"Ce înseamnă abrevierile și cuvintele tehnice din aplicație.",en:"What the abbreviations and technical words in this app mean."},
-  glossLink:{ro:"Ce înseamnă TTL, FCS, MAC…? Vezi dicționarul ↓",en:"What do TTL, FCS, MAC… mean? See the glossary ↓"}
+  brand:{ro:"Rețea pas cu pas",en:"Network step by step"},navLessons:{ro:"Lecții",en:"Lessons"},navSoon:{ro:"În curând",en:"Coming soon"},
+  eyebrow:{ro:"Lecții interactive · gratuite · RO / EN",en:"Interactive lessons · free · RO / EN"},
+  h1:{ro:"Înțelege rețelele urmărind pachetele, pas cu pas",en:"Understand networks by following the packets, step by step"},
+  sub:{ro:"Fiecare lecție e o simulare animată: vezi ce face fiecare dispozitiv și ce câmpuri se schimbă la fiecare hop. Pornești de la cadrul Ethernet și ajungi la Service-urile din Kubernetes.",en:"Each lesson is an animated simulation: see what every device does and which fields change at every hop. You start with the Ethernet frame and end with Kubernetes Services."},
+  meta:[{ro:"3 lecții",en:"3 lessons"},{ro:"47 de pași",en:"47 steps"},{ro:"21 de întrebări",en:"21 questions"},{ro:"fără cont, fără instalări",en:"no account, no install"}],
+  how:[["▶",{ro:"Simulare pas cu pas",en:"Step-by-step simulation"},{ro:"Înainte, înapoi sau redare automată, cu animația pachetului pe diagramă.",en:"Forward, back or auto-play, with the packet animated on the diagram."}],
+       ["≡",{ro:"Pachetul „live”",en:"The \"live\" packet"},{ro:"Câmpurile noi, schimbate sau eliminate sunt colorate la fiecare pas.",en:"New, changed or removed fields are coloured at every step."}],
+       [">_",{ro:"Comenzi reale",en:"Real commands"},{ro:"La fiecare lecție: comenzi de încercat pe Windows sau într-un cluster.",en:"In every lesson: commands to try on Windows or in a cluster."}]],
+  pathEyebrow:{ro:"Traseul recomandat",en:"Suggested path"},pathT:{ro:"Lecții",en:"Lessons"},
+  pathLead:{ro:"Le poți parcurge în orice ordine, dar fiecare se sprijină pe cea dinainte.",en:"You can take them in any order, but each one builds on the one before."},
+  start:{ro:"Începe lecția →",en:"Start the lesson →"},
+  soonEyebrow:{ro:"Planificate",en:"Planned"},soonT:{ro:"În curând",en:"Coming soon"},
+  foot:{ro:"Proiect educațional. Adresele și numele din lecții sunt exemple.",en:"An educational project. Addresses and names in the lessons are examples."},
+  src:{ro:"Codul sursă pe GitHub ↗",en:"Source code on GitHub ↗"},theme:{ro:"Comută tema luminoasă / întunecată",en:"Toggle light / dark theme"}
 };
-const LAYERS=[[7,{ro:"Aplicație",en:"Application"},{ro:"date",en:"data"}],[4,"Transport","segment"],[3,{ro:"Rețea",en:"Network"},{ro:"pachet",en:"packet"}],[2,{ro:"Legătură de date",en:"Data link"},{ro:"cadru",en:"frame"}],[1,{ro:"Fizic",en:"Physical"},{ro:"biți",en:"bits"}]];
-const DEVNAME={A:"Host A",B:"Host B",C:"Host C",SW1:"switch SW1",SW2:"switch SW2",R1:"router R1",R2:"router R2"};
-
-/* ---------- quiz ---------- */
-const QUIZ=[
- {q:{ro:"Ce se schimbă când cadrul trece printr-un router?",en:"What changes when the frame passes through a router?"},
-  o:[{ro:"Adresele IP sursă și destinație",en:"The source and destination IP addresses"},{ro:"Adresele MAC sursă și destinație (plus TTL și FCS)",en:"The source and destination MAC addresses (plus TTL and FCS)"},{ro:"Nimic, routerul doar îl trimite mai departe",en:"Nothing, the router just passes it on"},{ro:"Doar datele (payload)",en:"Only the payload"}],a:1,
-  e:{ro:"Routerul construiește un cadru nou pentru fiecare legătură, deci MAC-urile se schimbă. IP-urile rămân aceleași de la A la B.",en:"The router builds a new frame for every link, so the MACs change. The IPs stay the same from A to B."}},
- {q:{ro:"A trimite ceva către B, care e în altă rețea. Ce MAC destinație pune A în cadru?",en:"A sends something to B, which is on another network. Which destination MAC does A put in the frame?"},
-  o:[{ro:"MAC-ul lui B",en:"B's MAC"},{ro:"MAC-ul lui R1 (gateway-ul implicit)",en:"R1's MAC (the default gateway)"},{ro:"FF:FF:FF:FF:FF:FF",en:"FF:FF:FF:FF:FF:FF"},{ro:"MAC-ul lui R2",en:"R2's MAC"}],a:1,
-  e:{ro:"MAC-ul arată doar următorul pas. Pentru o altă rețea, următorul pas e gateway-ul.",en:"The MAC only points to the next stop. For another network, the next stop is the gateway."}},
- {q:{ro:"Un switch primește un cadru al cărui MAC destinație nu e în tabela lui. Ce face?",en:"A switch receives a frame whose destination MAC is not in its table. What does it do?"},
-  o:[{ro:"Îl aruncă",en:"Drops it"},{ro:"Îl trimite înapoi expeditorului",en:"Sends it back to the sender"},{ro:"Îl trimite pe toate porturile, mai puțin pe cel de intrare",en:"Sends it out of every port except the incoming one"},{ro:"Întreabă routerul",en:"Asks the router"}],a:2,
-  e:{ro:"Asta se numește inundare (flooding). Doar destinatarul real îl păstrează; ceilalți îl aruncă.",en:"This is called flooding. Only the real recipient keeps it; the others drop it."}},
- {q:{ro:"De unde învață un switch ce MAC se află pe ce port?",en:"How does a switch learn which MAC is on which port?"},
-  o:[{ro:"Din MAC-ul sursă al cadrelor care intră",en:"From the source MAC of incoming frames"},{ro:"Din MAC-ul destinație",en:"From the destination MAC"},{ro:"Din tabela de rutare",en:"From the routing table"},{ro:"Din IP-ul destinație",en:"From the destination IP"}],a:0,
-  e:{ro:"Când un cadru intră pe un port, switch-ul notează: „MAC-ul sursă stă pe portul ăsta”.",en:"When a frame comes in on a port, the switch notes: \"this source MAC lives on this port\"."}},
- {q:{ro:"Un pachet pleacă de la A cu TTL 64 și trece prin 2 routere și 2 switch-uri. Cu ce TTL ajunge la B?",en:"A packet leaves A with TTL 64 and goes through 2 routers and 2 switches. What TTL does it have at B?"},
-  o:[{ro:"64",en:"64"},{ro:"60",en:"60"},{ro:"62",en:"62"},{ro:"66",en:"66"}],a:2,
-  e:{ro:"Fiecare router scade 1: 64 → 63 → 62. Switch-urile nu ating TTL-ul – lucrează doar cu stratul 2.",en:"Each router subtracts 1: 64 → 63 → 62. Switches don't touch the TTL – they only work at layer 2."}},
- {q:{ro:"La ce folosește ARP?",en:"What is ARP for?"},
-  o:[{ro:"Află adresa IP pentru un nume de site",en:"Finds the IP address for a website name"},{ro:"Află adresa MAC pentru o adresă IP cunoscută din rețeaua locală",en:"Finds the MAC address for a known IP address on the local network"},{ro:"Dă o adresă IP calculatorului",en:"Gives the computer an IP address"},{ro:"Verifică dacă un cadru s-a stricat",en:"Checks whether a frame got damaged"}],a:1,
-  e:{ro:"Nume → IP e treaba DNS, alocarea IP-ului e treaba DHCP, iar verificarea erorilor o face FCS-ul.",en:"Name → IP is DNS's job, handing out IPs is DHCP's job, and error checking is done by the FCS."}},
- {q:{ro:"De ce recalculează routerul FCS-ul?",en:"Why does the router recalculate the FCS?"},
-  o:[{ro:"Pentru că FCS-ul conține IP-ul routerului",en:"Because the FCS contains the router's IP"},{ro:"Nu îl recalculează, FCS-ul rămâne același",en:"It doesn't – the FCS stays the same"},{ro:"Pentru că a construit un cadru nou (MAC-uri noi, TTL nou), deci și suma de control e alta",en:"Because it built a new frame (new MACs, new TTL), so the checksum is different too"},{ro:"Pentru că așa îi cere switch-ul",en:"Because the switch asks it to"}],a:2,
-  e:{ro:"FCS-ul e calculat din tot conținutul cadrului. Cadru nou ⇒ FCS nou.",en:"The FCS is calculated from the whole frame's content. New frame ⇒ new FCS."}}
+const ILL={
+ eth:`<svg viewBox="0 0 300 100" aria-hidden="true"><line class="ill-line" x1="40" y1="55" x2="260" y2="55"/><rect class="ill-dev" x="22" y="42" width="36" height="24" rx="3"/><rect class="ill-dev" x="92" y="45" width="44" height="20" rx="4"/><circle class="ill-dev" cx="180" cy="55" r="15"/><rect class="ill-dev" x="242" y="42" width="36" height="24" rx="3"/><rect class="ill-tok" x="118" y="18" width="40" height="17" rx="4"/><text class="ill-txt" x="138" y="30" text-anchor="middle" fill="var(--l2)">ETH</text></svg>`,
+ dns:`<svg viewBox="0 0 300 100" aria-hidden="true"><line class="ill-line" x1="45" y1="62" x2="120" y2="62"/><line class="ill-line" x1="120" y1="62" x2="210" y2="22"/><line class="ill-line" x1="120" y1="62" x2="250" y2="62"/><line class="ill-line" x1="120" y1="62" x2="210" y2="88"/><rect class="ill-dev" x="27" y="50" width="36" height="24" rx="3"/><rect class="ill-dev" x="106" y="44" width="28" height="36" rx="3"/><circle class="ill-dev" cx="210" cy="22" r="12"/><circle class="ill-dev" cx="250" cy="62" r="12"/><rect class="ill-dev" x="198" y="76" width="24" height="22" rx="3"/><rect class="ill-dns" x="58" y="22" width="40" height="17" rx="4"/><text class="ill-txt" x="78" y="34" text-anchor="middle" fill="var(--arp)">DNS</text></svg>`,
+ k8s:`<svg viewBox="0 0 300 100" aria-hidden="true"><rect x="10" y="10" width="110" height="80" rx="8" fill="none" stroke="var(--border)" stroke-dasharray="4 3"/><rect x="180" y="10" width="110" height="80" rx="8" fill="none" stroke="var(--border)" stroke-dasharray="4 3"/><line class="ill-line" x1="65" y1="38" x2="150" y2="50" stroke-dasharray="5 4"/><line class="ill-line" x1="150" y1="50" x2="235" y2="38" stroke-dasharray="5 4"/><line class="ill-line" x1="150" y1="50" x2="65" y2="72" stroke-dasharray="5 4"/><polygon class="ill-dev" points="65,24 77,31 77,45 65,52 53,45 53,31"/><polygon class="ill-dev" points="65,60 75,66 75,78 65,84 55,78 55,66"/><polygon class="ill-dev" points="235,24 247,31 247,45 235,52 223,45 223,31"/><rect class="ill-dev" x="128" y="40" width="44" height="20" rx="10" stroke-dasharray="3 2"/><circle class="ill-acc" cx="137" cy="50" r="2.5"/></svg>`
+};
+const LESSONS=[
+ {href:"ethernet/",ill:"eth",lvl:{ro:"Începător",en:"Beginner"},stats:{ro:"18 pași · ≈ 15 min",en:"18 steps · ≈ 15 min"},
+  t:{ro:"Drumul unui cadru Ethernet",en:"The journey of an Ethernet frame"},
+  d:{ro:"De la Host A la Host B prin switch-uri și routere: încapsulare, ARP, tabele MAC și de rutare.",en:"From Host A to Host B via switches and routers: encapsulation, ARP, MAC and routing tables."},
+  topics:[{ro:"De ce MAC-urile se schimbă și IP-urile nu",en:"Why MACs change and IPs don't"},{ro:"TTL, FCS, ARP",en:"TTL, FCS, ARP"},{ro:"Anatomia cadrului, octet cu octet",en:"Frame anatomy, byte by byte"}]},
+ {href:"dns/",ill:"dns",lvl:{ro:"Începător",en:"Beginner"},stats:{ro:"13 pași · ≈ 15 min",en:"13 steps · ≈ 15 min"},
+  t:{ro:"Cum funcționează DNS",en:"How DNS works"},
+  d:{ro:"Cum devine www.example.com o adresă IP: resolver, server rădăcină, .com, server autoritar și cache.",en:"How www.example.com becomes an IP address: resolver, root server, .com, authoritative server and caching."},
+  topics:[{ro:"Recursiv vs. iterativ",en:"Recursive vs. iterative"},{ro:"Înregistrări A, NS, CNAME, MX, TXT",en:"A, NS, CNAME, MX, TXT records"},{ro:"TTL și cache",en:"TTL and caching"}]},
+ {href:"kubernetes/",ill:"k8s",lvl:{ro:"Intermediar",en:"Intermediate"},stats:{ro:"16 pași · ≈ 20 min",en:"16 steps · ≈ 20 min"},
+  t:{ro:"Kubernetes: Service-uri și DNS în cluster",en:"Kubernetes: Services and cluster DNS"},
+  d:{ro:"Un pod cheamă „backend”: CoreDNS, ClusterIP, kube-proxy și DNAT, trecerea între noduri, NodePort și LoadBalancer.",en:"A pod calls \"backend\": CoreDNS, ClusterIP, kube-proxy and DNAT, crossing nodes, NodePort and LoadBalancer."},
+  topics:[{ro:"Cluster, noduri, pod-uri, etichete",en:"Cluster, nodes, pods, labels"},{ro:"ClusterIP, NodePort, LoadBalancer, headless",en:"ClusterIP, NodePort, LoadBalancer, headless"},{ro:"Nume DNS: backend.shop.svc.cluster.local",en:"DNS names: backend.shop.svc.cluster.local"}]}
 ];
-let answers=new Array(QUIZ.length).fill(null);
-
-/* ---------- glossary ---------- */
-const GLOSS=[
- ["TTL","Time To Live",{ro:"„Timp de viață” al unui pachet IP: un număr (de obicei 64) pe care fiecare router îl scade cu 1. Când ajunge la 0, pachetul e aruncat. Așa un pachet nu poate circula la nesfârșit dacă rețeaua are o buclă.",en:"A packet's \"lifetime\": a number (usually 64) that every router lowers by 1. When it hits 0 the packet is discarded, so a packet can't circle forever if the network has a loop."}],
- ["FCS","Frame Check Sequence",{ro:"„Secvența de verificare a cadrului”: 4 octeți la finalul cadrului Ethernet, calculați din tot conținutul lui (cu CRC-32). Destinatarul reface calculul și vede dacă vreun bit s-a stricat pe cablu; dacă nu se potrivește, cadrul e aruncat.",en:"4 bytes at the end of an Ethernet frame, calculated from its whole content (using CRC-32). The receiver redoes the calculation; if it doesn't match, a bit got damaged on the wire and the frame is discarded."}],
- ["CRC-32","Cyclic Redundancy Check",{ro:"Formula matematică folosită pentru FCS. Produce un număr de 32 de biți care se schimbă dacă se schimbă orice bit din cadru.",en:"The maths formula used for the FCS. It produces a 32-bit number that changes if any bit of the frame changes."}],
- ["MAC","Media Access Control",{ro:"Adresa fizică a plăcii de rețea, de 6 octeți (ex. 02:AA:00:00:00:0A). Se folosește doar în rețeaua locală, pentru „următorul pas”.",en:"The network card's physical address, 6 bytes (e.g. 02:AA:00:00:00:0A). Used only on the local network, for the \"next stop\"."}],
- ["IP","Internet Protocol",{ro:"Protocolul de la stratul 3. Adresa IP (ex. 192.168.2.20) identifică un calculator în toată rețeaua și rămâne aceeași de la sursă la destinație.",en:"The layer-3 protocol. An IP address (e.g. 192.168.2.20) identifies a computer across networks and stays the same from source to destination."}],
- ["ARP","Address Resolution Protocol",{ro:"Protocolul care află adresa MAC pentru un IP din rețeaua locală („Cine are 192.168.1.1?”).",en:"The protocol that finds the MAC address for an IP on the local network (\"Who has 192.168.1.1?\")."}],
- ["TCP","Transmission Control Protocol",{ro:"Protocol de la stratul 4 care livrează datele sigur și în ordine, folosind porturi ca să știe cărui program îi sunt destinate.",en:"A layer-4 protocol that delivers data reliably and in order, using ports to know which program it's for."}],
- ["Port",null,{ro:"Un număr (0–65535) care identifică un program pe un calculator. 80 = server web (HTTP), 443 = HTTPS.",en:"A number (0–65535) that identifies a program on a computer. 80 = web server (HTTP), 443 = HTTPS."}],
- ["HTTP","HyperText Transfer Protocol",{ro:"Limbajul în care browserul cere pagini web de la server (ex. GET / HTTP/1.1).",en:"The language a browser uses to request web pages from a server (e.g. GET / HTTP/1.1)."}],
- ["EtherType",null,{ro:"Câmp din antetul Ethernet care spune ce e înăuntru: 0x0800 = IPv4, 0x0806 = ARP.",en:"A field in the Ethernet header saying what's inside: 0x0800 = IPv4, 0x0806 = ARP."}],
- ["Checksum IP",null,{ro:"Sumă de control doar pentru antetul IP. Routerul o recalculează pentru că schimbă TTL-ul.",en:"A checksum over the IP header only. The router recalculates it because it changes the TTL."}],
- ["Payload",null,{ro:"„Încărcătura utilă”: datele propriu-zise transportate, fără antete.",en:"The actual data being carried, without headers."}],
- ["LAN / WAN","Local / Wide Area Network",{ro:"LAN = rețea locală (o casă, un birou). WAN = rețea pe distanță mare, care leagă rețele între ele (ex. legătura dintre routere, internetul).",en:"LAN = local network (a home, an office). WAN = wide-area network linking networks together (e.g. the link between routers, the internet)."}],
- ["/24",{ro:"masca de rețea",en:"subnet mask"},{ro:"Primii 24 de biți ai adresei IP arată rețeaua (192.168.1), restul arată calculatorul. Echivalent cu 255.255.255.0.",en:"The first 24 bits of the IP address are the network (192.168.1), the rest is the computer. Same as 255.255.255.0."}],
- ["Gateway",{ro:"gateway implicit",en:"default gateway"},{ro:"Routerul căruia un calculator îi trimite tot ce e destinat altor rețele.",en:"The router a computer sends everything destined for other networks to."}],
- ["Hop",null,{ro:"Un „salt”: o porțiune de drum între două dispozitive de stratul 3 (ex. de la R1 la R2).",en:"One leg of the trip between two layer-3 devices (e.g. from R1 to R2)."}],
- ["Broadcast / Unicast",null,{ro:"Broadcast = către toți din rețeaua locală (MAC FF:FF:FF:FF:FF:FF). Unicast = către un singur destinatar.",en:"Broadcast = to everyone on the local network (MAC FF:FF:FF:FF:FF:FF). Unicast = to a single recipient."}],
- ["Gi0 / Gi1","GigabitEthernet 0 / 1",{ro:"Numele interfețelor (porturilor) unui router.",en:"Names of a router's interfaces (ports)."}],
- ["OSI","Open Systems Interconnection",{ro:"Modelul în 7 straturi care împarte comunicația în rețea pe niveluri. Aici folosim modelul TCP/IP, mai simplu, dar păstrăm numerele OSI (L1, L2, L3, L4, L7).",en:"The 7-layer model that splits network communication into levels. We use the simpler TCP/IP model here but keep the OSI numbers (L1, L2, L3, L4, L7)."}],
- ["PDU","Protocol Data Unit",{ro:"Numele „bucății” de date la fiecare strat: date (L7), segment (L4), pachet (L3), cadru (L2), biți (L1).",en:"The name of the data \"chunk\" at each layer: data (L7), segment (L4), packet (L3), frame (L2), bits (L1)."}],
- ["SYN / ACK","Synchronize / Acknowledge",{ro:"Mesajele TCP din „strângerea de mână” cu care se deschide o conexiune.",en:"The TCP messages of the handshake that opens a connection."}],
- ["DNS / DHCP","Domain Name System / Dynamic Host Configuration Protocol",{ro:"DNS transformă un nume (ex. exemplu.ro) în adresă IP. DHCP dă automat calculatorului IP, mască și gateway.",en:"DNS turns a name (e.g. example.com) into an IP address. DHCP automatically gives a computer its IP, mask and gateway."}]
-];
-function renderGloss(){
-  let h=`<h2>${T(UI.glossT)}</h2><p class="lead">${T(UI.glossLead)}</p><dl class="gl">`;
-  GLOSS.forEach(([t,full,d])=>{h+=`<div><dt>${t}${full?`<small>${T(full)}</small>`:""}</dt><dd>${T(d)}</dd></div>`});
-  $("#gloss").innerHTML=h+`</dl>`;
-}
-
-/* ---------- state ---------- */
-let cur=0,playing=false,timer=null,animId=0,L=null,moreOpen=false;
-document.addEventListener("click",e=>{const b=e.target.closest(".copy");if(!b)return;
-  const done=()=>{b.textContent=T(UI.copied);setTimeout(()=>{b.textContent=T(UI.copy)},1600)};
-  const fallback=()=>{const c=b.parentElement.querySelector("code");const r=document.createRange();r.selectNodeContents(c);const s=getSelection();s.removeAllRanges();s.addRange(r)};
-  try{navigator.clipboard.writeText(b.dataset.cmd).then(done,fallback)}catch(err){fallback()}});
-
-/* ---------- reference: frame anatomy + switch vs router ---------- */
-const ANAT=[
- ["pre",{ro:"Preambul + SFD",en:"Preamble + SFD"},"7 + 1",{ro:"Sincronizare și „începe cadrul”. Se trimite pe fir, dar de obicei nu se numără în mărimea cadrului.",en:"Synchronisation and \"frame starts here\". Sent on the wire but usually not counted in the frame size."},1.6],
- ["l2",{ro:"MAC destinație",en:"Destination MAC"},"6",{ro:"Următorul dispozitiv care trebuie să primească cadrul.",en:"The next device that should receive the frame."},1.4],
- ["l2",{ro:"MAC sursă",en:"Source MAC"},"6",{ro:"Placa de rețea care a trimis cadrul pe această legătură.",en:"The network card that sent the frame on this link."},1.4],
- ["l2",{ro:"Tag VLAN 802.1Q (opțional)",en:"802.1Q VLAN tag (optional)"},"0 / 4",{ro:"Apare doar pe legături cu VLAN-uri; spune din ce rețea virtuală face parte cadrul.",en:"Only on VLAN links; says which virtual network the frame belongs to."},1],
- ["l2",{ro:"EtherType",en:"EtherType"},"2",{ro:"Ce e înăuntru: 0x0800 IPv4, 0x0806 ARP, 0x86DD IPv6.",en:"What's inside: 0x0800 IPv4, 0x0806 ARP, 0x86DD IPv6."},1],
- ["pay",{ro:"Date (payload)",en:"Payload"},"46–1500",{ro:"Pachetul IP (sau mesajul ARP). Sub 46 de octeți se adaugă umplutură.",en:"The IP packet (or ARP message). Padded if under 46 bytes."},5],
- ["l2",{ro:"FCS",en:"FCS"},"4",{ro:"Sumă de control CRC-32 pentru tot cadrul.",en:"CRC-32 checksum over the whole frame."},1]
-];
-const CMP=[
- [{ro:"Strat",en:"Layer"},{ro:"2 – Legătură de date",en:"2 – Data link"},{ro:"3 – Rețea",en:"3 – Network"}],
- [{ro:"Se uită la",en:"Looks at"},{ro:"MAC destinație",en:"Destination MAC"},{ro:"IP destinație",en:"Destination IP"}],
- [{ro:"Tabela",en:"Table"},{ro:"Tabela MAC (MAC → port), învățată automat din MAC-urile sursă",en:"MAC table (MAC → port), learned automatically from source MACs"},{ro:"Tabela de rutare (rețea → următorul hop), configurată sau învățată prin protocoale de rutare",en:"Routing table (network → next hop), configured or learned via routing protocols"}],
- [{ro:"Modifică cadrul?",en:"Changes the frame?"},{ro:"Nu",en:"No"},{ro:"Da: antet Ethernet nou, TTL − 1, FCS nou",en:"Yes: new Ethernet header, TTL − 1, new FCS"}],
- [{ro:"Broadcast",en:"Broadcast"},{ro:"Îl trimite pe toate porturile",en:"Sends it out of every port"},{ro:"Îl oprește: separă rețelele",en:"Stops it: separates networks"}],
- [{ro:"Destinație necunoscută",en:"Unknown destination"},{ro:"Inundă (flooding)",en:"Floods"},{ro:"Folosește ruta implicită sau aruncă pachetul (ICMP „Destination unreachable”)",en:"Uses the default route or drops the packet (ICMP \"Destination unreachable\")"}]
-];
-function renderAnatomy(){
-  let h=`<h2>${lang==="ro"?"Cadrul Ethernet II, octet cu octet":"The Ethernet II frame, byte by byte"}</h2>`;
-  h+=`<div class="fbar" aria-hidden="true">${ANAT.map((r,i)=>`<div class="fb-${r[0]}" style="flex:${r[4]}">${T([{ro:"Preambul",en:"Preamble"},{ro:"MAC dst",en:"Dst MAC"},{ro:"MAC src",en:"Src MAC"},"VLAN","Type",{ro:"Date",en:"Payload"},"FCS"][i])}<small>${r[2]} B</small></div>`).join("")}</div>`;
-  h+=`<div class="ruler"><span>${lang==="ro"?"primul bit pe fir":"first bit on the wire"}</span><span>${lang==="ro"?"ultimul":"last"} →</span></div>`;
-  h+=`<div class="scroll"><table><thead><tr><th>${lang==="ro"?"Câmp":"Field"}</th><th>${lang==="ro"?"Octeți":"Bytes"}</th><th>${lang==="ro"?"Rol":"Purpose"}</th></tr></thead><tbody>`;
-  ANAT.forEach(r=>{h+=`<tr><td><b>${T(r[1])}</b></td><td class="num">${r[2]}</td><td>${T(r[3])}</td></tr>`});
-  h+=`</tbody></table></div><div class="facts">`;
-  [["64 B",{ro:"cadru minim",en:"minimum frame"}],["1518 B",{ro:"cadru maxim (fără VLAN)",en:"maximum frame (no VLAN)"}],["1500 B",{ro:"MTU: date maxime",en:"MTU: max payload"}],["72 B",{ro:"cadrul din simulare",en:"the frame in this simulation"}],["14 B",{ro:"antet Ethernet",en:"Ethernet header"}],["6 B",{ro:"o adresă MAC",en:"one MAC address"}]]
-    .forEach(([n,l])=>{h+=`<div class="fact"><b>${n}</b><span>${T(l)}</span></div>`});
-  $("#anat-frame").innerHTML=h+`</div>`;
-  let c=`<h2>${lang==="ro"?"Switch sau router?":"Switch or router?"}</h2><div class="scroll"><table class="cmp"><thead><tr><th></th><th>Switch</th><th>Router</th></tr></thead><tbody>`;
-  CMP.forEach(r=>{c+=`<tr><td>${T(r[0])}</td><td>${T(r[1])}</td><td>${T(r[2])}</td></tr>`});
-  c+=`</tbody></table></div><p class="note">${lang==="ro"?"Pe scurt: switch-ul livrează în interiorul unei rețele, routerul livrează între rețele.":"In short: a switch delivers within a network, a router delivers between networks."}</p>`;
-  $("#anat-cmp").innerHTML=c;
-}
-const mqNarrow=matchMedia("(max-width: 640px)");
-const mqReduce=matchMedia("(prefers-reduced-motion: reduce)");
-const svg=$("#net");
-const SVGNS="http://www.w3.org/2000/svg";
-
-/* ---------- diagram ---------- */
-function icon(t,x,y){
-  if(t==="host")return `<rect class="dev" x="${x-20}" y="${y-17}" width="40" height="27" rx="3"/><rect class="dev-fill" x="${x-4}" y="${y+10}" width="8" height="5"/><rect class="dev-fill" x="${x-12}" y="${y+15}" width="24" height="3" rx="1.5"/>`;
-  if(t==="switch")return `<rect class="dev" x="${x-27}" y="${y-13}" width="54" height="26" rx="5"/><path class="dev-ink" d="M${x-15} ${y-4}h26m-5 -4l5 4l-5 4M${x+15} ${y+5}h-26m5 -4l-5 4l5 4"/>`;
-  return `<circle class="dev" cx="${x}" cy="${y}" r="21"/><path class="dev-ink" d="M${x-12} ${y}h24M${x} ${y-12}v24M${x+8} ${y-4}l4 4l-4 4M${x-8} ${y-4}l-4 4l4 4M${x-4} ${y-8}l4 -4l4 4M${x-4} ${y+8}l4 4l4 -4"/>`;
-}
-function buildDiagram(){
-  L=LAYOUTS[mqNarrow.matches?"narrow":"wide"];
-  svg.setAttribute("viewBox",L.vb.join(" "));
-  svg.setAttribute("class",L.cls);
-  const n=L.n,narrow=L.cls==="narrow";let h="";
-  L.zones.forEach(z=>{h+=`<rect class="zone" x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="12"/><text class="zone-lbl" x="${z.x+10}" y="${z.y+z.h-9}">${z.l}</text>`});
-  h+=`<text class="zone-lbl" x="${L.wan.x}" y="${L.wan.y}" text-anchor="${L.wan.a}">WAN · 10.0.0.0/30</text>`;
-  LINKS.forEach(([a,b])=>{h+=`<line class="link" data-l="${a}-${b}" x1="${n[a][0]}" y1="${n[a][1]}" x2="${n[b][0]}" y2="${n[b][1]}"/>`});
-  PORTS.forEach(([sw,o,p])=>{const [x1,y1]=n[sw],[x2,y2]=n[o];const dx=x2-x1,dy=y2-y1,len=Math.hypot(dx,dy);const d=narrow?40:44;
-    const px=x1+dx/len*d+(dy===0?0:9),py=y1+dy/len*d+(dy===0?-7:4);h+=`<text class="port" x="${px}" y="${py}" text-anchor="middle">${p}</text>`});
-  Object.entries(NODES).forEach(([id,nd])=>{const [x,y]=n[id];
-    h+=`<g class="node" id="n-${id}"><circle class="ring" cx="${x}" cy="${y}" r="${nd.type==="switch"?33:28}"/>${icon(nd.type,x,y)}`;
-    const lh=narrow?12:14;
-    if(nd.side){const tx=x+(nd.type==="host"?30:36);h+=`<text class="nm" x="${tx}" y="${y-4}">${nd.name}</text>`;nd.lines.forEach((l,i)=>{h+=`<text class="lbl" x="${tx}" y="${y-4+lh*(i+1)}">${l}</text>`})}
-    else if(nd.lblLeft){h+=`<text class="nm" x="${x-34}" y="${y+28}" text-anchor="end">${nd.name}</text>`}
-    else{let ty=y+(nd.type==="switch"?47:44);h+=`<text class="nm" x="${x}" y="${ty}" text-anchor="middle">${nd.name}</text>`;nd.lines.forEach((l,i)=>{h+=`<text class="lbl" x="${x}" y="${ty+lh*(i+1)}" text-anchor="middle">${l}</text>`})}
-    h+=`</g>`});
-  h+=`<g id="marks"></g><g id="tokens"></g>`;
-  svg.innerHTML=h;
-}
-const tokPos=id=>{const [x,y]=L.n[id];return [x,y-32]};
-function pduKey(f){if(!f)return null;if(f.dstMac)return f.arpOp?"arp":"eth";if(f.srcIp)return "ip";if(f.srcPort)return "tcp";return "app"}
-const TOK={eth:["ETH","k-data"],arp:["ARP","k-arp"],ip:["IP","k-ip"],tcp:["TCP","k-tcp"],app:[{ro:"DATE",en:"DATA"},"k-app"]};
-function tokenEl(f){const [lbl,cls]=TOK[pduKey(f)];const g=document.createElementNS(SVGNS,"g");g.setAttribute("class","token "+cls);
-  g.innerHTML=`<rect x="-21" y="-10" width="42" height="20" rx="5"/><text x="0" y="1">${T(lbl)}</text>`;return g}
-const place=(el,[x,y])=>el.setAttribute("transform",`translate(${x.toFixed(1)},${y.toFixed(1)})`);
-function restNodes(st){if(st.rest)return st.rest;if(st.move){return st.move[st.move.length-1].map(s=>s[1])}return [].concat(st.at)}
-function setMarks(st){const g=svg.querySelector("#marks");g.innerHTML="";if(!st.marks)return;
-  Object.entries(st.marks).forEach(([id,k])=>{const [x,y]=L.n[id];const side=NODES[id].side;
-    const t=document.createElementNS(SVGNS,"text");t.setAttribute("class","mark "+k);
-    t.setAttribute("x",side?x+30:x);t.setAttribute("y",side?y+42:y-52);if(!side)t.setAttribute("text-anchor","middle");
-    t.textContent=T(k==="ok"?UI.accepted:UI.dropped);g.appendChild(t)})}
-function updateDiagram(animate,done){
-  const st=S[cur];const id=++animId;
-  svg.querySelectorAll(".node").forEach(e=>e.classList.remove("active"));
-  [].concat(st.at).forEach(a=>{const e=svg.querySelector("#n-"+a);if(e)e.classList.add("active")});
-  const hot=new Set();(st.move||[]).forEach(ph=>ph.forEach(([a,b])=>{hot.add(a+"-"+b);hot.add(b+"-"+a)}));
-  svg.querySelectorAll(".link").forEach(l=>l.classList.toggle("hot",hot.has(l.dataset.l)));
-  const layer=svg.querySelector("#tokens");layer.innerHTML="";svg.querySelector("#marks").innerHTML="";
-  const finish=()=>{if(id!==animId)return;layer.innerHTML="";if(st.frame)restNodes(st).forEach(n=>{const t=tokenEl(st.frame);place(t,tokPos(n));layer.appendChild(t)});setMarks(st);done&&done()};
-  if(!animate||!st.move||!st.frame||mqReduce.matches){finish();return 0}
-  let pi=0;const D=850;
-  const phase=()=>{if(id!==animId)return;if(pi>=st.move.length){finish();return}
-    const segs=st.move[pi++];layer.innerHTML="";const els=segs.map(()=>{const t=tokenEl(st.frame);layer.appendChild(t);return t});
-    const t0=performance.now();
-    const tick=now=>{if(id!==animId)return;const p=Math.min(1,(now-t0)/D);const e=p<.5?2*p*p:1-Math.pow(-2*p+2,2)/2;
-      segs.forEach(([a,b],k)=>{const A=tokPos(a),B=tokPos(b);place(els[k],[A[0]+(B[0]-A[0])*e,A[1]+(B[1]-A[1])*e])});
-      if(p<1)requestAnimationFrame(tick);else phase()};
-    requestAnimationFrame(tick)};
-  phase();return st.move.length*D;
-}
-
-/* ---------- panels ---------- */
-function prevFrame(i){for(let j=i-1;j>=0;j--){if(S[j].frame&&S[j].kind===S[i].kind)return S[j].frame}return null}
-const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
-function renderExp(){
-  const st=S[cur];let h="";
-  const dev=st.stack?st.stack.dev:null;
-  h+=`<p class="eyebrow">${T(UI.step)} ${cur+1} / ${N}${dev?" · "+DEVNAME[dev]:""}</p>`;
-  h+=`<h2>${T(st.title)}</h2>${T(st.body)}`;
-  if(st.more)h+=`<details class="more"${moreOpen?" open":""}><summary>${T(UI.more)}</summary><div class="more-body">${T(st.more)}</div></details>`;
-  if(st.try)h+=`<div class="try"><h4>${T(UI.tryT)}</h4>${st.try.map(c=>`<div class="cmdrow"><div class="cmd"><code>${c.cmd}</code><button type="button" class="copy" data-cmd="${c.cmd}">${T(UI.copy)}</button></div><p>${T(c.d)}</p></div>`).join("")}</div>`;
-  if(st.stack){const k=st.stack;
-    h+=`<div class="stack"><h3>${T(UI.stackT).replace("{d}",DEVNAME[k.dev])} · ${T(UI[k.dir])}</h3>`;
-    LAYERS.forEach(([n,name,pdu])=>{const off=n>k.max,on=k.on.includes(n);
-      h+=`<div class="layer L${n}${on?" on":""}${off?" off":""}"><span class="n">L${n}</span><span>${T(name)}</span><span class="pdu">${off?T(UI.notUsed):T(pdu)}</span></div>`});
-    h+=`<div class="note">${T(UI.stackNote)}</div></div>`}
-  $("#exp").innerHTML=h;
-  const dm=$("#exp details.more");if(dm)dm.addEventListener("toggle",()=>{moreOpen=dm.open});
-  const b=$("#toQuiz");if(b)b.onclick=()=>{stop();$("#quiz").scrollIntoView({behavior:mqReduce.matches?"auto":"smooth"})};
-}
-function renderFrame(){
-  const st=S[cur],f=st.frame,p=prevFrame(cur);let h=`<h2>${T(UI.frame)}`;
-  if(!f){h+=`</h2><p class="empty">${T(st.summary?UI.sumFrame:UI.noFrame)}</p>`;$("#frame").innerHTML=h;return}
-  h+=`<span class="pdu-badge">${T(UI.pdu[pduKey(f)])}</span></h2>`;
-  h+=`<div class="legend"><span><i class="sw" style="background:var(--newbg);border:1px solid var(--newfg)"></i>${T(UI.lgNew)}</span><span><i class="sw" style="background:var(--chgbg);border:1px solid var(--chgfg)"></i>${T(UI.lgChg)}</span><span><i class="sw" style="background:var(--rembg);border:1px solid var(--remfg)"></i>${T(UI.lgRem)}</span></div>`;
-  let bar="",groups="",any=false;
-  GROUPS.forEach(g=>{
-    const ks=g.fields.filter(k=>k in f||(p&&k in p));if(!ks.length)return;
-    const present=ks.some(k=>k in f);let touched=false,rows="";
-    ks.forEach(k=>{let cls="",tag="",val;
-      if(k in f&&!(p&&k in p)){cls="new";tag=T(UI.lgNew)}
-      else if(!(k in f)){cls="rem";tag=T(UI.lgRem)}
-      else if(!same(f[k],p[k])){cls="chg";tag=T(UI.lgChg)}
-      if(cls)touched=true;if(cls)any=true;
-      if(cls==="rem")val=T(p[k]);else if(cls==="chg")val=`<span class="old">${T(p[k])}</span>→ ${T(f[k])}`;else val=T(f[k]);
-      rows+=`<div class="f ${cls}"><span class="k">${T(FL[k])}${tag?`<span class="tag">${tag}</span>`:""}</span><span class="v">${val}</span></div>`});
-    const grow={eth:3,arp:4,ip:4,tcp:2,app:3,fcs:1}[g.id];
-    bar+=`<div class="g-${g.id}${present?"":" gone"}${touched&&present?" touched":""}" style="flex:${grow}">${T(g.short)}</div>`;
-    groups+=`<div class="group g-${g.id}"><h4>${T(g.name)}</h4>${rows}</div>`});
-  h+=`<div class="bar" aria-hidden="true">${bar}</div>`;
-  if(!any)h+=`<p class="note">${T(UI.nochange)}</p>`;
-  $("#frame").innerHTML=h+groups+`<p><a class="glink" href="#gloss">${T(UI.glossLink)}</a></p>`;
-}
-function renderTables(){
-  const st=S[cur],el=$("#tables");if(!st.tables){el.hidden=true;el.innerHTML="";return}
-  const {s,added}=stateAt(cur);let h=`<h2>${T(UI.tables)}</h2>`;
-  st.tables.forEach(id=>{const t=TABLES[id];const rows=t.rows(s);const hl=st.hl&&st.hl[id];
-    h+=`<div class="tbl"><h3>${T(t.title)}</h3><div class="scroll"><table><thead><tr>${t.cols.map(c=>`<th>${T(c)}</th>`).join("")}</tr></thead><tbody>`;
-    if(!rows.length)h+=`<tr><td colspan="${t.cols.length}" class="empty">${T(UI.empty)}</td></tr>`;
-    rows.forEach((r,i)=>{const hit=t.idx?hl===i:hl===r[0];const add=(added[id]||[]).includes(r[0]);
-      h+=`<tr class="${hit?"hit":""}${add?" added":""}">${r.map((c,ci)=>`<td class="${(ci>0||!t.idx)?"m":""}">${T(c)}</td>`).join("")}</tr>`});
-    h+=`</tbody></table></div>`;
-    if(st.miss&&st.miss[id])h+=`<div class="tnote">${T(UI.miss).replace("{m}",st.miss[id])}</div>`;
-    h+=`</div>`});
-  el.innerHTML=h;el.hidden=false;
-}
-function renderLog(){
-  let rows="";for(let j=0;j<=cur;j++)if(S[j].log){const f=S[j].frame;
-    rows+=`<tr><td><b>${S[j].log}</b></td><td class="m mac">${f.dstMac}</td><td class="m mac">${f.srcMac}</td><td class="m ip">${f.srcIp}</td><td class="m ip">${f.dstIp}</td><td class="m">${f.ttl}</td><td class="m">${f.fcs}</td></tr>`}
-  let h=`<h2>${T(UI.logT)}</h2><p class="lead">${T(UI.logLead)}</p>`;
-  if(!rows)h+=`<p class="empty">${T(UI.logEmpty)}</p>`;
-  else h+=`<div class="scroll"><table><thead><tr><th>${T(UI.link)}</th><th>${T(FL.dstMac)}</th><th>${T(FL.srcMac)}</th><th>${T(FL.srcIp)}</th><th>${T(FL.dstIp)}</th><th>TTL</th><th>FCS</th></tr></thead><tbody>${rows}</tbody></table></div>`;
-  $("#log").innerHTML=h;
-}
-function renderQuiz(){
-  let h=`<h2>${T(UI.quizT)}</h2>`;
-  QUIZ.forEach((q,qi)=>{const a=answers[qi];
-    h+=`<div class="q"><p class="t">${qi+1}. ${T(q.q)}</p><div class="opts">`;
-    q.o.forEach((o,oi)=>{let c="";if(a!==null){if(oi===q.a)c="right";else if(oi===a)c="wrong"}
-      h+=`<button type="button" class="opt ${c}" data-q="${qi}" data-o="${oi}" ${a!==null?"disabled":""}>${T(o)}</button>`});
-    h+=`</div>`;
-    if(a!==null)h+=`<p class="fb ${a===q.a?"ok":"no"}"><b>${T(a===q.a?UI.right:UI.wrong)}</b> ${T(q.e)}</p>`;
-    h+=`</div>`});
-  const done=answers.filter(x=>x!==null).length,ok=answers.filter((x,i)=>x===QUIZ[i].a).length;
-  h+=`<div class="score">${T(UI.score)}: ${ok} / ${QUIZ.length}${done?` <button type="button" class="btn" id="retry">${T(UI.retry)}</button>`:""}</div>`;
-  $("#quiz").innerHTML=h;
-  const r=$("#retry");if(r)r.onclick=()=>{answers.fill(null);renderQuiz()};
-}
-$("#quiz").addEventListener("click",e=>{const b=e.target.closest(".opt");if(!b||b.disabled)return;answers[+b.dataset.q]=+b.dataset.o;renderQuiz();
-  const q=$("#quiz").querySelectorAll(".q")[+b.dataset.q];const fb=q&&q.querySelector(".fb");if(fb)fb.setAttribute("role","status")});
-
-function renderControls(){
-  const lab=(id,v)=>{const s=T(v),i=s.indexOf(" ");const ic=id==="#b-next"?s.slice(s.lastIndexOf(" ")+1):s.slice(0,i);const tx=id==="#b-next"?s.slice(0,s.lastIndexOf(" ")):s.slice(i+1);
-    const b=$(id);b.innerHTML=id==="#b-next"?`<span class="bt">${tx} </span><span aria-hidden="true">${ic}</span>`:`<span aria-hidden="true">${ic}</span><span class="bt"> ${tx}</span>`;b.setAttribute("aria-label",tx);b.title=tx};
-  lab("#b-reset",UI.reset);lab("#b-back",UI.back);lab("#b-next",UI.next);lab("#b-play",playing?UI.pause:UI.play);
-  $("#b-back").disabled=cur===0;$("#b-next").disabled=cur===N-1;$("#b-reset").disabled=cur===0&&!playing;
-  $("#stepno").textContent=`${T(UI.step)} ${cur+1} ${T(UI.of)} ${N}`;
-  const d=$("#dots");if(d.children.length!==N){d.innerHTML=S.map((_,i)=>`<button type="button" data-i="${i}"></button>`).join("")}
-  [...d.children].forEach((b,i)=>{b.className=i===cur?"cur":i<cur?"done":"";b.setAttribute("aria-label",`${T(UI.step)} ${i+1}: ${T(S[i].title)}`);b.setAttribute("aria-current",i===cur?"step":"false")});
-}
-function renderStatic(){
-  document.documentElement.lang=lang;document.title=lang==="ro"?"Drumul unui cadru":"Ethernet Frame Journey";
+const SOON=[["VLAN",{ro:"Cum împarte un switch mai multe rețele, cu etichete 802.1Q.",en:"How one switch carries several networks with 802.1Q tags."}],
+ ["NAT",{ro:"Cum ies mai multe calculatoare pe internet cu un singur IP public.",en:"How many computers share one public IP on the internet."}],
+ ["HTTPS / TLS",{ro:"Negocierea TLS, certificate și de ce e sigur lacătul din browser.",en:"The TLS handshake, certificates and why the browser padlock is safe."}],
+ ["Ingress",{ro:"Rutarea HTTP în Kubernetes după domeniu și cale.",en:"HTTP routing in Kubernetes by domain and path."}]];
+function render(){
+  document.documentElement.lang=lang;document.title=lang==="ro"?"Rețea pas cu pas":"Network Step by Step";
   document.querySelectorAll("[data-t]").forEach(e=>{e.textContent=T(UI[e.dataset.t])});
-  $("#goals").innerHTML=UI.goals.map(g=>`<li>${T(g)}</li>`).join("");
-  $("#meta").innerHTML=UI.meta.map(g=>`<li>${T(g)}</li>`).join("");
-  $("#dlegend").innerHTML=`<span><i class="lg-ring"></i>${T(UI.lgRing)}</span><span><b class="lg-arp">ARP</b>${T(UI.lgArp)}</span><span><b class="lg-eth">ETH</b>${T(UI.lgEth)}</span><span><b class="lg-ip">IP</b>${T(UI.lgIp)}</span><span><b class="lg-tcp">TCP</b>${T(UI.lgTcp)}</span><span><b class="lg-app">${T(TOK.app[0])}</b>${T(UI.lgApp)}</span>`;
-  renderAnatomy();
-  $("#t-title").textContent=T(UI.title);$("#t-sub").textContent=T(UI.sub);$("#foot").textContent=T(UI.foot);
-  $("#theme").setAttribute("aria-label",T(UI.theme));$("#theme").title=T(UI.theme);
+  document.getElementById("meta").innerHTML=UI.meta.map(m=>`<li>${T(m)}</li>`).join("");
+  document.getElementById("how").innerHTML=UI.how.map(([i,b,s])=>`<li><i aria-hidden="true">${i}</i><div><b>${T(b)}</b><span>${T(s)}</span></div></li>`).join("");
+  document.getElementById("path").innerHTML=LESSONS.map((l,i)=>`<a class="lesson" href="${l.href}"><div class="top"><span class="num">${lang==="ro"?"LECȚIA":"LESSON"} ${String(i+1).padStart(2,"0")}</span><span class="lvl">${T(l.lvl)}</span></div>${ILL[l.ill]}<h3>${T(l.t)}</h3><p>${T(l.d)}</p><ul>${l.topics.map(t=>`<li>${T(t)}</li>`).join("")}</ul><span class="stats">${T(l.stats)}</span><span class="go">${T(UI.start)}</span></a>`).join("");
+  document.getElementById("soon").innerHTML=SOON.map(([b,p])=>`<div><b>${b}</b><p>${T(p)}</p></div>`).join("");
+  const th=document.getElementById("theme");th.setAttribute("aria-label",T(UI.theme));th.title=T(UI.theme);
   document.querySelectorAll("[data-lang]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.lang===lang?"true":"false"));
 }
-function render(animate){
-  renderControls();renderExp();renderFrame();renderTables();renderLog();
-  const dur=updateDiagram(animate,null);
-  if(playing){clearTimeout(timer);timer=setTimeout(()=>{if(!playing)return;if(cur<N-1){cur++;render(true)}else stop()},(dur||0)+5200)}
-}
-function go(i,animate){cur=Math.max(0,Math.min(N-1,i));render(!!animate)}
-function stop(){playing=false;clearTimeout(timer);renderControls()}
-
-/* ---------- events ---------- */
-$("#b-next").onclick=()=>{if(playing)stop();go(cur+1,true)};
-$("#b-back").onclick=()=>{if(playing)stop();go(cur-1,false)};
-$("#b-reset").onclick=()=>{stop();go(0,false)};
-$("#b-play").onclick=()=>{if(playing){stop();return}playing=true;if(cur===N-1)cur=0;go(cur+(cur===0?0:1),cur!==0)};
-$("#dots").onclick=e=>{const b=e.target.closest("button");if(!b)return;if(playing)stop();go(+b.dataset.i,false)};
-document.addEventListener("keydown",e=>{if(e.altKey||e.ctrlKey||e.metaKey)return;const t=e.target;if(t&&(t.isContentEditable||/INPUT|TEXTAREA|SELECT/.test(t.tagName)))return;
-  if(e.key==="ArrowRight"){e.preventDefault();if(playing)stop();if(cur<N-1)go(cur+1,true)}
-  else if(e.key==="ArrowLeft"){e.preventDefault();if(playing)stop();if(cur>0)go(cur-1,false)}});
-document.querySelectorAll("[data-lang]").forEach(b=>b.onclick=()=>{lang=b.dataset.lang;store.set("cadru-lang",lang);renderStatic();renderGloss();renderQuiz();render(false)});
-const savedTheme=store.get("cadru-theme");if(savedTheme==="light"||savedTheme==="dark")document.documentElement.dataset.theme=savedTheme;
-$("#theme").onclick=()=>{const isDark=document.documentElement.dataset.theme?document.documentElement.dataset.theme==="dark":matchMedia("(prefers-color-scheme: dark)").matches;
-  const nt=isDark?"light":"dark";document.documentElement.dataset.theme=nt;store.set("cadru-theme",nt)};
-const onLayout=()=>{buildDiagram();updateDiagram(false,null)};
-if(mqNarrow.addEventListener)mqNarrow.addEventListener("change",onLayout);else mqNarrow.addListener(onLayout);
-
-buildDiagram();renderStatic();renderGloss();renderQuiz();render(false);
+document.querySelectorAll("[data-lang]").forEach(b=>b.onclick=()=>{lang=b.dataset.lang;store.set("cadru-lang",lang);render()});
+const saved=store.get("cadru-theme");if(saved==="light"||saved==="dark")document.documentElement.dataset.theme=saved;
+document.getElementById("theme").onclick=()=>{const r=document.documentElement,d=r.dataset.theme?r.dataset.theme==="dark":matchMedia("(prefers-color-scheme: dark)").matches;const nt=d?"light":"dark";r.dataset.theme=nt;store.set("cadru-theme",nt)};
+render();
 })();
 </script>
 </body>

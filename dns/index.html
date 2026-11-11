@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cum funcționează DNS</title>
+<meta name="description" content="Lecție interactivă: cum află calculatorul IP-ul lui www.example.com, de la cache-ul local la serverele rădăcină, .com și cel autoritar. / Interactive lesson: how DNS resolution works.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<script>
+(function(){
+const IP={pc:"192.168.1.10",res:"198.51.100.53",root:"198.41.0.4",tld:"192.5.6.30",auth:"192.0.2.53",web:"203.0.113.80"};
+const NAME="www.example.com",ANS="www.example.com. 3600 A "+IP.web;
+const RD={ro:"RD (vreau răspuns complet)",en:"RD (recursion desired)"},IT={ro:"RD=0 (întrebare iterativă)",en:"RD=0 (iterative query)"},QR={ro:"QR (răspuns)",en:"QR (response)"};
+const Q0={srcIp:IP.pc,dstIp:IP.res,proto:"UDP",srcPort:"51000",dstPort:"53",id:"0x3a7f",flags:RD,qname:NAME,qtype:"A"};
+const q=(dst,port,id)=>({srcIp:IP.res,dstIp:dst,proto:"UDP",srcPort:port,dstPort:"53",id,flags:IT,qname:NAME,qtype:"A"});
+const r=(src,port,id,extra)=>Object.assign({srcIp:src,dstIp:IP.res,proto:"UDP",srcPort:"53",dstPort:port,id,flags:QR,qname:NAME,qtype:"A"},extra);
+const A0={srcIp:IP.res,dstIp:IP.pc,proto:"UDP",srcPort:"53",dstPort:"51000",id:"0x3a7f",flags:{ro:"QR RD RA (răspuns, recursiv)",en:"QR RD RA (response, recursive)"},qname:NAME,qtype:"A",answer:ANS};
+
+window.LESSON={
+docTitle:{ro:"Cum funcționează DNS",en:"How DNS Works"},
+eyebrow:{ro:"Lecție interactivă · DNS",en:"Interactive lesson · DNS"},
+title:{ro:"DNS: cum află calculatorul adresa unui site",en:"DNS: how your computer finds a site's address"},
+sub:{ro:"Scrii www.example.com în browser. Urmărește întrebarea prin cache-ul local, resolver-ul furnizorului, serverul rădăcină, serverul .com și serverul autoritar, apoi vezi cum te ajută cache-ul data viitoare.",en:"You type www.example.com into the browser. Follow the question through the local cache, your provider's resolver, the root server, the .com server and the authoritative server, then see how caching helps next time."},
+meta:[{ro:"≈ 15 minute",en:"≈ 15 minutes"},{ro:"13 pași",en:"13 steps"},{ro:"7 întrebări",en:"7 questions"},{ro:"Începător",en:"Beginner"}],
+goals:[{ro:"Diferența dintre resolver recursiv și server autoritar",en:"The difference between a recursive resolver and an authoritative server"},{ro:"Cum funcționează ierarhia: rădăcină → TLD → domeniu",en:"How the hierarchy works: root → TLD → domain"},{ro:"Ce sunt înregistrările A, NS, CNAME, MX, TXT",en:"What A, NS, CNAME, MX and TXT records are"},{ro:"Cum funcționează cache-ul și TTL-ul",en:"How caching and TTL work"}],
+foot:{ro:"Domeniul example.com și adresele 192.0.2.x, 198.51.100.x, 203.0.113.x sunt rezervate pentru exemple. Serverul rădăcină și cel .com au adresele lor reale.",en:"The example.com domain and the 192.0.2.x, 198.51.100.x, 203.0.113.x addresses are reserved for examples. The root and .com servers use their real addresses."},
+ui:{refT:{ro:"Tipuri de înregistrări și comenzi utile",en:"Record types and useful commands"},refLead:{ro:"Ce poate conține o zonă DNS, diferența dintre recursiv și iterativ, și comenzi de încercat pe Windows.",en:"What a DNS zone can hold, recursive vs iterative, and commands to try on Windows."}},
+tryT:{ro:"Încearcă pe calculatorul tău (PowerShell)",en:"Try it on your computer (PowerShell)"},
+legend:[["lg-arp","DNS",{ro:"întrebare / răspuns DNS",en:"DNS query / answer"}],["lg-app","HTTPS",{ro:"conexiunea la site",en:"connection to the site"}]],
+
+nodes:{
+  pc:{type:"host",name:{ro:"Laptopul tău",en:"Your laptop"},lines:[IP.pc]},
+  res:{type:"server",name:{ro:"Resolver (ISP)",en:"Resolver (ISP)"},lines:[IP.res]},
+  root:{type:"globe",name:{ro:"Server rădăcină „.”",en:"Root server \".\""},lines:["a.root-servers.net",IP.root]},
+  tld:{type:"globe",name:{ro:"Server TLD .com",en:".com TLD server"},lines:["a.gtld-servers.net",IP.tld]},
+  auth:{type:"server",name:{ro:"Server autoritar",en:"Authoritative server"},lines:["ns1.example.com",IP.auth]},
+  web:{type:"server",name:NAME,lines:[IP.web]}
+},
+links:[["pc","res"],["res","root"],["res","tld"],["res","auth"],["pc","web","virt"]],
+layouts:{
+  wide:{vb:[0,0,1000,450],n:{pc:[110,190],res:[330,190],root:[620,82],tld:[810,200],auth:[620,318],web:[330,375]},
+    zones:[{x:10,y:110,w:200,h:190,l:{ro:"Rețeaua ta",en:"Your network"}},{x:230,y:110,w:200,h:190,l:{ro:"Furnizorul de internet",en:"Internet provider"}},
+      {x:480,y:16,w:510,h:410,top:true,cls:"virt",l:{ro:"Ierarhia DNS de pe internet",en:"The internet's DNS hierarchy"}}]},
+  narrow:{vb:[0,0,360,610],n:{pc:[60,80],res:[60,262],web:[60,470],root:[262,120],tld:[262,262],auth:[262,404]},
+    side:{pc:"right",res:"right",web:"right"},hideLinks:["pc-web"],
+    zones:[{x:186,y:40,w:170,h:440,top:true,cls:"virt",l:{ro:"Ierarhia DNS",en:"DNS hierarchy"}}]}
+},
+groups:[
+  {id:"ip",color:"l3",fields:["srcIp","dstIp"],name:{ro:"Antet IP (L3)",en:"IP header (L3)"},short:"IP",grow:3},
+  {id:"l4",color:"l4",fields:["proto","srcPort","dstPort"],name:{ro:"Transport (L4)",en:"Transport (L4)"},short:"UDP/TCP",grow:2},
+  {id:"hdr",color:"arp",fields:["id","flags"],name:{ro:"Antet DNS",en:"DNS header"},short:{ro:"Antet DNS",en:"DNS hdr"},grow:2},
+  {id:"q",color:"arp",fields:["qname","qtype"],name:{ro:"Întrebarea (Question)",en:"Question"},short:"Question",grow:2},
+  {id:"a",color:"l7",fields:["answer","authority","additional"],name:{ro:"Secțiunile de răspuns",en:"Answer sections"},short:"Answer",grow:3},
+  {id:"app",color:"l7",fields:["req"],name:{ro:"Aplicație (L7)",en:"Application (L7)"},short:"HTTPS",grow:3}
+],
+fieldLabels:{srcIp:{ro:"IP sursă",en:"Source IP"},dstIp:{ro:"IP destinație",en:"Destination IP"},proto:"Protocol",srcPort:{ro:"Port sursă",en:"Source port"},dstPort:{ro:"Port destinație",en:"Destination port"},
+  id:{ro:"ID tranzacție",en:"Transaction ID"},flags:{ro:"Indicatori",en:"Flags"},qname:{ro:"Nume întrebat",en:"Queried name"},qtype:{ro:"Tip",en:"Type"},
+  answer:"Answer",authority:{ro:"Authority (trimitere)",en:"Authority (referral)"},additional:{ro:"Additional (adrese ajutătoare)",en:"Additional (helper addresses)"},req:{ro:"Mesaj",en:"Message"}},
+pdu:f=>f.req?{badge:{ro:"Conexiune HTTPS",en:"HTTPS connection"},tok:["HTTPS","k-app"]}
+  :f.answer?{badge:{ro:"Răspuns DNS",en:"DNS answer"},tok:["DNS","k-tcp"]}
+  :f.authority?{badge:{ro:"Trimitere (referral)",en:"Referral"},tok:["DNS","k-ip"]}
+  :{badge:{ro:"Întrebare DNS",en:"DNS query"},tok:["DNS","k-arp"]},
+
+init:{oscache:[],rcache:[[{ro:". (rădăcina)",en:". (the root)"},"NS a.root-servers.net → "+IP.root,{ro:"fișierul root hints",en:"root hints file"}]]},
+tables:{
+  hosts:{title:{ro:"Fișierul hosts (C:\\Windows\\System32\\drivers\\etc\\hosts)",en:"The hosts file (C:\\Windows\\System32\\drivers\\etc\\hosts)"},cols:["IP",{ro:"Nume",en:"Name"}],rows:()=>[["127.0.0.1","localhost"]]},
+  oscache:{title:{ro:"Cache-ul DNS al Windows",en:"Windows DNS cache"},cols:[{ro:"Nume",en:"Name"},{ro:"Înregistrare",en:"Record"},"TTL"]},
+  rcache:{title:{ro:"Cache-ul resolver-ului",en:"The resolver's cache"},cols:[{ro:"Nume",en:"Name"},{ro:"Ce știe",en:"What it knows"},{ro:"Valabil",en:"Valid for"}]},
+  rootz:{title:{ro:"Zona rădăcină (fragment)",en:"The root zone (excerpt)"},cols:[{ro:"Nume",en:"Name"},{ro:"Tip",en:"Type"},{ro:"Valoare",en:"Value"}],
+    rows:()=>[["com.","NS","a.gtld-servers.net … m.gtld-servers.net"],["org.","NS",{ro:"serverele .org",en:"the .org servers"}],["ro.","NS",{ro:"serverele .ro",en:"the .ro servers"}]]},
+  tldz:{title:{ro:"Zona .com (fragment)",en:"The .com zone (excerpt)"},cols:[{ro:"Nume",en:"Name"},{ro:"Tip",en:"Type"},{ro:"Valoare",en:"Value"}],
+    rows:()=>[["example.com.","NS","ns1.example.com"],["ns1.example.com.",{ro:"A (glue)",en:"A (glue)"},IP.auth],["…",{ro:"",en:""},{ro:"peste 150 de milioane de domenii",en:"over 150 million domains"}]]},
+  authz:{title:{ro:"Zona example.com pe ns1.example.com",en:"The example.com zone on ns1.example.com"},cols:[{ro:"Nume",en:"Name"},{ro:"Tip",en:"Type"},{ro:"Valoare",en:"Value"},"TTL"],
+    rows:()=>[["www.example.com.","A",IP.web,"3600"],["example.com.","MX","10 mail.example.com.","3600"],["example.com.","TXT","\"v=spf1 mx -all\"","3600"],["blog.example.com.","CNAME","www.example.com.","3600"]]}
+},
+log:{title:{ro:"Jurnalul întrebărilor",en:"Query log"},lead:{ro:"Fiecare rând e un pachet UDP. Laptopul pune o singură întrebare; resolver-ul face restul.",en:"Each row is one UDP packet. The laptop asks a single question; the resolver does the rest."},
+  first:{ro:"Moment",en:"Moment"},minWidth:600,
+  cols:[{h:{ro:"De la",en:"From"},v:f=>f.srcIp,cls:"ip"},{h:{ro:"Către",en:"To"},v:f=>f.dstIp,cls:"mac"},{h:"ID",v:f=>f.id||"—"},{h:{ro:"Conține",en:"Contains"},v:f=>f.answer||f.authority||(f.req)||(f.qname+" ?")}]},
+
+steps:[
+{at:"pc",frame:null,kind:"none",who:{ro:"laptopul tău",en:"your laptop"},
+ title:{ro:"Scenariul",en:"The scenario"},
+ body:{ro:`<p>Scrii <code>www.example.com</code> în browser. Calculatoarele nu se găsesc după nume, ci după <strong>adrese IP</strong>. Cineva trebuie să traducă numele în IP.</p>
+<p>Asta face <strong>DNS</strong> (Domain Name System), un fel de „agendă telefonică” a internetului. Nu stă pe un singur server: e împărțită pe <strong>niveluri</strong>, iar fiecare nivel știe doar cine se ocupă de nivelul următor.</p>
+<p>Citește un nume de la dreapta la stânga: <code>.</code> (rădăcina) → <code>com</code> → <code>example</code> → <code>www</code>.</p>`,
+ en:`<p>You type <code>www.example.com</code> into the browser. Computers don't find each other by name but by <strong>IP address</strong>. Someone has to translate the name into an IP.</p>
+<p>That's what <strong>DNS</strong> (Domain Name System) does, a sort of internet "phone book". It doesn't live on one server: it's split into <strong>levels</strong>, and each level only knows who handles the next one.</p>
+<p>Read a name right to left: <code>.</code> (the root) → <code>com</code> → <code>example</code> → <code>www</code>.</p>`},
+ more:{ro:`<p>Numele complet are de fapt un punct la final: <code>www.example.com.</code>. Acel punct este <strong>rădăcina</strong>. De obicei nu-l scriem, dar serverele DNS îl folosesc mereu.</p><p>Fiecare parte (etichetă) poate avea maximum 63 de caractere, iar tot numele maximum 253.</p>`,
+  en:`<p>The full name actually ends with a dot: <code>www.example.com.</code>. That dot is the <strong>root</strong>. We usually don't type it, but DNS servers always use it.</p><p>Each part (label) can be at most 63 characters, and the whole name at most 253.</p>`}},
+
+{at:"pc",frame:null,kind:"none",tables:["hosts","oscache"],who:{ro:"laptopul tău",en:"your laptop"},
+ title:{ro:"Întâi caută pe propriul calculator",en:"First it looks on your own computer"},
+ body:{ro:`<p>Înainte să întrebe pe cineva, calculatorul verifică, în ordine:</p>
+<ol><li><strong>Cache-ul browserului</strong>: a mai fost recent pe acest site?</li><li><strong>Fișierul hosts</strong>: o listă scrisă de mână cu nume și IP-uri.</li><li><strong>Cache-ul DNS al Windows</strong>: răspunsuri primite recent, pentru orice program.</li></ol>
+<p>Nu găsește nimic pentru <code>www.example.com</code>. Trebuie să întrebe un server DNS.</p>`,
+ en:`<p>Before asking anyone, the computer checks, in order:</p>
+<ol><li>The <strong>browser cache</strong>: has it been on this site recently?</li><li>The <strong>hosts file</strong>: a hand-written list of names and IPs.</li><li>The <strong>Windows DNS cache</strong>: recent answers, for any program.</li></ol>
+<p>It finds nothing for <code>www.example.com</code>. It has to ask a DNS server.</p>`},
+ more:{ro:`<p>Fișierul hosts e verificat înaintea DNS-ului, de aceea e folosit pentru teste („trimite acest nume la serverul meu local”) sau pentru blocarea unor site-uri. Tot de aceea unii viruși îl modifică: verifică-l dacă un site cunoscut se deschide ciudat.</p>`,
+  en:`<p>The hosts file is checked before DNS, which is why it's used for testing ("send this name to my local server") or for blocking sites. It's also why some malware modifies it: check it if a well-known site opens strangely.</p>`},
+ try:[{cmd:"ipconfig /displaydns",d:{ro:"Afișează cache-ul DNS al Windows.",en:"Shows the Windows DNS cache."}},{cmd:"Get-Content C:\\Windows\\System32\\drivers\\etc\\hosts",d:{ro:"Afișează fișierul hosts.",en:"Shows the hosts file."}}]},
+
+{at:"pc",frame:Q0,kind:"dns",move:[[["pc","res"]]],log:{ro:"laptop → resolver",en:"laptop → resolver"},who:{ro:"laptopul tău",en:"your laptop"},
+ title:{ro:"Întrebarea pleacă spre resolver",en:"The question goes to the resolver"},
+ body:{ro:`<p>Calculatorul trimite un mic pachet <strong>UDP</strong> pe portul <code>53</code> către <strong>resolver</strong>-ul primit prin DHCP (de obicei al furnizorului de internet).</p>
+<p>Pachetul are un <strong>ID</strong> (<code>0x3a7f</code>), ca răspunsul să poată fi recunoscut, și indicatorul <strong>RD</strong>: „te rog fă tu toată munca și dă-mi răspunsul final”. Aceasta e o întrebare <strong>recursivă</strong>.</p>`,
+ en:`<p>The computer sends a small <strong>UDP</strong> packet to port <code>53</code> of the <strong>resolver</strong> it got via DHCP (usually your internet provider's).</p>
+<p>The packet has an <strong>ID</strong> (<code>0x3a7f</code>) so the reply can be matched, and the <strong>RD</strong> flag: "please do all the work and give me the final answer". This is a <strong>recursive</strong> query.</p>`},
+ more:{ro:`<p>În realitate, pachetul trece întâi prin routerul de acasă, care face <strong>NAT</strong>: resolver-ul vede IP-ul public al casei, nu <code>192.168.1.10</code>. Pentru claritate am lăsat IP-ul local.</p><p>Poți folosi și resolvere publice, de exemplu 1.1.1.1 sau 8.8.8.8. Tot mai des, DNS-ul circulă criptat: <strong>DNS over HTTPS</strong> (DoH) sau <strong>DNS over TLS</strong> (DoT), ca să nu poată fi citit pe drum.</p>`,
+  en:`<p>In reality, the packet first goes through your home router, which does <strong>NAT</strong>: the resolver sees your home's public IP, not <code>192.168.1.10</code>. We kept the local IP for clarity.</p><p>You can also use public resolvers, such as 1.1.1.1 or 8.8.8.8. More and more, DNS travels encrypted, as <strong>DNS over HTTPS</strong> (DoH) or <strong>DNS over TLS</strong> (DoT), so it can't be read on the way.</p>`},
+ try:[{cmd:"Get-DnsClientServerAddress -AddressFamily IPv4",d:{ro:"Arată ce resolver folosește fiecare placă de rețea.",en:"Shows which resolver each network adapter uses."}}]},
+
+{at:"res",frame:q(IP.root,"40213","0x91c2"),kind:"dns",move:[[["res","root"]]],log:{ro:"resolver → rădăcină",en:"resolver → root"},tables:["rcache"],who:{ro:"resolver-ul",en:"the resolver"},
+ title:{ro:"Resolver-ul nu știe: întreabă rădăcina",en:"The resolver doesn't know: it asks the root"},
+ body:{ro:`<p>Resolver-ul caută în cache-ul lui: nu are <code>www.example.com</code> și nici <code>com</code>. Știe doar adresele <strong>serverelor rădăcină</strong>, dintr-un fișier livrat odată cu programul (<em>root hints</em>).</p>
+<p>Trimite o întrebare <strong>nouă</strong>, cu alt ID și alt port, către <code>a.root-servers.net</code>. De data asta fără RD: e o întrebare <strong>iterativă</strong> („spune-mi ce știi tu”).</p>`,
+ en:`<p>The resolver checks its cache: it has neither <code>www.example.com</code> nor <code>com</code>. It only knows the addresses of the <strong>root servers</strong>, from a file shipped with the software (<em>root hints</em>).</p>
+<p>It sends a <strong>new</strong> question, with a different ID and port, to <code>a.root-servers.net</code>. This time without RD: it's an <strong>iterative</strong> query ("tell me what you know").</p>`},
+ more:{ro:`<p>Există 13 nume de servere rădăcină, de la <code>a</code> la <code>m.root-servers.net</code>, dar în spatele lor sunt <strong>peste 1.500 de mașini</strong> în toată lumea. Toate copiile aceluiași server au același IP (<strong>anycast</strong>), iar rețeaua te duce automat la cea mai apropiată.</p><p>ID-ul și portul sursă aleatorii îngreunează falsificarea răspunsurilor (<em>cache poisoning</em>). DNSSEC adaugă semnături digitale care dovedesc că răspunsul e autentic.</p>`,
+  en:`<p>There are 13 root server names, from <code>a</code> to <code>m.root-servers.net</code>, but behind them are <strong>over 1,500 machines</strong> worldwide. All copies of the same server share one IP (<strong>anycast</strong>), and the network automatically takes you to the closest.</p><p>The random ID and source port make it harder to forge answers (<em>cache poisoning</em>). DNSSEC adds digital signatures that prove an answer is genuine.</p>`}},
+
+{at:"root",frame:r(IP.root,"40213","0x91c2",{authority:"com. NS a.gtld-servers.net",additional:"a.gtld-servers.net A "+IP.tld}),kind:"dns",move:[[["root","res"]]],
+ fx:[["rcache","com.","NS a.gtld-servers.net → "+IP.tld,{ro:"2 zile",en:"2 days"}]],log:{ro:"rădăcină → resolver",en:"root → resolver"},tables:["rootz","rcache"],hl:{rootz:"com."},who:{ro:"serverul rădăcină",en:"the root server"},
+ title:{ro:"Rădăcina: „nu știu, întreabă .com”",en:"The root: \"don't know, ask .com\""},
+ body:{ro:`<p>Serverul rădăcină nu știe IP-ul lui <code>www.example.com</code>, dar știe cine răspunde de <strong>.com</strong>. Trimite o <strong>trimitere</strong> (referral):</p>
+<ul><li>în <strong>Authority</strong>: <code>com. NS a.gtld-servers.net</code>, adică „ăsta e serverul pentru .com”;</li><li>în <strong>Additional</strong>: și IP-ul lui (<code>192.5.6.30</code>), ca resolver-ul să nu mai trebuiască să-l caute. Asta se numește <em>glue</em>.</li></ul>
+<p>Resolver-ul ține minte informația în cache (2 zile).</p>`,
+ en:`<p>The root server doesn't know the IP of <code>www.example.com</code>, but it knows who handles <strong>.com</strong>. It sends a <strong>referral</strong>:</p>
+<ul><li>in <strong>Authority</strong>: <code>com. NS a.gtld-servers.net</code>, i.e. "this is the server for .com";</li><li>in <strong>Additional</strong>: its IP too (<code>192.5.6.30</code>), so the resolver doesn't have to look it up. This is called <em>glue</em>.</li></ul>
+<p>The resolver keeps this in its cache (2 days).</p>`}},
+
+{at:"res",frame:q(IP.tld,"40877","0x5e10"),kind:"dns",move:[[["res","tld"]]],log:{ro:"resolver → .com",en:"resolver → .com"},who:{ro:"resolver-ul",en:"the resolver"},
+ title:{ro:"Resolver-ul întreabă serverul .com",en:"The resolver asks the .com server"},
+ body:{ro:`<p>Aceeași întrebare, <code>www.example.com A?</code>, dar acum către serverul <strong>TLD</strong> (top-level domain) pentru .com, la <code>192.5.6.30</code>.</p>
+<p>Observă câmpurile colorate: e un pachet nou, cu alt ID și alt port.</p>`,
+ en:`<p>The same question, <code>www.example.com A?</code>, but now to the <strong>TLD</strong> (top-level domain) server for .com, at <code>192.5.6.30</code>.</p>
+<p>Note the coloured fields: it's a new packet, with a new ID and port.</p>`},
+ more:{ro:`<p>Există mai multe feluri de TLD: generice (<code>.com</code>, <code>.org</code>, <code>.net</code>), de țară (<code>.ro</code>, <code>.de</code>) și unele noi (<code>.app</code>, <code>.dev</code>). Fiecare e administrat de o organizație (registry); pentru .ro, de exemplu, de RoTLD.</p>`,
+  en:`<p>There are several kinds of TLD: generic (<code>.com</code>, <code>.org</code>, <code>.net</code>), country (<code>.ro</code>, <code>.de</code>) and newer ones (<code>.app</code>, <code>.dev</code>). Each is run by an organisation (registry); .ro, for example, by RoTLD.</p>`}},
+
+{at:"tld",frame:r(IP.tld,"40877","0x5e10",{authority:"example.com. NS ns1.example.com",additional:"ns1.example.com A "+IP.auth}),kind:"dns",move:[[["tld","res"]]],
+ fx:[["rcache","example.com.","NS ns1.example.com → "+IP.auth,{ro:"2 zile",en:"2 days"}]],log:{ro:".com → resolver",en:".com → resolver"},tables:["tldz","rcache"],hl:{tldz:"example.com."},who:{ro:"serverul .com",en:"the .com server"},
+ title:{ro:".com: „întreabă ns1.example.com”",en:".com: \"ask ns1.example.com\""},
+ body:{ro:`<p>Nici serverul .com nu știe IP-ul lui <code>www</code>. Știe însă cine e <strong>serverul autoritar</strong> pentru domeniul <code>example.com</code>: cel pe care proprietarul domeniului l-a declarat când l-a cumpărat.</p>
+<p>Altă trimitere: <code>example.com. NS ns1.example.com</code>, plus IP-ul lui (<code>192.0.2.53</code>) în Additional.</p>`,
+ en:`<p>The .com server doesn't know the IP of <code>www</code> either. But it knows the <strong>authoritative server</strong> for the domain <code>example.com</code>: the one the domain's owner declared when they bought it.</p>
+<p>Another referral: <code>example.com. NS ns1.example.com</code>, plus its IP (<code>192.0.2.53</code>) in Additional.</p>`},
+ more:{ro:`<p>Când cumperi un domeniu de la un registrar, setezi <strong>serverele de nume</strong> (NS). Registrar-ul le trimite la registry, care le pune în zona .com. Dacă schimbi furnizorul de hosting, schimbi aceste NS-uri, iar internetul află în câteva ore (cât durează să expire cache-urile).</p>`,
+  en:`<p>When you buy a domain from a registrar, you set its <strong>name servers</strong> (NS). The registrar sends them to the registry, which puts them in the .com zone. If you change hosting providers you change these NS records, and the internet learns within a few hours (as long as caches take to expire).</p>`}},
+
+{at:"res",frame:q(IP.auth,"41902","0xc4d1"),kind:"dns",move:[[["res","auth"]]],log:{ro:"resolver → autoritar",en:"resolver → authoritative"},who:{ro:"resolver-ul",en:"the resolver"},
+ title:{ro:"Resolver-ul întreabă serverul autoritar",en:"The resolver asks the authoritative server"},
+ body:{ro:`<p>Al treilea pas al căutării: întrebarea ajunge la <code>ns1.example.com</code> (<code>192.0.2.53</code>), serverul care deține <strong>zona</strong> example.com, adică lista oficială a tuturor înregistrărilor domeniului.</p>`,
+ en:`<p>The third step of the search: the question reaches <code>ns1.example.com</code> (<code>192.0.2.53</code>), the server that holds the example.com <strong>zone</strong>, the official list of all the domain's records.</p>`}},
+
+{at:"auth",frame:r(IP.auth,"41902","0xc4d1",{flags:{ro:"QR AA (răspuns autoritar)",en:"QR AA (authoritative answer)"},answer:ANS}),kind:"dns",move:[[["auth","res"]]],
+ fx:[["rcache","www.example.com.","A "+IP.web,"3600 s"]],log:{ro:"autoritar → resolver",en:"authoritative → resolver"},tables:["authz","rcache"],hl:{authz:"www.example.com."},who:{ro:"serverul autoritar",en:"the authoritative server"},
+ title:{ro:"Răspunsul final: 203.0.113.80",en:"The final answer: 203.0.113.80"},
+ body:{ro:`<p>Serverul autoritar caută în zona lui și găsește înregistrarea <strong>A</strong>:</p><p class="quote">www.example.com. 3600 A 203.0.113.80</p>
+<ul><li><strong>A</strong> = adresă IPv4 (pentru IPv6 ar fi <strong>AAAA</strong>);</li><li><strong>3600</strong> = TTL: răspunsul poate fi ținut în cache o oră;</li><li>indicatorul <strong>AA</strong>: „sunt sursa oficială, nu repet ce am auzit”.</li></ul>`,
+ en:`<p>The authoritative server looks in its zone and finds the <strong>A</strong> record:</p><p class="quote">www.example.com. 3600 A 203.0.113.80</p>
+<ul><li><strong>A</strong> = IPv4 address (for IPv6 it would be <strong>AAAA</strong>);</li><li><strong>3600</strong> = TTL: the answer may be cached for an hour;</li><li>the <strong>AA</strong> flag: "I'm the official source, not repeating what I heard".</li></ul>`},
+ more:{ro:`<p>Dacă înregistrarea ar fi fost un <strong>CNAME</strong> (de ex. <code>blog.example.com CNAME www.example.com</code>), resolver-ul ar fi continuat cu numele nou până ajungea la o înregistrare A.</p><p>Dacă numele nu există, serverul răspunde <strong>NXDOMAIN</strong>. Asta ai văzut în Edge la domeniul inventat de pe GitHub Pages: <code>DNS_PROBE_FINISHED_NXDOMAIN</code>.</p>`,
+  en:`<p>If the record had been a <strong>CNAME</strong> (e.g. <code>blog.example.com CNAME www.example.com</code>), the resolver would have carried on with the new name until it reached an A record.</p><p>If the name doesn't exist, the server answers <strong>NXDOMAIN</strong>. That's what Edge showed for a made-up domain: <code>DNS_PROBE_FINISHED_NXDOMAIN</code>.</p>`}},
+
+{at:"res",frame:A0,kind:"dns",move:[[["res","pc"]]],fx:[["oscache",NAME,"A "+IP.web,"3600 s"]],log:{ro:"resolver → laptop",en:"resolver → laptop"},tables:["rcache","oscache"],hl:{rcache:"www.example.com."},who:{ro:"resolver-ul",en:"the resolver"},
+ title:{ro:"Resolver-ul îți dă răspunsul",en:"The resolver gives you the answer"},
+ body:{ro:`<p>Resolver-ul îi răspunde laptopului la <strong>întrebarea inițială</strong>: același ID (<code>0x3a7f</code>), același port (<code>51000</code>), iar în Answer: <code>203.0.113.80</code>.</p>
+<p>Indicatorul <strong>RA</strong> („recursion available”) spune că resolver-ul a făcut el toată căutarea. Laptopul a trimis o singură întrebare; resolver-ul a mai pus trei.</p>
+<p>Și laptopul salvează răspunsul în cache-ul Windows, pentru o oră.</p>`,
+ en:`<p>The resolver answers the laptop's <strong>original question</strong>: same ID (<code>0x3a7f</code>), same port (<code>51000</code>), and in Answer: <code>203.0.113.80</code>.</p>
+<p>The <strong>RA</strong> ("recursion available") flag says the resolver did the whole search itself. The laptop sent one question; the resolver asked three more.</p>
+<p>The laptop also saves the answer in the Windows cache, for an hour.</p>`},
+ try:[{cmd:"Resolve-DnsName www.example.com -Type A",d:{ro:"Pune exact această întrebare din PowerShell.",en:"Asks exactly this question from PowerShell."}},{cmd:"nslookup -type=NS example.com",d:{ro:"Află serverele autoritare ale unui domeniu.",en:"Finds a domain's authoritative servers."}}]},
+
+{at:"pc",frame:{srcIp:IP.pc,dstIp:IP.web,proto:"TCP",srcPort:"52044",dstPort:"443",req:"TLS ClientHello (SNI: www.example.com)"},kind:"web",move:[[["pc","web"]]],log:{ro:"laptop → site",en:"laptop → site"},who:{ro:"browserul",en:"the browser"},
+ title:{ro:"Abia acum se conectează la site",en:"Only now does it connect to the site"},
+ body:{ro:`<p>Cu IP-ul aflat, browserul deschide o conexiune <strong>TCP</strong> spre <code>203.0.113.80:443</code> și începe negocierea <strong>TLS</strong> (HTTPS). În mesaj trimite din nou numele (<strong>SNI</strong>), ca serverul să știe ce site vrei, dacă găzduiește mai multe.</p>
+<p>Tot ce ai văzut până acum a durat de obicei între <strong>20 și 150 ms</strong>. Drumul pachetelor până la site e exact cel din <a href="../ethernet/">lecția Ethernet</a>.</p>`,
+ en:`<p>With the IP known, the browser opens a <strong>TCP</strong> connection to <code>203.0.113.80:443</code> and starts the <strong>TLS</strong> (HTTPS) handshake. In that message it sends the name again (<strong>SNI</strong>) so the server knows which site you want if it hosts several.</p>
+<p>Everything you've seen so far usually takes <strong>20 to 150 ms</strong>. The packets' path to the site is exactly the one from the <a href="../ethernet/">Ethernet lesson</a>.</p>`}},
+
+{at:"res",frame:{...A0,answer:"www.example.com. 2958 A "+IP.web},kind:"dns",cmp:9,move:[[["pc","res"]],[["res","pc"]]],log:{ro:"mai târziu: din cache",en:"later: from cache"},tables:["rcache"],hl:{rcache:"www.example.com."},who:{ro:"resolver-ul",en:"the resolver"},
+ title:{ro:"Data viitoare: răspuns din cache",en:"Next time: an answer from the cache"},
+ body:{ro:`<p>Zece minute mai târziu, alt client al aceluiași furnizor (sau tu, după ce ai golit cache-ul Windows) cere tot <code>www.example.com</code>.</p>
+<p>Resolver-ul îl are în cache și răspunde <strong>imediat</strong>, fără să mai întrebe rădăcina, .com sau serverul autoritar. Observă <strong>TTL-ul</strong>: a scăzut de la 3600 la 2958 de secunde. Când ajunge la 0, înregistrarea e ștearsă și data viitoare căutarea se reia.</p>
+<p class="key">Cache-ul face DNS-ul rapid, dar înseamnă și că o schimbare de IP se vede peste tot abia după ce expiră TTL-ul.</p>`,
+ en:`<p>Ten minutes later, another customer of the same provider (or you, after clearing the Windows cache) asks for <code>www.example.com</code> too.</p>
+<p>The resolver has it cached and answers <strong>immediately</strong>, without asking the root, .com or the authoritative server again. Note the <strong>TTL</strong>: it dropped from 3600 to 2958 seconds. When it reaches 0, the record is removed and next time the search starts again.</p>
+<p class="key">Caching makes DNS fast, but it also means an IP change only shows up everywhere once the TTL has expired.</p>`},
+ more:{ro:`<p>De aceea, înainte de o mutare de server, administratorii scad TTL-ul (de ex. la 300 s) cu o zi înainte. După mutare îl cresc la loc.</p>`,
+  en:`<p>That's why, before moving a server, admins lower the TTL (e.g. to 300 s) a day in advance, then raise it again after the move.</p>`},
+ try:[{cmd:"ipconfig /flushdns",d:{ro:"Golește cache-ul DNS al Windows (util când un site și-a schimbat IP-ul).",en:"Clears the Windows DNS cache (useful when a site changed its IP)."}}]},
+
+{at:["pc","res"],frame:null,kind:"none",summary:true,
+ title:{ro:"Recapitulare",en:"Recap"},
+ body:{ro:`<div class="flow"><span>laptop</span><i>→</i><span>resolver</span><i>→</i><span>.</span><i>→</i><span>com</span><i>→</i><span>example.com</span><i>⇒</i><span>203.0.113.80</span></div>
+<ul><li>Calculatorul verifică întâi <strong>cache-ul local</strong> și fișierul <strong>hosts</strong>.</li>
+<li>Pune o întrebare <strong>recursivă</strong> resolver-ului: „dă-mi răspunsul final”.</li>
+<li>Resolver-ul pune întrebări <strong>iterative</strong>: rădăcina și TLD-ul răspund cu <strong>trimiteri</strong> (NS), serverul <strong>autoritar</strong> răspunde cu înregistrarea.</li>
+<li>Fiecare răspuns are un <strong>TTL</strong>; până expiră, răspunsul e luat din <strong>cache</strong>.</li></ul>
+<p>În Kubernetes, CoreDNS joacă rolul serverului autoritar pentru <code>cluster.local</code> (vezi <a href="../kubernetes/">lecția Kubernetes</a>).</p>
+<p><button type="button" class="btn primary" data-goto="quiz">Mergi la test ↓</button></p>`,
+ en:`<div class="flow"><span>laptop</span><i>→</i><span>resolver</span><i>→</i><span>.</span><i>→</i><span>com</span><i>→</i><span>example.com</span><i>⇒</i><span>203.0.113.80</span></div>
+<ul><li>The computer first checks its <strong>local cache</strong> and the <strong>hosts</strong> file.</li>
+<li>It asks the resolver a <strong>recursive</strong> question: "give me the final answer".</li>
+<li>The resolver asks <strong>iterative</strong> questions: the root and TLD reply with <strong>referrals</strong> (NS), the <strong>authoritative</strong> server replies with the record.</li>
+<li>Every answer has a <strong>TTL</strong>; until it expires, the answer comes from the <strong>cache</strong>.</li></ul>
+<p>In Kubernetes, CoreDNS plays the authoritative server for <code>cluster.local</code> (see the <a href="../kubernetes/">Kubernetes lesson</a>).</p>
+<p><button type="button" class="btn primary" data-goto="quiz">Go to the quiz ↓</button></p>`}}
+],
+
+reference:(T,lang)=>{
+  const ro=lang==="ro";
+  const rec=[
+    ["A","www.example.com. A 203.0.113.80",{ro:"Adresa IPv4 a unui nume.",en:"A name's IPv4 address."}],
+    ["AAAA","www.example.com. AAAA 2001:db8::80",{ro:"Adresa IPv6.",en:"The IPv6 address."}],
+    ["CNAME","blog.example.com. CNAME www.example.com.",{ro:"Alias: „caută acest alt nume”.",en:"Alias: \"look up this other name instead\"."}],
+    ["MX","example.com. MX 10 mail.example.com.",{ro:"Serverul care primește e-mailurile domeniului; numărul mic are prioritate.",en:"The server that receives the domain's email; lower number wins."}],
+    ["NS","example.com. NS ns1.example.com.",{ro:"Serverele autoritare ale domeniului.",en:"The domain's authoritative servers."}],
+    ["TXT","example.com. TXT \"v=spf1 mx -all\"",{ro:"Text liber: verificări de domeniu, reguli anti-spam (SPF, DKIM, DMARC).",en:"Free text: domain verification, anti-spam rules (SPF, DKIM, DMARC)."}],
+    ["SOA","example.com. SOA ns1.example.com. …",{ro:"Datele zonei: serverul principal, numărul de versiune, timpi de reîmprospătare.",en:"Zone data: primary server, serial number, refresh timers."}],
+    ["PTR","80.113.0.203.in-addr.arpa. PTR www.example.com.",{ro:"Invers: din IP în nume.",en:"Reverse: from IP to name."}],
+    ["SRV","_sip._tcp.example.com. SRV 10 5 5060 sip.example.com.",{ro:"Unde rulează un serviciu: server și port (folosit și în Kubernetes).",en:"Where a service runs: server and port (also used in Kubernetes)."}]
+  ];
+  let h=`<div class="ref-grid"><section class="card refcard"><h2>${ro?"Tipuri de înregistrări DNS":"DNS record types"}</h2><div class="scroll"><table class="cmp" style="min-width:520px"><thead><tr><th>${ro?"Tip":"Type"}</th><th>${ro?"Exemplu":"Example"}</th><th>${ro?"La ce folosește":"What it's for"}</th></tr></thead><tbody>`;
+  rec.forEach(r=>{h+=`<tr><td><span class="pill">${r[0]}</span></td><td class="m">${r[1]}</td><td>${T(r[2])}</td></tr>`});
+  h+=`</tbody></table></div></section>`;
+  h+=`<section class="card refcard"><h2>${ro?"Recursiv sau iterativ?":"Recursive or iterative?"}</h2>
+<div class="scroll"><table class="cmp"><thead><tr><th></th><th>${ro?"Resolver recursiv":"Recursive resolver"}</th><th>${ro?"Server autoritar":"Authoritative server"}</th></tr></thead><tbody>
+<tr><td>${ro?"Exemple":"Examples"}</td><td>${ro?"resolver-ul ISP, 1.1.1.1, 8.8.8.8, routerul de acasă":"your ISP's resolver, 1.1.1.1, 8.8.8.8, your home router"}</td><td>${ro?"serverele rădăcină, .com, ns1.example.com, CoreDNS":"root servers, .com, ns1.example.com, CoreDNS"}</td></tr>
+<tr><td>${ro?"Ce face":"What it does"}</td><td>${ro?"Caută răspunsul pentru tine, întrebând pe rând serverele":"Finds the answer for you by asking servers in turn"}</td><td>${ro?"Răspunde doar despre zona lui":"Only answers about its own zone"}</td></tr>
+<tr><td>${ro?"Cache":"Cache"}</td><td>${ro?"Da, după TTL":"Yes, by TTL"}</td><td>${ro?"Nu are nevoie: el e sursa":"Doesn't need one: it is the source"}</td></tr>
+<tr><td>${ro?"Primește":"Receives"}</td><td>${ro?"Întrebări recursive (RD=1)":"Recursive queries (RD=1)"}</td><td>${ro?"Întrebări iterative":"Iterative queries"}</td></tr>
+</tbody></table></div>
+<h3>${ro?"Comenzi utile pe Windows":"Useful commands on Windows"}</h3>
+<div class="try">${[["Resolve-DnsName example.com -Type MX",{ro:"Serverele de e-mail ale unui domeniu.",en:"A domain's mail servers."}],["Resolve-DnsName example.com -Type TXT",{ro:"Înregistrările text (SPF etc.).",en:"The text records (SPF, etc.)."}],["Resolve-DnsName www.example.com -Server 1.1.1.1",{ro:"Întreabă un alt resolver decât cel implicit.",en:"Asks a different resolver than the default one."}],["nslookup 203.0.113.80",{ro:"Căutare inversă: din IP în nume (PTR).",en:"Reverse lookup: from IP to name (PTR)."}]].map(c=>`<div class="cmdrow"><div class="cmd"><code>${c[0]}</code><button type="button" class="copy" data-cmd="${c[0]}">${ro?"Copiază":"Copy"}</button></div><p>${T(c[1])}</p></div>`).join("")}</div></section></div>`;
+  return h;
+},
+
+gloss:[
+ ["DNS","Domain Name System",{ro:"Sistemul care traduce nume (www.example.com) în adrese IP.",en:"The system that translates names (www.example.com) into IP addresses."}],
+ ["Resolver",{ro:"resolver recursiv",en:"recursive resolver"},{ro:"Serverul care face căutarea completă pentru tine și ține minte răspunsurile.",en:"The server that does the full lookup for you and remembers the answers."}],
+ [{ro:"Server autoritar",en:"Authoritative server"},null,{ro:"Serverul care deține oficial înregistrările unui domeniu.",en:"The server that officially holds a domain's records."}],
+ [{ro:"Server rădăcină",en:"Root server"},null,{ro:"Vârful ierarhiei: știe serverele fiecărui TLD (.com, .ro…).",en:"The top of the hierarchy: knows the servers for each TLD (.com, .ro…)."}],
+ ["TLD","Top-Level Domain",{ro:"Ultima parte a numelui: .com, .org, .ro.",en:"The last part of a name: .com, .org, .ro."}],
+ [{ro:"Zonă",en:"Zone"},null,{ro:"Lista de înregistrări a unui domeniu, ținută pe serverul autoritar.",en:"A domain's list of records, kept on the authoritative server."}],
+ ["TTL","Time To Live",{ro:"Câte secunde poate fi ținut un răspuns în cache.",en:"How many seconds an answer may be cached."}],
+ ["Cache",null,{ro:"Memorie temporară cu răspunsuri primite recent.",en:"Temporary memory of recently received answers."}],
+ ["Referral",{ro:"trimitere",en:null},{ro:"Răspuns de tipul „nu știu, întreabă serverul acesta” (înregistrări NS).",en:"An answer like \"don't know, ask this server\" (NS records)."}],
+ ["Glue",null,{ro:"IP-ul unui server de nume trimis odată cu trimiterea, ca să nu fie nevoie de altă căutare.",en:"A name server's IP sent along with the referral so no extra lookup is needed."}],
+ ["RD / RA / AA",null,{ro:"Indicatori DNS: Recursion Desired, Recursion Available, Authoritative Answer.",en:"DNS flags: Recursion Desired, Recursion Available, Authoritative Answer."}],
+ ["NXDOMAIN","Non-Existent Domain",{ro:"Răspunsul „acest nume nu există”.",en:"The answer \"this name doesn't exist\"."}],
+ ["hosts",null,{ro:"Fișier local cu perechi IP–nume, verificat înaintea DNS-ului.",en:"A local file of IP–name pairs, checked before DNS."}],
+ ["Anycast",null,{ro:"Același IP pe multe servere din lume; ajungi automat la cel mai apropiat.",en:"The same IP on many servers worldwide; you automatically reach the closest."}],
+ ["DNSSEC","DNS Security Extensions",{ro:"Semnături digitale care dovedesc că un răspuns DNS e autentic.",en:"Digital signatures proving a DNS answer is genuine."}],
+ ["DoH / DoT","DNS over HTTPS / TLS",{ro:"DNS criptat, ca întrebările să nu poată fi citite sau modificate pe drum.",en:"Encrypted DNS, so queries can't be read or changed on the way."}],
+ ["Registrar / Registry",null,{ro:"Registrar-ul îți vinde domeniul; registry-ul administrează tot TLD-ul (de ex. RoTLD pentru .ro).",en:"The registrar sells you the domain; the registry runs the whole TLD (e.g. RoTLD for .ro)."}],
+ ["SNI","Server Name Indication",{ro:"Numele site-ului trimis la începutul conexiunii HTTPS.",en:"The site name sent at the start of an HTTPS connection."}],
+ ["FQDN","Fully Qualified Domain Name",{ro:"Numele complet, cu punctul final: www.example.com.",en:"The complete name, with the final dot: www.example.com."}]
+],
+
+quiz:[
+ {q:{ro:"Cine face toată căutarea când scrii un nume în browser?",en:"Who does the whole search when you type a name into the browser?"},
+  o:[{ro:"Browserul întreabă singur fiecare server",en:"The browser asks every server itself"},{ro:"Resolver-ul recursiv (de ex. al furnizorului)",en:"The recursive resolver (e.g. your provider's)"},{ro:"Serverul rădăcină",en:"The root server"},{ro:"Site-ul pe care vrei să-l deschizi",en:"The site you want to open"}],a:1,
+  e:{ro:"Laptopul pune o singură întrebare recursivă; resolver-ul întreabă rădăcina, TLD-ul și serverul autoritar.",en:"The laptop asks one recursive question; the resolver asks the root, the TLD and the authoritative server."}},
+ {q:{ro:"Ce răspunde serverul rădăcină la întrebarea „www.example.com A?”",en:"What does the root server answer to \"www.example.com A?\""},
+  o:[{ro:"IP-ul site-ului",en:"The site's IP"},{ro:"NXDOMAIN",en:"NXDOMAIN"},{ro:"O trimitere spre serverele .com",en:"A referral to the .com servers"},{ro:"Nu răspunde",en:"It doesn't answer"}],a:2,
+  e:{ro:"Rădăcina știe doar cine se ocupă de fiecare TLD.",en:"The root only knows who handles each TLD."}},
+ {q:{ro:"Ce înseamnă TTL 3600 la o înregistrare DNS?",en:"What does TTL 3600 on a DNS record mean?"},
+  o:[{ro:"Răspunsul poate fi ținut în cache 3600 de secunde",en:"The answer may be cached for 3600 seconds"},{ro:"Serverul e la 3600 km",en:"The server is 3600 km away"},{ro:"Pachetul poate trece prin 3600 de routere",en:"The packet may cross 3600 routers"},{ro:"Domeniul expiră în 3600 de zile",en:"The domain expires in 3600 days"}],a:0,
+  e:{ro:"TTL-ul DNS e un timp de păstrare în cache, nu același lucru cu TTL-ul din antetul IP.",en:"The DNS TTL is a cache lifetime, not the same thing as the TTL in the IP header."}},
+ {q:{ro:"Ce tip de înregistrare spune unde ajung e-mailurile unui domeniu?",en:"Which record type says where a domain's email goes?"},
+  o:[{ro:"A",en:"A"},{ro:"CNAME",en:"CNAME"},{ro:"TXT",en:"TXT"},{ro:"MX",en:"MX"}],a:3,
+  e:{ro:"MX (Mail eXchanger) indică serverul de e-mail și prioritatea lui.",en:"MX (Mail eXchanger) points to the mail server and its priority."}},
+ {q:{ro:"Ce verifică Windows înainte să întrebe un server DNS?",en:"What does Windows check before asking a DNS server?"},
+  o:[{ro:"Doar internetul",en:"Only the internet"},{ro:"Cache-ul local și fișierul hosts",en:"The local cache and the hosts file"},{ro:"Serverul rădăcină",en:"The root server"},{ro:"Tabela de rutare",en:"The routing table"}],a:1,
+  e:{ro:"Dacă găsește numele local, nu mai trimite niciun pachet DNS.",en:"If it finds the name locally, it sends no DNS packet at all."}},
+ {q:{ro:"Ai mutat site-ul pe un IP nou, dar unii vizitatori ajung încă la cel vechi. De ce?",en:"You moved your site to a new IP but some visitors still reach the old one. Why?"},
+  o:[{ro:"Serverul rădăcină e defect",en:"The root server is broken"},{ro:"Resolverele lor au încă vechiul răspuns în cache, până expiră TTL-ul",en:"Their resolvers still have the old answer cached until the TTL expires"},{ro:"Trebuie schimbat cablul",en:"The cable needs replacing"},{ro:"IP-urile nu se pot schimba",en:"IPs can't change"}],a:1,
+  e:{ro:"De aceea se scade TTL-ul înainte de o mutare.",en:"That's why you lower the TTL before a move."}},
+ {q:{ro:"Ce înseamnă eroarea DNS_PROBE_FINISHED_NXDOMAIN?",en:"What does the error DNS_PROBE_FINISHED_NXDOMAIN mean?"},
+  o:[{ro:"Site-ul e lent",en:"The site is slow"},{ro:"Parola e greșită",en:"The password is wrong"},{ro:"Numele de domeniu nu există în DNS",en:"The domain name doesn't exist in DNS"},{ro:"Serverul web e oprit",en:"The web server is down"}],a:2,
+  e:{ro:"NXDOMAIN = Non-Existent Domain: niciun server autoritar nu are acel nume.",en:"NXDOMAIN = Non-Existent Domain: no authoritative server has that name."}}
+]
+};
+})();
+</script>
+<script src="../assets/engine.js"></script>
+</body>
+</html>
