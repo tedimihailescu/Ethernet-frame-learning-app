@@ -15,6 +15,7 @@ Lecții web interactive despre rețele. Fiecare lecție e o simulare animată: u
 | 3 | [Kubernetes: Service-uri și DNS în cluster](https://tedimihailescu.github.io/Ethernet-frame-learning-app/kubernetes/) | Pod-uri, etichete, Service și EndpointSlice, CoreDNS și `backend.shop.svc.cluster.local`, kube-proxy și DNAT, conntrack, CNI, NodePort și LoadBalancer |
 | 4 | [Tomcat: viața unei cereri](https://tedimihailescu.github.io/Ethernet-frame-learning-app/tomcat/) | nginx ca reverse proxy, Connector, thread pool, Engine/Host/Context, filtre, DispatcherServlet, HikariCP, blocarea sub încărcare |
 | 5 | [Microservicii pe Tomcat în producție](https://tedimihailescu.github.io/Ethernet-frame-learning-app/microservicii/) | Spring Boot cu Tomcat încorporat, API gateway, REST, Kafka și outbox, timeout, circuit breaker, bulkhead, tracing, health checks |
+| 6 | [Rețeaua pod-urilor în Google Cloud (GKE)](https://tedimihailescu.github.io/Ethernet-frame-learning-app/gke-retea/) | IPAM, veth, bridge, kubenet, VPC-native cu alias IP, Calico și network policy, intranode visibility, overlay VXLAN/IPIP, NAT (după un [video Project Calico](https://www.youtube.com/watch?v=sDsWmdMniNs)) |
 
 Fiecare lecție are: diagramă animată, pachetul „live” cu câmpurile schimbate colorate, tabele (MAC, rutare, ARP, DNS, conntrack…), secțiuni „Află mai mult”, comenzi de încercat, referință, dicționar și test. Totul în română și engleză, temă luminoasă/întunecată, funcționează pe telefon.
 

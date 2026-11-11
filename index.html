@@ -70,7 +70,7 @@
   <div class="path" id="path"></div>
 
   <div class="sec-head" id="productie"><p class="eyebrow" data-t="prodEyebrow"></p><h2 data-t="prodT"></h2><p class="lead" data-t="prodLead"></p></div>
-  <div class="path two" id="path2"></div>
+  <div class="path" id="path2"></div>
 
   <div class="sec-head" id="curand"><p class="eyebrow" data-t="soonEyebrow"></p><h2 data-t="soonT"></h2></div>
   <div class="soon" id="soon"></div>
@@ -91,7 +91,7 @@ const UI={
   prodEyebrow:{ro:"Aplicații în producție",en:"Production apps"},prodT:{ro:"Cum funcționează o aplicație reală",en:"How a real application works"},
   prodLead:{ro:"De la rețea la aplicație: ce se întâmplă cu o cerere în interiorul serverului Java și cum colaborează microserviciile.",en:"From the network to the app: what happens to a request inside the Java server, and how microservices work together."},
   navProd:{ro:"Producție",en:"Production"},
-  meta:[{ro:"5 lecții",en:"5 lessons"},{ro:"85 de pași",en:"85 steps"},{ro:"62 de întrebări",en:"62 questions"},{ro:"fără cont, fără instalări",en:"no account, no install"}],
+  meta:[{ro:"6 lecții",en:"6 lessons"},{ro:"102 pași",en:"102 steps"},{ro:"72 de întrebări",en:"72 questions"},{ro:"fără cont, fără instalări",en:"no account, no install"}],
   how:[["▶",{ro:"Simulare pas cu pas",en:"Step-by-step simulation"},{ro:"Înainte, înapoi sau redare automată, cu animația pachetului pe diagramă.",en:"Forward, back or auto-play, with the packet animated on the diagram."}],
        ["≡",{ro:"Pachetul „live”",en:"The \"live\" packet"},{ro:"Câmpurile noi, schimbate sau eliminate sunt colorate la fiecare pas.",en:"New, changed or removed fields are coloured at every step."}],
        [">_",{ro:"Comenzi reale",en:"Real commands"},{ro:"La fiecare lecție: comenzi de încercat pe Windows sau într-un cluster.",en:"In every lesson: commands to try on Windows or in a cluster."}]],
@@ -131,8 +131,13 @@ const PROD=[
  {href:"microservicii/index.html",ill:"ms",lvl:{ro:"Intermediar",en:"Intermediate"},stats:{ro:"17 pași · ≈ 25 min",en:"17 steps · ≈ 25 min"},
   t:{ro:"Microservicii pe Tomcat în producție",en:"Microservices on Tomcat in production"},
   d:{ro:"O comandă prin servicii Spring Boot cu Tomcat încorporat, în Kubernetes: gateway, REST, Kafka, și cum previi defecțiunile în cascadă.",en:"An order through Spring Boot services with embedded Tomcat, in Kubernetes: gateway, REST, Kafka, and how to prevent cascading failures."},
-  topics:[{ro:"Tomcat încorporat, API gateway, JWT",en:"Embedded Tomcat, API gateway, JWT"},{ro:"Sincron vs. asincron, outbox, idempotență",en:"Sync vs async, outbox, idempotency"},{ro:"Timeout, circuit breaker, bulkhead, tracing",en:"Timeouts, circuit breakers, bulkheads, tracing"}]}
+  topics:[{ro:"Tomcat încorporat, API gateway, JWT",en:"Embedded Tomcat, API gateway, JWT"},{ro:"Sincron vs. asincron, outbox, idempotență",en:"Sync vs async, outbox, idempotency"},{ro:"Timeout, circuit breaker, bulkhead, tracing",en:"Timeouts, circuit breakers, bulkheads, tracing"}]},
+ {href:"gke-retea/index.html",ill:"gke",lvl:{ro:"Intermediar",en:"Intermediate"},stats:{ro:"17 pași · ≈ 25 min · după un video Project Calico",en:"17 steps · ≈ 25 min · from a Project Calico video"},
+  t:{ro:"Rețeaua pod-urilor în Google Cloud (GKE)",en:"Pod networking on Google Cloud (GKE)"},
+  d:{ro:"Cum primesc pod-urile IP-uri și cum ajung pachetele între noduri: kubenet, VPC-native cu alias IP, Calico, network policy, overlay VXLAN și NAT.",en:"How pods get IPs and how packets travel between nodes: kubenet, VPC-native with alias IPs, Calico, network policy, VXLAN overlays and NAT."},
+  topics:[{ro:"IPAM, namespace, veth, bridge",en:"IPAM, namespaces, veth, bridges"},{ro:"VPC-native, alias IP, intranode visibility",en:"VPC-native, alias IPs, intranode visibility"},{ro:"Calico: policy, overlay VXLAN/IPIP, NAT",en:"Calico: policy, VXLAN/IPIP overlays, NAT"}]}
 ];
+ILL.gke=`<svg viewBox="0 0 300 100" aria-hidden="true"><rect x="8" y="12" width="96" height="76" rx="8" fill="none" stroke="var(--border)" stroke-dasharray="4 3"/><rect x="196" y="12" width="96" height="76" rx="8" fill="none" stroke="var(--border)" stroke-dasharray="4 3"/><line class="ill-line" x1="40" y1="50" x2="260" y2="50"/><polygon class="ill-dev" points="38,36 48,42 48,58 38,64 28,58 28,42"/><circle class="ill-dev" cx="86" cy="50" r="11"/><circle class="ill-dev" cx="150" cy="50" r="16"/><path class="ill-line" d="M134 50h32M150 34c-7 8-7 24 0 32M150 34c7 8 7 24 0 32" fill="none" stroke-width="1.4"/><circle class="ill-dev" cx="214" cy="50" r="11"/><polygon class="ill-dev" points="262,36 272,42 272,58 262,64 252,58 252,42"/><rect class="ill-dns" x="104" y="16" width="44" height="15" rx="4"/><text class="ill-txt" x="126" y="27" text-anchor="middle" fill="var(--arp)">VXLAN</text></svg>`;
 const SOON=[["VLAN",{ro:"Cum împarte un switch mai multe rețele, cu etichete 802.1Q.",en:"How one switch carries several networks with 802.1Q tags."}],
  ["NAT",{ro:"Cum ies mai multe calculatoare pe internet cu un singur IP public.",en:"How many computers share one public IP on the internet."}],
  ["HTTPS / TLS",{ro:"Negocierea TLS, certificate și de ce e sigur lacătul din browser.",en:"The TLS handshake, certificates and why the browser padlock is safe."}],

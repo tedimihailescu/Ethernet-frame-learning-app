@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rețeaua pod-urilor în GKE</title>
+<meta name="description" content="Lecție interactivă: cum primesc pod-urile rețea în Kubernetes pe Google Cloud (GKE): IPAM, veth, bridge, VPC-native cu alias IP, Calico, network policy, intranode visibility, overlay VXLAN/IPIP și NAT. / How pod networking works on Google Cloud (GKE).">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<script>
+(function(){
+const IP={n1:"10.128.0.2",n2:"10.128.0.3",gw:"10.128.0.1",a:"10.4.1.5",a2:"10.4.1.6",b:"10.4.2.7",vm:"10.128.0.50",ext:"203.0.113.10"};
+const VIDEO="https://www.youtube.com/watch?v=sDsWmdMniNs";
+const L1={srcIp:IP.a,dstIp:IP.a2,proto:"TCP",dstPort:"8080",iface:{ro:"eth0 (în pod) → veth3a1f (pe nod)",en:"eth0 (in pod) → veth3a1f (on node)"},payload:"GET /api/health"};
+const L2={...L1,route:{ro:"10.4.1.0/24 → cbr0 (bridge)",en:"10.4.1.0/24 → cbr0 (bridge)"},iface:{ro:"cbr0 → veth8c2d → eth0 (pod A2)",en:"cbr0 → veth8c2d → eth0 (pod A2)"}};
+const X1={srcIp:IP.a,dstIp:IP.b,proto:"TCP",dstPort:"8080",iface:{ro:"veth3a1f → cbr0 → eth0 (node-1)",en:"veth3a1f → cbr0 → eth0 (node-1)"},route:{ro:"default via 10.128.0.1 (eth0)",en:"default via 10.128.0.1 (eth0)"},payload:"GET /api/orders"};
+const X2={...X1,route:{ro:"VPC: nicio rută pentru 10.4.2.0/24 → aruncat",en:"VPC: no route for 10.4.2.0/24 → dropped"}};
+const X3={...X1,route:{ro:"VPC: alias IP 10.4.2.0/24 → node-2",en:"VPC: alias IP 10.4.2.0/24 → node-2"},iface:{ro:"eth0 (node-2) → cbr0 → veth5b90 → pod B",en:"eth0 (node-2) → cbr0 → veth5b90 → pod B"}};
+const VM1={srcIp:IP.vm+" (VM)",dstIp:IP.b,proto:"TCP",dstPort:"8080",route:{ro:"VPC: alias IP 10.4.2.0/24 → node-2",en:"VPC: alias IP 10.4.2.0/24 → node-2"},payload:"GET /api/orders"};
+const C1={srcIp:IP.a,dstIp:IP.b,proto:"TCP",dstPort:"8080",iface:{ro:"eth0 (în pod) → cali3a1f (pe nod), fără bridge",en:"eth0 (in pod) → cali3a1f (on node), no bridge"},route:{ro:"10.4.2.0/24 via eth0 → VPC (alias IP)",en:"10.4.2.0/24 via eth0 → VPC (alias IP)"},payload:"GET /api/orders"};
+const P1={srcIp:IP.a2+" (app=batch)",dstIp:IP.b+" (app=backend)",proto:"TCP",dstPort:"8080",policy:{ro:"DENY: sursa nu are eticheta app=frontend",en:"DENY: the source lacks the label app=frontend"},payload:"GET /api/orders"};
+const H1={srcIp:IP.a,dstIp:IP.a2,proto:"TCP",dstPort:"8080",route:{ro:"netd: pod → VPC → înapoi pe node-1",en:"netd: pod → VPC → back to node-1"},flowlog:{ro:"înregistrat în VPC Flow Logs",en:"recorded in VPC Flow Logs"},payload:"GET /api/health"};
+const O1={oSrc:IP.n1+" (node-1)",oDst:IP.n2+" (node-2)",oProto:"UDP 4789 · VXLAN VNI 4096",srcIp:IP.a,dstIp:IP.b,proto:"TCP",dstPort:"8080",payload:"GET /api/orders"};
+const O2={srcIp:IP.a,dstIp:IP.b,proto:"TCP",dstPort:"8080",iface:{ro:"vxlan.calico → cali5b90 → pod B",en:"vxlan.calico → cali5b90 → pod B"},payload:"GET /api/orders"};
+const N1={srcIp:IP.a,dstIp:IP.ext+" (api.example.com)",proto:"TCP",dstPort:"443",payload:"TLS ClientHello"};
+const N2={...N1,srcIp:IP.n1+" (node-1, după SNAT)",route:{ro:"iptables MASQUERADE: 10.4.1.5 → 10.128.0.2",en:"iptables MASQUERADE: 10.4.1.5 → 10.128.0.2"}};
+
+window.LESSON={
+docTitle:{ro:"Rețeaua pod-urilor în GKE",en:"Pod Networking on GKE"},
+eyebrow:{ro:"Lecție interactivă · Kubernetes pe Google Cloud",en:"Interactive lesson · Kubernetes on Google Cloud"},
+title:{ro:"Cum primesc pod-urile rețea în Google Cloud (GKE)",en:"How pods get networking on Google Cloud (GKE)"},
+sub:{ro:"Pod-urile au propriile IP-uri, dar rețeaua Google (VPC) cunoaște la început doar mașinile. Vezi cum se rezolvă asta: veth și bridge, kubenet, VPC-native cu alias IP, Calico și network policy, intranode visibility, overlay VXLAN/IPIP și NAT spre internet.",en:"Pods have their own IPs, but the Google network (VPC) initially only knows the machines. See how that's solved: veth and bridge, kubenet, VPC-native with alias IPs, Calico and network policy, intranode visibility, VXLAN/IPIP overlays and NAT to the internet."},
+meta:[{ro:"≈ 25 minute",en:"≈ 25 minutes"},{ro:"17 pași",en:"17 steps"},{ro:"10 întrebări",en:"10 questions"},{ro:"Intermediar",en:"Intermediate"}],
+goals:[{ro:"Cum ajunge un pod în rețea: namespace, veth, bridge, rute",en:"How a pod joins the network: namespace, veth, bridge, routes"},{ro:"De ce VPC-ul trebuie să afle de IP-urile pod-urilor (VPC-native)",en:"Why the VPC must learn about pod IPs (VPC-native)"},{ro:"Ce aduce Calico: fără bridge, network policy, overlay",en:"What Calico adds: no bridge, network policy, overlays"},{ro:"Când alegi overlay și ce înseamnă NAT pentru pod-uri",en:"When to choose an overlay and what NAT means for pods"}],
+foot:{ro:"Pe baza videoclipului „Kubernetes networking on Google Cloud” (Project Calico, YouTube), rezumat și explicat aici cu propriile cuvinte, cu detalii în plus. Adresele sunt exemple.",en:"Based on the video \"Kubernetes networking on Google Cloud\" (Project Calico, YouTube), summarised and explained here in our own words, with extra detail. Addresses are examples."},
+ui:{refT:{ro:"Comparația opțiunilor și comenzi",en:"Comparing the options, and commands"},refLead:{ro:"Cele patru variante de rețea pentru pod-uri pe Google Cloud, una lângă alta, cum arată un pachet încapsulat și comenzile cu care le vezi în practică.",en:"The four pod networking options on Google Cloud side by side, what an encapsulated packet looks like, and the commands to see them in practice."}},
+tryT:{ro:"Încearcă (într-un cluster GKE sau pe un nod)",en:"Try it (in a GKE cluster or on a node)"},
+legend:[["lg-ip","IP",{ro:"pachet pod → pod",en:"pod → pod packet"}],["lg-arp","VXLAN",{ro:"pachet încapsulat (overlay)",en:"encapsulated packet (overlay)"}]],
+
+nodes:{
+  podA:{type:"pod",name:"pod A",lines:[IP.a]},
+  podA2:{type:"pod",name:"pod A2",lines:[IP.a2]},
+  br1:{type:"switch",name:"bridge",lines:[{ro:"cbr0 / rute",en:"cbr0 / routes"}]},
+  n1:{type:"router",name:"node-1 · eth0",lines:[IP.n1]},
+  vpc:{type:"globe",name:"VPC",lines:["10.128.0.0/20"]},
+  inet:{type:"globe",name:"Internet",lines:[IP.ext]},
+  vm:{type:"server",name:{ro:"VM (în afara cluster-ului)",en:"VM (outside the cluster)"},lines:[IP.vm]},
+  n2:{type:"router",name:"node-2 · eth0",lines:[IP.n2]},
+  br2:{type:"switch",name:"bridge",lines:[{ro:"cbr0 / rute",en:"cbr0 / routes"}]},
+  podB:{type:"pod",name:"pod B",lines:[IP.b]}
+},
+links:[["podA","br1"],["podA2","br1"],["br1","n1"],["n1","vpc"],["vpc","n2"],["n2","br2"],["br2","podB"],["vpc","vm"],["vpc","inet"]],
+layouts:{
+  wide:{vb:[0,0,1000,500],n:{podA:[80,140],podA2:[80,330],br1:[190,235],n1:[305,235],vpc:[500,235],inet:[500,80],vm:[500,400],n2:[695,235],br2:[810,235],podB:[925,235]},
+    zones:[{x:10,y:40,w:330,h:380,top:true,l:{ro:"node-1 (VM GCE) · pod-uri 10.4.1.0/24",en:"node-1 (GCE VM) · pods 10.4.1.0/24"}},
+      {x:660,y:40,w:330,h:380,top:true,l:{ro:"node-2 (VM GCE) · pod-uri 10.4.2.0/24",en:"node-2 (GCE VM) · pods 10.4.2.0/24"}}]},
+  narrow:{vb:[0,0,360,770],n:{podA:[60,62],podA2:[245,62],br1:[130,155],n1:[130,255],vpc:[130,385],inet:[300,335],vm:[300,430],n2:[130,515],br2:[130,615],podB:[130,712]},
+    side:{podA:"right",br1:"right",n1:"right",vpc:"left",inet:"left",vm:"left",n2:"right",br2:"right",podB:"right"},
+    zones:[{x:4,y:8,w:352,h:300,top:true,l:{ro:"node-1 · pod-uri 10.4.1.0/24",en:"node-1 · pods 10.4.1.0/24"}},
+      {x:4,y:468,w:352,h:296,top:true,l:{ro:"node-2 · pod-uri 10.4.2.0/24",en:"node-2 · pods 10.4.2.0/24"}}]}
+},
+groups:[
+  {id:"outer",color:"arp",fields:["oSrc","oDst","oProto"],name:{ro:"Antet exterior (overlay)",en:"Outer header (overlay)"},short:{ro:"Exterior",en:"Outer"},grow:3},
+  {id:"ip",color:"l3",fields:["srcIp","dstIp"],name:{ro:"Antet IP (L3)",en:"IP header (L3)"},short:"IP",grow:3},
+  {id:"l4",color:"l4",fields:["proto","dstPort"],name:"L4",short:"TCP",grow:2},
+  {id:"path",color:"l2",fields:["iface","route","policy","flowlog"],name:{ro:"Ce decide nodul (nu e în pachet)",en:"What the node decides (not in the packet)"},short:{ro:"Decizie",en:"Decision"},grow:3},
+  {id:"app",color:"l7",fields:["payload"],name:{ro:"Date",en:"Data"},short:{ro:"Date",en:"Data"},grow:2}
+],
+fieldLabels:{oSrc:{ro:"IP sursă exterior",en:"Outer source IP"},oDst:{ro:"IP destinație exterior",en:"Outer destination IP"},oProto:{ro:"Încapsulare",en:"Encapsulation"},
+  srcIp:{ro:"IP sursă",en:"Source IP"},dstIp:{ro:"IP destinație",en:"Destination IP"},proto:"Protocol",dstPort:{ro:"Port destinație",en:"Destination port"},
+  iface:{ro:"Interfețe",en:"Interfaces"},route:{ro:"Rută aleasă",en:"Route chosen"},policy:"Network Policy",flowlog:"Flow log",payload:{ro:"Conținut",en:"Payload"}},
+pdu:f=>f.oSrc?{badge:{ro:"Pachet încapsulat (VXLAN)",en:"Encapsulated packet (VXLAN)"},tok:["VXLAN","k-arp"]}:{badge:{ro:"Pachet IP",en:"IP packet"},tok:["IP","k-ip"]},
+
+init:{vpc:[["10.128.0.0/20",{ro:"subnet: VM-uri și noduri (direct)",en:"subnet: VMs and nodes (direct)"}]]},
+tables:{
+  vpc:{title:{ro:"Rutele cunoscute de VPC",en:"Routes the VPC knows"},cols:[{ro:"Destinație",en:"Destination"},{ro:"Merge la",en:"Goes to"}]},
+  ipam:{title:{ro:"IPAM: cine primește ce adrese",en:"IPAM: who gets which addresses"},cols:[{ro:"Ce",en:"What"},{ro:"Interval",en:"Range"}],
+    rows:()=>[[{ro:"Toate pod-urile din cluster (pod CIDR)",en:"All pods in the cluster (pod CIDR)"},"10.4.0.0/14"],["node-1","10.4.1.0/24 (256)"],["node-2","10.4.2.0/24 (256)"],[{ro:"Nodurile (subnet VPC)",en:"The nodes (VPC subnet)"},"10.128.0.0/20"]]},
+  links1:{title:{ro:"Interfețele de pe node-1 (ip link)",en:"Interfaces on node-1 (ip link)"},cols:[{ro:"Interfață",en:"Interface"},{ro:"Ce e",en:"What it is"}],
+    rows:()=>[["eth0",{ro:"placa de rețea a VM-ului, spre VPC",en:"the VM's network card, towards the VPC"}],["cbr0",{ro:"bridge-ul (switch software) kubenet",en:"the kubenet bridge (software switch)"}],["veth3a1f",{ro:"capătul de pe nod al lui pod A",en:"pod A's node-side end"}],["veth8c2d",{ro:"capătul de pe nod al lui pod A2",en:"pod A2's node-side end"}]]},
+  routes1:{title:{ro:"Rutele lui node-1 (kubenet)",en:"node-1's routes (kubenet)"},cols:[{ro:"Destinație",en:"Destination"},{ro:"Pe unde",en:"Via"}],
+    rows:()=>[["10.4.1.0/24","dev cbr0"],["default","via 10.128.0.1 dev eth0"]]},
+  routesCal:{title:{ro:"Rutele lui node-1 (cu Calico)",en:"node-1's routes (with Calico)"},cols:[{ro:"Destinație",en:"Destination"},{ro:"Pe unde",en:"Via"}],
+    rows:()=>[["10.4.1.5/32","dev cali3a1f"],["10.4.1.6/32","dev cali8c2d"],["default","via 10.128.0.1 dev eth0"]]},
+  policy:{title:{ro:"NetworkPolicy „backend-allow-frontend”",en:"NetworkPolicy \"backend-allow-frontend\""},cols:[{ro:"Regulă",en:"Rule"},{ro:"Valoare",en:"Value"}],
+    rows:()=>[[{ro:"Se aplică pe",en:"Applies to"},"app=backend (pod B)"],[{ro:"Permite intrare de la",en:"Allows ingress from"},"app=frontend"],["Port","TCP 8080"],[{ro:"Restul",en:"Everything else"},{ro:"blocat",en:"blocked"}],["pod A","app=frontend ✓"],["pod A2","app=batch ✗"]]},
+  flow:{title:{ro:"VPC Flow Logs (extras)",en:"VPC Flow Logs (excerpt)"},cols:[{ro:"Sursă",en:"Source"},{ro:"Destinație",en:"Destination"},{ro:"Octeți",en:"Bytes"}],
+    rows:()=>[[IP.a,IP.a2+":8080","1 240"],[IP.a,IP.b+":8080","8 912"],[IP.vm,IP.b+":8080","3 004"]]},
+  mtu:{title:{ro:"Cât „costă” încapsularea",en:"What encapsulation \"costs\""},cols:[{ro:"Mod",en:"Mode"},{ro:"Octeți în plus",en:"Extra bytes"},{ro:"MTU pentru pod",en:"Pod MTU"}],
+    rows:()=>[[{ro:"Fără overlay (VPC-native)",en:"No overlay (VPC-native)"},"0","1460"],["IPIP","20","1440"],["VXLAN","50","1410"]]},
+  nat:{title:{ro:"conntrack pe node-1",en:"conntrack on node-1"},cols:[{ro:"Conexiune originală",en:"Original connection"},{ro:"După SNAT",en:"After SNAT"}],
+    rows:()=>[["10.4.1.5:51544 → 203.0.113.10:443","10.128.0.2:51544 → 203.0.113.10:443"]]}
+},
+log:{title:{ro:"Jurnalul pachetelor",en:"Packet log"},lead:{ro:"Albastru = IP-urile pod-urilor. Galben = ce vede VPC-ul (IP-ul exterior la overlay, altfel destinația).",en:"Blue = the pod IPs. Yellow = what the VPC sees (the outer IP for an overlay, otherwise the destination)."},
+  first:{ro:"Moment",en:"Moment"},minWidth:600,
+  cols:[{h:{ro:"Sursă",en:"Source"},v:f=>f.srcIp,cls:"ip"},{h:{ro:"Destinație",en:"Destination"},v:f=>f.dstIp,cls:"ip"},{h:{ro:"Ce vede VPC-ul",en:"What the VPC sees"},v:f=>f.oSrc?f.oSrc+" → "+f.oDst:f.dstIp,cls:"mac"}]},
+
+steps:[
+{at:["n1","n2","vpc"],frame:null,kind:"none",tables:["vpc"],
+ title:{ro:"Scenariul: un cluster GKE cu două noduri",en:"The scenario: a GKE cluster with two nodes"},
+ body:{ro:`<p>Un cluster Kubernetes pe Google Cloud. Fiecare <strong>nod</strong> e o mașină virtuală <strong>GCE</strong> cu o placă de rețea <code>eth0</code>, conectată la <strong>VPC</strong>, rețeaua virtuală Google. VPC-ul știe IP-ul fiecărei mașini (<code>10.128.0.2</code>, <code>10.128.0.3</code>) și se ocupă singur de transportul pachetelor între ele.</p>
+<p>Dar pe noduri rulează <strong>pod-uri</strong>, iar <strong>fiecare pod are propriul IP</strong>. Întrebarea lecției: cum primesc pod-urile aceste IP-uri și cum ajung pachetele de la un pod la altul, la o mașină din afara cluster-ului sau în internet?</p>
+<p>Răspunsul depinde de varianta de rețea aleasă. Le luăm pe rând: <strong>kubenet</strong>, <strong>VPC-native</strong>, <strong>Calico</strong>, <strong>intranode visibility</strong> și <strong>overlay</strong>.</p>`,
+ en:`<p>A Kubernetes cluster on Google Cloud. Each <strong>node</strong> is a <strong>GCE</strong> virtual machine with an <code>eth0</code> network card connected to the <strong>VPC</strong>, Google's virtual network. The VPC knows each machine's IP (<code>10.128.0.2</code>, <code>10.128.0.3</code>) and handles moving packets between them by itself.</p>
+<p>But <strong>pods</strong> run on the nodes, and <strong>every pod has its own IP</strong>. The lesson's question: how do pods get those IPs, and how do packets get from one pod to another, to a machine outside the cluster, or to the internet?</p>
+<p>The answer depends on the networking option chosen. We'll take them in turn: <strong>kubenet</strong>, <strong>VPC-native</strong>, <strong>Calico</strong>, <strong>intranode visibility</strong> and <strong>overlay</strong>.</p>`},
+ more:{ro:`<p>Lecția se bazează pe videoclipul <a href="${VIDEO}">„Kubernetes networking on Google Cloud”</a> (Project Calico). Am adăugat detalii și o notă despre GKE de azi: clusterele noi sunt implicit <strong>VPC-native</strong>, iar network policy se face de obicei cu <strong>GKE Dataplane V2</strong> (bazat pe Cilium și eBPF). Ideile de bază rămân aceleași.</p>`,
+  en:`<p>This lesson is based on the video <a href="${VIDEO}">"Kubernetes networking on Google Cloud"</a> (Project Calico). We've added detail and a note on today's GKE: new clusters are <strong>VPC-native</strong> by default, and network policy is usually done with <strong>GKE Dataplane V2</strong> (based on Cilium and eBPF). The core ideas are the same.</p>`},
+ try:[{cmd:"kubectl get nodes -o wide",d:{ro:"Nodurile și IP-urile lor interne (INTERNAL-IP).",en:"The nodes and their internal IPs (INTERNAL-IP)."}}]},
+
+{at:["n1","n2"],frame:null,kind:"none",tables:["ipam"],who:"IPAM",
+ title:{ro:"De unde vin IP-urile pod-urilor (IPAM)",en:"Where pod IPs come from (IPAM)"},
+ body:{ro:`<p>IP-urile pod-urilor sunt alocate de un plugin <strong>CNI</strong> numit <strong>IPAM</strong> (IP Address Management). Varianta implicită a GKE, <strong>kubenet</strong>, folosește IPAM-ul <code>host-local</code>:</p>
+<ol><li>Cluster-ul are un interval mare pentru toate pod-urile, <strong>pod CIDR</strong>-ul: <code>10.4.0.0/14</code>.</li>
+<li>Fiecare nod primește din el o bucată <code>/24</code> (256 de adrese): node-1 → <code>10.4.1.0/24</code>, node-2 → <code>10.4.2.0/24</code>.</li>
+<li>Fiecare pod nou de pe un nod primește o adresă liberă din bucata nodului lui: pod A → <code>10.4.1.5</code>.</li></ol>`,
+ en:`<p>Pod IPs are allocated by a <strong>CNI</strong> plugin called <strong>IPAM</strong> (IP Address Management). GKE's default option, <strong>kubenet</strong>, uses the <code>host-local</code> IPAM:</p>
+<ol><li>The cluster has one big range for all pods, the <strong>pod CIDR</strong>: <code>10.4.0.0/14</code>.</li>
+<li>Each node gets a <code>/24</code> slice of it (256 addresses): node-1 → <code>10.4.1.0/24</code>, node-2 → <code>10.4.2.0/24</code>.</li>
+<li>Each new pod on a node gets a free address from its node's slice: pod A → <code>10.4.1.5</code>.</li></ol>`},
+ more:{ro:`<p>Un <code>/24</code> per nod înseamnă că pe un nod încap cel mult ~250 de pod-uri, iar un pod CIDR <code>/14</code> ajunge pentru ~1.000 de noduri. Pentru clustere mari sau rețele de firmă cu multe intervale deja ocupate, asta poate deveni o problemă: e unul dintre motivele pentru care unii aleg overlay-ul cu IPAM-ul Calico (pașii 13–17).</p>`,
+  en:`<p>One <code>/24</code> per node means at most ~250 pods per node, and a <code>/14</code> pod CIDR is enough for ~1,000 nodes. For big clusters, or company networks with many ranges already taken, that can become a problem: it's one reason some choose an overlay with Calico's IPAM (steps 13–17).</p>`},
+ try:[{cmd:"kubectl get nodes -o custom-columns=NODE:.metadata.name,PODCIDR:.spec.podCIDR",d:{ro:"Bucata de adrese pentru pod-uri primită de fiecare nod.",en:"The pod address slice each node received."}}]},
+
+{at:"podA",frame:L1,kind:"loc",move:[[["podA","br1"]]],log:{ro:"pod A → pod A2 (același nod)",en:"pod A → pod A2 (same node)"},tables:["links1"],hl:{links1:"veth3a1f"},who:"pod A",
+ title:{ro:"Cum iese un pachet din pod: namespace și veth",en:"How a packet leaves a pod: namespace and veth"},
+ body:{ro:`<p>Fiecare pod are <strong>propriul mediu de rețea</strong>, separat de cel al nodului: un <strong>network namespace</strong> Linux. În el, podul vede o singură placă de rețea, <code>eth0</code>, cu IP-ul lui.</p>
+<p>Acel <code>eth0</code> e de fapt un capăt al unei <strong>perechi veth</strong> (virtual Ethernet): ca un cablu virtual cu două mufe. Celălalt capăt stă pe nod și are un nume generat automat, de ex. <code>veth3a1f</code>. Tot ce intră pe un capăt iese pe celălalt.</p>
+<p>Pod A trimite o cerere spre pod A2, de pe același nod. Pachetul iese din pod pe <code>eth0</code> și apare pe nod pe <code>veth3a1f</code>.</p>`,
+ en:`<p>Each pod has its <strong>own network environment</strong>, separate from the node's: a Linux <strong>network namespace</strong>. Inside it, the pod sees a single network card, <code>eth0</code>, with its IP.</p>
+<p>That <code>eth0</code> is actually one end of a <strong>veth pair</strong> (virtual Ethernet): like a virtual cable with two plugs. The other end lives on the node with an automatically generated name, e.g. <code>veth3a1f</code>. Whatever goes in one end comes out the other.</p>
+<p>Pod A sends a request to pod A2, on the same node. The packet leaves the pod on <code>eth0</code> and appears on the node on <code>veth3a1f</code>.</p>`},
+ try:[{cmd:"kubectl exec pod-a -- ip addr show eth0",d:{ro:"IP-ul văzut din interiorul podului.",en:"The IP as seen from inside the pod."}},{cmd:"ip link show type veth",d:{ro:"Pe nod: toate capetele veth ale pod-urilor.",en:"On the node: every pod's veth end."}}]},
+
+{at:"br1",frame:L2,kind:"loc",move:[[["br1","podA2"]]],tables:["routes1"],hl:{routes1:"10.4.1.0/24"},who:"node-1 (kubenet)",
+ title:{ro:"Bridge-ul: un switch software pe nod",en:"The bridge: a software switch on the node"},
+ body:{ro:`<p>Kubenet leagă toate capetele veth la un <strong>bridge</strong> numit <code>cbr0</code>. Un bridge e <strong>un switch Ethernet făcut în software</strong>: învață MAC-uri și trimite cadre exact ca switch-ul din <a href="../ethernet/index.html">lecția Ethernet</a>.</p>
+<p>Peste el, kernel-ul Linux de pe nod joacă rolul unui <strong>router simplu</strong>, cu două rute:</p>
+<ul><li><code>10.4.1.0/24 → cbr0</code>: pod-urile de pe acest nod sunt „pe bridge”;</li><li><code>default → eth0</code>: orice altceva iese spre VPC.</li></ul>
+<p>Pod A2 e în <code>10.4.1.0/24</code>, deci pachetul merge prin bridge direct la el. Traficul între pod-uri de pe <strong>același nod</strong> nici nu iese din mașină.</p>`,
+ en:`<p>Kubenet connects every veth end to a <strong>bridge</strong> called <code>cbr0</code>. A bridge is <strong>an Ethernet switch built in software</strong>: it learns MACs and forwards frames exactly like the switch in the <a href="../ethernet/index.html">Ethernet lesson</a>.</p>
+<p>On top of it, the node's Linux kernel acts as a <strong>simple router</strong> with two routes:</p>
+<ul><li><code>10.4.1.0/24 → cbr0</code>: this node's pods are "on the bridge";</li><li><code>default → eth0</code>: anything else goes out to the VPC.</li></ul>
+<p>Pod A2 is in <code>10.4.1.0/24</code>, so the packet goes through the bridge straight to it. Traffic between pods on the <strong>same node</strong> never even leaves the machine.</p>`},
+ try:[{cmd:"ip route",d:{ro:"Pe nod: rutele de mai sus.",en:"On the node: the routes above."}}]},
+
+{at:"podA",frame:X1,kind:"x",move:[[["podA","br1"]],[["br1","n1"]],[["n1","vpc"]]],log:{ro:"pod A → pod B (alt nod)",en:"pod A → pod B (other node)"},tables:["routes1"],hl:{routes1:"default"},who:"node-1 (kubenet)",
+ title:{ro:"Spre un pod de pe alt nod",en:"Towards a pod on another node"},
+ body:{ro:`<p>Acum pod A trimite spre pod B (<code>10.4.2.7</code>), de pe node-2. Adresa nu e în <code>10.4.1.0/24</code>, așa că nodul folosește ruta <strong>default</strong>: pachetul trece prin bridge, apoi e rutat afară pe <code>eth0</code>, spre VPC.</p>
+<p>Observă: <strong>IP-ul sursă e IP-ul podului</strong> (<code>10.4.1.5</code>), nu al nodului. Pachetul ajunge în rețeaua Google exact cu adresele pod-urilor.</p>`,
+ en:`<p>Now pod A sends to pod B (<code>10.4.2.7</code>), on node-2. The address isn't in <code>10.4.1.0/24</code>, so the node uses the <strong>default</strong> route: the packet goes through the bridge, then is routed out on <code>eth0</code>, towards the VPC.</p>
+<p>Notice: <strong>the source IP is the pod's IP</strong> (<code>10.4.1.5</code>), not the node's. The packet enters Google's network carrying the pod addresses.</p>`}},
+
+{at:"vpc",frame:X2,kind:"x",tables:["vpc"],tnote:{vpc:{ro:"Caut 10.4.2.7 → nicio rută ⇒ pachetul e aruncat",en:"Looking up 10.4.2.7 → no route ⇒ the packet is dropped"}},marks:{vpc:{k:"drop",t:{ro:"✗ aruncat",en:"✗ dropped"}}},who:"VPC",
+ title:{ro:"Problema: VPC-ul nu știe de pod-uri",en:"The problem: the VPC doesn't know about pods"},
+ body:{ro:`<p>Kubenet a configurat rețeaua <strong>în interiorul nodurilor</strong>. Dar VPC-ul Google cunoaște doar IP-urile plăcilor de rețea ale mașinilor (<code>10.128.0.x</code>). Despre <code>10.4.2.7</code> nu știe nimic: nu are nicio rută care să spună că adresa stă pe node-2.</p>
+<p>Rezultatul: pachetul e <strong>aruncat</strong>. Pod-urile de pe același nod comunică, dar cele de pe noduri diferite <strong>nu</strong>.</p>
+<p class="key">Regula Kubernetes cere ca orice pod să poată vorbi cu orice pod. Rețeaua de dedesubt trebuie, deci, să afle cumva unde stă fiecare IP de pod.</p>`,
+ en:`<p>Kubenet set up the network <strong>inside the nodes</strong>. But Google's VPC only knows the IPs of the machines' network cards (<code>10.128.0.x</code>). It knows nothing about <code>10.4.2.7</code>: it has no route saying that address lives on node-2.</p>
+<p>The result: the packet is <strong>dropped</strong>. Pods on the same node can talk, but pods on different nodes <strong>can't</strong>.</p>
+<p class="key">Kubernetes' rule says any pod must be able to talk to any pod. So the underlying network has to learn, somehow, where each pod IP lives.</p>`}},
+
+{at:"vpc",frame:X3,kind:"x",move:[[["vpc","n2"]],[["n2","br2"]],[["br2","podB"]]],fx:[["vpc","10.4.1.0/24",{ro:"alias IP pe placa lui node-1",en:"alias IP on node-1's card"}],["vpc","10.4.2.0/24",{ro:"alias IP pe placa lui node-2",en:"alias IP on node-2's card"}]],tables:["vpc"],hl:{vpc:"10.4.2.0/24"},who:"VPC-native",
+ title:{ro:"Soluția GKE: cluster „VPC-native” cu alias IP",en:"GKE's fix: a \"VPC-native\" cluster with alias IPs"},
+ body:{ro:`<p>Facem cluster-ul <strong>VPC-native</strong>:</p>
+<ol><li>Pod CIDR-ul <code>10.4.0.0/14</code> e adăugat în VPC ca <strong>interval secundar</strong> al subnet-ului.</li>
+<li>Placa de rețea a fiecărui nod primește un <strong>interval alias IP</strong>: exact bucata <code>/24</code> a nodului. Placa lui node-2 „deține” acum și <code>10.4.2.0/24</code>.</li></ol>
+<p>Acum VPC-ul <strong>știe</strong> că <code>10.4.2.7</code> e la node-2 și îi livrează pachetul. Node-2 îl trimite prin bridge-ul lui la pod B.</p>
+<p>Pe GKE (sau cu instalatorul <code>kube-up</code>) totul se face automat, fără pași manuali.</p>`,
+ en:`<p>We make the cluster <strong>VPC-native</strong>:</p>
+<ol><li>The pod CIDR <code>10.4.0.0/14</code> is added to the VPC as a <strong>secondary range</strong> of the subnet.</li>
+<li>Each node's network card gets an <strong>alias IP range</strong>: exactly the node's <code>/24</code> slice. node-2's card now also "owns" <code>10.4.2.0/24</code>.</li></ol>
+<p>Now the VPC <strong>knows</strong> that <code>10.4.2.7</code> is at node-2 and delivers the packet there. node-2 sends it through its bridge to pod B.</p>
+<p>On GKE (or with the <code>kube-up</code> installer) all of this is automatic, with no manual steps.</p>`},
+ more:{ro:`<p>Alternativa veche erau <strong>rute statice</strong> în VPC („10.4.2.0/24 → node-2”), câte una pe nod. Google limitează numărul de rute, deci metoda nu scalează la clustere mari; alias IP-urile nu au această problemă și sunt verificate de rețeaua Google (anti-spoofing).</p>`,
+  en:`<p>The old alternative was <strong>static routes</strong> in the VPC ("10.4.2.0/24 → node-2"), one per node. Google limits the number of routes, so that doesn't scale to big clusters; alias IPs don't have this problem and are checked by Google's network (anti-spoofing).</p>`},
+ try:[{cmd:"gcloud container clusters create demo --enable-ip-alias",d:{ro:"Creează un cluster VPC-native (azi e implicit).",en:"Creates a VPC-native cluster (the default today)."}}]},
+
+{at:"vm",frame:VM1,kind:"vm",move:[[["vm","vpc"]],[["vpc","n2"]],[["n2","br2"]],[["br2","podB"]]],log:{ro:"VM → pod B (direct)",en:"VM → pod B (direct)"},tables:["vpc"],hl:{vpc:"10.4.2.0/24"},who:"VM",
+ title:{ro:"Bonus: și mașinile din afara cluster-ului ajung la pod-uri",en:"Bonus: machines outside the cluster can reach pods too"},
+ body:{ro:`<p>Pentru că VPC-ul cunoaște acum IP-urile pod-urilor, o <strong>mașină virtuală care nu face parte din cluster</strong> (<code>10.128.0.50</code>, de ex. un server vechi sau o bază de date) poate trimite pachete <strong>direct la IP-ul unui pod</strong>, și invers.</p>
+<p>E util când ai nevoie de acces direct la pod-uri, fără să treci printr-un <strong>Service</strong> Kubernetes.</p>`,
+ en:`<p>Because the VPC now knows the pod IPs, a <strong>virtual machine that isn't part of the cluster</strong> (<code>10.128.0.50</code>, e.g. an older server or a database) can send packets <strong>straight to a pod's IP</strong>, and vice versa.</p>
+<p>That's handy when you need direct access to pods without going through a Kubernetes <strong>Service</strong>.</p>`},
+ more:{ro:`<p>De obicei tot e mai bine să folosești un Service (vezi <a href="../kubernetes/index.html">lecția Kubernetes</a>): IP-urile pod-urilor se schimbă la fiecare recreare, iar Service-ul îți dă un nume și un IP stabile.</p>`,
+  en:`<p>Usually it's still better to use a Service (see the <a href="../kubernetes/index.html">Kubernetes lesson</a>): pod IPs change every time a pod is recreated, and a Service gives you a stable name and IP.</p>`}},
+
+{at:"br1",frame:C1,kind:"cal",move:[[["podA","br1"]],[["br1","n1"]],[["n1","vpc"]],[["vpc","n2"]],[["n2","br2"]],[["br2","podB"]]],tables:["routesCal"],hl:{routesCal:"10.4.1.5/32"},marks:{br1:{k:"ok",t:{ro:"fără bridge",en:"no bridge"}},br2:{k:"ok",t:{ro:"fără bridge",en:"no bridge"}}},who:"Calico",
+ title:{ro:"Calico peste VPC-native: fără bridge",en:"Calico on VPC-native: no bridge"},
+ body:{ro:`<p>GKE are suport încorporat pentru <strong>Calico</strong> (pentru network policy, vezi pasul următor). Cu Calico, rețeaua din nod se schimbă puțin:</p>
+<ul><li>Capătul de pe nod al perechii veth se numește <code>cali…</code> în loc de <code>veth…</code> (o diferență de nume, atât).</li>
+<li>Mai important: <strong>nu mai există bridge</strong>. Fiecare pod e legat direct la rutarea nodului, iar Calico adaugă o <strong>rută /32 pentru fiecare pod</strong> (<code>10.4.1.5/32 dev cali3a1f</code>) când îl creează și o șterge când podul dispare.</li></ul>
+<p>Mai simplu și puțin mai rapid decât kubenet. Conectivitatea rămâne aceeași: pod-uri locale, pod-uri de pe alte noduri, VM-uri.</p>`,
+ en:`<p>GKE has built-in support for <strong>Calico</strong> (for network policy, see the next step). With Calico, the networking inside the node changes a little:</p>
+<ul><li>The node-side end of the veth pair is named <code>cali…</code> instead of <code>veth…</code> (just a naming difference).</li>
+<li>More importantly: <strong>there's no bridge any more</strong>. Each pod is connected straight to the node's routing, and Calico adds a <strong>/32 route per pod</strong> (<code>10.4.1.5/32 dev cali3a1f</code>) when it creates the pod and removes it when the pod goes away.</li></ul>
+<p>Simpler and slightly faster than kubenet. Connectivity stays the same: local pods, pods on other nodes, VMs.</p>`},
+ try:[{cmd:"ip route | grep cali",d:{ro:"Pe un nod cu Calico: câte o rută pentru fiecare pod local.",en:"On a node with Calico: one route per local pod."}}]},
+
+{at:"br2",frame:P1,kind:"pol",move:[[["podA2","br1"]],[["br1","n1"]],[["n1","vpc"]],[["vpc","n2"]],[["n2","br2"]]],rest:["br2"],tables:["policy"],hl:{policy:"pod A2"},marks:{br2:{k:"drop",t:{ro:"✗ blocat de policy",en:"✗ blocked by policy"}}},who:"Calico Network Policy",
+ title:{ro:"Network Policy: un firewall în fața fiecărui pod",en:"Network Policy: a firewall in front of every pod"},
+ body:{ro:`<p>Până acum, orice pod putea vorbi cu orice pod. În producție vrei mai puțin: doar traficul <strong>așteptat</strong>. Calico aplică <strong>Network Policy</strong>: gândește-te la ea ca la un <strong>firewall virtual în fața fiecărui pod</strong>, actualizat în timp real după regulile Kubernetes și Calico.</p>
+<p>Regula din dreapta: la pod B (<code>app=backend</code>) au voie să intre doar conexiuni de la pod-uri cu <code>app=frontend</code>, pe portul 8080.</p>
+<p>Pod A2 are eticheta <code>app=batch</code>. Pachetul lui ajunge până la node-2, dar regulile Calico de lângă interfața lui pod B îl <strong>blochează</strong>. O cerere de la pod A (<code>app=frontend</code>) ar trece.</p>`,
+ en:`<p>So far, any pod could talk to any pod. In production you want less: only <strong>expected</strong> traffic. Calico enforces <strong>Network Policy</strong>: think of it as a <strong>virtual firewall in front of every pod</strong>, updated in real time from the Kubernetes and Calico rules.</p>
+<p>The rule on the right: pod B (<code>app=backend</code>) only accepts connections from pods labelled <code>app=frontend</code>, on port 8080.</p>
+<p>Pod A2 has the label <code>app=batch</code>. Its packet reaches node-2, but the Calico rules next to pod B's interface <strong>block</strong> it. A request from pod A (<code>app=frontend</code>) would pass.</p>`},
+ more:{ro:`<p>Regulile se scriu pe <strong>etichete</strong>, nu pe IP-uri, pentru că IP-urile pod-urilor se schimbă des. Calico le transformă în reguli de kernel (iptables sau eBPF) pe fiecare nod, pentru pod-urile de acolo.</p><p>Un model des folosit: o regulă „<strong>default deny</strong>” pe tot namespace-ul, apoi reguli care permit explicit doar drumurile necesare.</p>`,
+  en:`<p>Rules are written on <strong>labels</strong>, not IPs, because pod IPs change often. Calico turns them into kernel rules (iptables or eBPF) on every node, for the pods living there.</p><p>A common pattern: a "<strong>default deny</strong>" rule for the whole namespace, then rules that explicitly allow only the paths you need.</p>`},
+ try:[{cmd:"gcloud container clusters update demo --enable-network-policy",d:{ro:"Activează network policy pe un cluster GKE existent.",en:"Enables network policy on an existing GKE cluster."}},{cmd:"kubectl get networkpolicy -A",d:{ro:"Regulile definite în cluster.",en:"The rules defined in the cluster."}}]},
+
+{at:"vpc",frame:H1,kind:"hp",move:[[["podA","br1"]],[["br1","n1"]],[["n1","vpc"]],[["vpc","n1"]],[["n1","br1"]],[["br1","podA2"]]],tables:["flow"],hl:{flow:IP.a},log:{ro:"pod A → pod A2 prin VPC",en:"pod A → pod A2 via the VPC"},who:"GCP netd",
+ title:{ro:"Intranode visibility: tot traficul prin VPC",en:"Intranode visibility: all traffic through the VPC"},
+ body:{ro:`<p>GKE are o opțiune numită <code>enable-intranode-visibility</code>. Ea adaugă componenta <strong>GCP netd</strong>, care pune rute speciale: <strong>tot</strong> traficul între pod-uri trece prin VPC, chiar și când pod-urile sunt pe același nod.</p>
+<p>Pod A → pod A2 nu mai merge direct prin nod: iese pe <code>eth0</code>, VPC-ul îl „întoarce” (<strong>hairpin</strong>) înapoi spre node-1, iar node-1 îl livrează lui pod A2.</p>
+<p>De ce un ocol? Pentru că așa <strong>fiecare conexiune apare în VPC Flow Logs</strong>: utile pentru audit, securitate și depanare.</p>`,
+ en:`<p>GKE has an option called <code>enable-intranode-visibility</code>. It adds the <strong>GCP netd</strong> component, which installs special routes: <strong>all</strong> pod-to-pod traffic goes through the VPC, even when the pods are on the same node.</p>
+<p>Pod A → pod A2 no longer goes straight through the node: it leaves on <code>eth0</code>, the VPC "turns it around" (<strong>hairpin</strong>) back to node-1, and node-1 delivers it to pod A2.</p>
+<p>Why the detour? Because then <strong>every connection shows up in VPC Flow Logs</strong>: useful for auditing, security and troubleshooting.</p>`},
+ more:{ro:`<p>Prețul e puțină latență în plus pentru traficul local. O alternativă e să înregistrezi fluxurile direct pe nod, fără ocol: așa face, de exemplu, Calico Enterprise, care adaugă și numele, namespace-ul și etichetele pod-urilor. Contează mult, pentru că un IP de pod singur nu spune mare lucru: peste o oră poate aparține altui pod.</p>`,
+  en:`<p>The price is a little extra latency for local traffic. An alternative is to record flows directly on the node, without the detour: that's what Calico Enterprise does, for example, also adding pod names, namespaces and labels. That matters a lot, because a pod IP alone says little: an hour later it may belong to a different pod.</p>`},
+ try:[{cmd:"gcloud container clusters update demo --enable-intra-node-visibility",d:{ro:"Activează opțiunea pe un cluster existent.",en:"Enables the option on an existing cluster."}}]},
+
+{at:"n1",frame:O1,kind:"ov",move:[[["podA","br1"]],[["br1","n1"]],[["n1","vpc"]],[["vpc","n2"]]],log:{ro:"overlay: încapsulat",en:"overlay: encapsulated"},tables:["mtu"],who:{ro:"Calico overlay (VXLAN)",en:"Calico overlay (VXLAN)"},
+ title:{ro:"Overlay: pachetul pod-ului într-un alt pachet",en:"Overlay: the pod's packet inside another packet"},
+ body:{ro:`<p>Ultima variantă: <strong>Calico cu rețea overlay</strong> și <strong>IPAM-ul Calico</strong>. Aici VPC-ul nu primește deloc intervalele pod-urilor: nici /24 per nod, nici adrese din VPC. Calico împarte singur adresele, în blocuri mici, după nevoie.</p>
+<p>Atunci cum ajunge pachetul la alt nod? Prin <strong>încapsulare</strong>: node-1 pune pachetul original al podului (<code>10.4.1.5 → 10.4.2.7</code>) <strong>în interiorul unui pachet exterior</strong> cu IP-urile nodurilor (<code>10.128.0.2 → 10.128.0.3</code>).</p>
+<p>Pentru VPC e un pachet obișnuit între două mașini pe care le cunoaște. IP-urile pod-urilor sunt „ascunse” înăuntru (vezi grupul nou din pachetul din dreapta).</p>
+<p>Calico știe două feluri de încapsulare, ambele făcute direct în kernel-ul Linux: <strong>VXLAN</strong> (pachetul intră într-un UDP, port 4789) și <strong>IPIP</strong> (IP în IP).</p>`,
+ en:`<p>The last option: <strong>Calico with an overlay network</strong> and <strong>Calico's IPAM</strong>. Here the VPC doesn't get the pod ranges at all: no /24 per node, no addresses from the VPC. Calico hands out addresses itself, in small blocks, as needed.</p>
+<p>So how does the packet reach another node? Through <strong>encapsulation</strong>: node-1 puts the pod's original packet (<code>10.4.1.5 → 10.4.2.7</code>) <strong>inside an outer packet</strong> with the node IPs (<code>10.128.0.2 → 10.128.0.3</code>).</p>
+<p>To the VPC it's an ordinary packet between two machines it knows. The pod IPs are "hidden" inside (see the new group in the packet on the right).</p>
+<p>Calico supports two kinds of encapsulation, both done right in the Linux kernel: <strong>VXLAN</strong> (the packet goes inside UDP, port 4789) and <strong>IPIP</strong> (IP in IP).</p>`},
+ more:{ro:`<p>Când are sens overlay-ul? Când vrei <strong>cât mai puține dependențe de rețeaua cloud-ului</strong> (aceeași configurare în orice cloud sau în propriul centru de date) sau când <strong>nu ai destule adrese IP</strong> în rețeaua firmei pentru clustere mari.</p>`,
+  en:`<p>When does an overlay make sense? When you want <strong>as few dependencies on the cloud network as possible</strong> (the same setup in any cloud or in your own data centre) or when you <strong>don't have enough IP addresses</strong> in the company network for big clusters.</p>`}},
+
+{at:"n2",frame:O2,kind:"ov",move:[[["n2","br2"]],[["br2","podB"]]],log:{ro:"overlay: despachetat",en:"overlay: unwrapped"},tables:["mtu"],hl:{mtu:"VXLAN"},who:"node-2",
+ title:{ro:"La destinație: despachetare și livrare",en:"At the destination: unwrapping and delivery"},
+ body:{ro:`<p>Node-2 primește pachetul exterior, vede că e VXLAN și îl <strong>despachetează</strong>: scoate antetul exterior și găsește pachetul original, de la pod A la pod B. Apoi îl livrează podului, prin interfața <code>cali…</code>.</p>
+<p>Pod B vede pachetul exact cum l-a trimis pod A, cu IP-urile pod-urilor. Nu știe nimic de încapsulare.</p>
+<p>Totul se face în kernel, deci e foarte eficient, dar nu e gratis: VXLAN adaugă <strong>50 de octeți</strong> la fiecare pachet (IPIP doar 20), deci MTU-ul pod-ului scade. Pentru aplicații cu trafic foarte mare, merită luat în calcul.</p>`,
+ en:`<p>node-2 receives the outer packet, sees it's VXLAN and <strong>unwraps</strong> it: it removes the outer header and finds the original packet, from pod A to pod B. It then delivers it to the pod through the <code>cali…</code> interface.</p>
+<p>Pod B sees the packet exactly as pod A sent it, with the pod IPs. It knows nothing about the encapsulation.</p>
+<p>It's all done in the kernel, so it's very efficient, but not free: VXLAN adds <strong>50 bytes</strong> to every packet (IPIP only 20), so the pod MTU drops. For very network-heavy apps, that's worth considering.</p>`}},
+
+{at:"vm",frame:null,kind:"none",marks:{vm:{k:"drop",t:{ro:"nu vede pod-urile",en:"can't see pods"}}},tables:["vpc"],who:{ro:"Consecințe ale overlay-ului",en:"Overlay consequences"},
+ title:{ro:"Overlay: din afară, doar prin Service",en:"Overlay: from outside, only via a Service"},
+ body:{ro:`<p>Cu overlay, VPC-ul <strong>nu cunoaște</strong> IP-urile pod-urilor (tabela lui de rute are doar subnet-ul mașinilor). Consecința:</p>
+<ul><li>VM-ul din afara cluster-ului <strong>nu mai poate</strong> trimite direct la <code>10.4.2.7</code>: VPC-ul n-ar ști unde să-l ducă.</li>
+<li>Conexiunile din afară trebuie să treacă printr-un <strong>Service</strong> Kubernetes (NodePort sau LoadBalancer), care ajunge pe IP-ul unui nod și apoi e redirecționat spre pod.</li></ul>
+<p>Compară cu pasul 8, unde, cu VPC-native, VM-ul ajungea direct la pod.</p>`,
+ en:`<p>With an overlay, the VPC <strong>doesn't know</strong> the pod IPs (its route table only has the machines' subnet). The consequence:</p>
+<ul><li>The VM outside the cluster <strong>can no longer</strong> send straight to <code>10.4.2.7</code>: the VPC wouldn't know where to take it.</li>
+<li>Connections from outside must go through a Kubernetes <strong>Service</strong> (NodePort or LoadBalancer), which arrives at a node's IP and is then redirected to the pod.</li></ul>
+<p>Compare with step 8, where with VPC-native the VM reached the pod directly.</p>`}},
+
+{at:"podA",frame:N1,kind:"nat",move:[[["podA","br1"]],[["br1","n1"]]],log:{ro:"pod A → internet (înainte de NAT)",en:"pod A → internet (before NAT)"},who:"pod A",
+ title:{ro:"Spre internet: pachetul pleacă cu IP-ul podului",en:"To the internet: the packet leaves with the pod's IP"},
+ body:{ro:`<p>Pod A vrea să cheme un API din afara cluster-ului: <code>api.example.com</code> (<code>203.0.113.10:443</code>). Pachetul pornește cu IP-ul sursă <code>10.4.1.5</code>.</p>
+<p>Cu overlay, rețeaua de dincolo de nod <strong>nu știe</strong> unde e <code>10.4.1.5</code>, deci n-ar avea unde trimite răspunsul. Trebuie făcut ceva înainte ca pachetul să iasă de pe nod.</p>`,
+ en:`<p>Pod A wants to call an API outside the cluster: <code>api.example.com</code> (<code>203.0.113.10:443</code>). The packet starts with source IP <code>10.4.1.5</code>.</p>
+<p>With an overlay, the network beyond the node <strong>doesn't know</strong> where <code>10.4.1.5</code> is, so it would have nowhere to send the reply. Something has to happen before the packet leaves the node.</p>`}},
+
+{at:"n1",frame:N2,kind:"nat",move:[[["n1","vpc"]],[["vpc","inet"]]],log:{ro:"după SNAT: IP-ul nodului",en:"after SNAT: the node's IP"},tables:["nat"],who:"node-1 (NAT)",
+ title:{ro:"NAT: nodul își pune propriul IP",en:"NAT: the node puts its own IP on"},
+ body:{ro:`<p>Kernel-ul lui node-1 face <strong>NAT</strong> (Network Address Translation), mai exact <strong>SNAT</strong>: înlocuiește IP-ul sursă al podului (<code>10.4.1.5</code>) cu IP-ul nodului (<code>10.128.0.2</code>). Pe acesta rețeaua Google îl cunoaște, deci pachetul poate merge mai departe normal.</p>
+<p>Kernel-ul ține minte schimbarea în <strong>conntrack</strong>. Când vine răspunsul de la <code>203.0.113.10</code> spre <code>10.128.0.2</code>, kernel-ul îl recunoaște și schimbă <strong>automat</strong> destinația înapoi în <code>10.4.1.5</code>. Podul nici nu observă că s-a întâmplat ceva.</p>`,
+ en:`<p>node-1's kernel does <strong>NAT</strong> (Network Address Translation), more precisely <strong>SNAT</strong>: it replaces the pod's source IP (<code>10.4.1.5</code>) with the node's IP (<code>10.128.0.2</code>). Google's network knows that one, so the packet can carry on normally.</p>
+<p>The kernel remembers the change in <strong>conntrack</strong>. When the reply arrives from <code>203.0.113.10</code> for <code>10.128.0.2</code>, the kernel recognises it and <strong>automatically</strong> changes the destination back to <code>10.4.1.5</code>. The pod doesn't even notice anything happened.</p>`},
+ more:{ro:`<p>E exact ce face routerul de acasă cu calculatoarele din rețeaua ta. Și pe GKE VPC-native se face SNAT spre internet, dar acolo de obicei mai departe, la ieșirea din VPC (Cloud NAT sau IP-ul extern al nodului), pentru că adresele <code>10.x</code> sunt private.</p>`,
+  en:`<p>It's exactly what your home router does for the computers on your network. GKE VPC-native clusters also SNAT towards the internet, but usually further out, where traffic leaves the VPC (Cloud NAT or the node's external IP), because <code>10.x</code> addresses are private.</p>`},
+ try:[{cmd:"sudo iptables -t nat -S | grep -i masquerade",d:{ro:"Pe un nod: regulile NAT pentru traficul pod-urilor.",en:"On a node: the NAT rules for pod traffic."}}]},
+
+{at:["n1","vpc","n2"],frame:null,kind:"none",summary:true,
+ title:{ro:"Recapitulare",en:"Recap"},
+ body:{ro:`<ul><li>Fiecare pod are un <strong>namespace</strong> de rețea și o pereche <strong>veth</strong> spre nod; IP-ul vine de la <strong>IPAM</strong>.</li>
+<li><strong>kubenet</strong>: bridge <code>cbr0</code> + rute pe nod. Merge pe același nod, dar VPC-ul trebuie să afle unde sunt pod-urile.</li>
+<li><strong>VPC-native</strong>: pod CIDR ca interval secundar și <strong>alias IP</strong> /24 pe fiecare nod. VPC-ul rutează direct la pod-uri; și VM-urile din afară le pot accesa.</li>
+<li><strong>Calico</strong> pe VPC-native: fără bridge, rute /32 per pod și <strong>network policy</strong>, adică un firewall în fața fiecărui pod.</li>
+<li><strong>Intranode visibility</strong> (netd): tot traficul trece prin VPC, ca să apară în <strong>flow logs</strong>.</li>
+<li><strong>Overlay</strong> (VXLAN/IPIP) cu IPAM Calico: independent de VPC, fără consum de adrese din VPC, dar cu 20–50 de octeți în plus pe pachet; din afară doar prin Service, iar spre internet cu <strong>NAT</strong>.</li></ul>
+<p><button type="button" class="btn primary" data-goto="quiz">Mergi la test ↓</button></p>`,
+ en:`<ul><li>Each pod has a network <strong>namespace</strong> and a <strong>veth</strong> pair to the node; its IP comes from <strong>IPAM</strong>.</li>
+<li><strong>kubenet</strong>: a <code>cbr0</code> bridge + routes on the node. Works on the same node, but the VPC must learn where the pods are.</li>
+<li><strong>VPC-native</strong>: the pod CIDR as a secondary range and a /24 <strong>alias IP</strong> on each node. The VPC routes straight to pods; outside VMs can reach them too.</li>
+<li><strong>Calico</strong> on VPC-native: no bridge, /32 routes per pod, and <strong>network policy</strong>, i.e. a firewall in front of every pod.</li>
+<li><strong>Intranode visibility</strong> (netd): all traffic goes through the VPC so it shows up in <strong>flow logs</strong>.</li>
+<li>An <strong>overlay</strong> (VXLAN/IPIP) with Calico IPAM: independent of the VPC, uses no VPC addresses, but adds 20–50 bytes per packet; from outside only via a Service, and to the internet via <strong>NAT</strong>.</li></ul>
+<p><button type="button" class="btn primary" data-goto="quiz">Go to the quiz ↓</button></p>`}}
+],
+
+reference:(T,lang)=>{
+  const ro=lang==="ro";
+  const rows=[
+    [{ro:"Cine știe IP-urile pod-urilor",en:"Who knows the pod IPs"},{ro:"doar nodurile",en:"only the nodes"},{ro:"nodurile și VPC-ul",en:"the nodes and the VPC"},{ro:"nodurile și VPC-ul",en:"the nodes and the VPC"},{ro:"doar nodurile (Calico)",en:"only the nodes (Calico)"}],
+    [{ro:"Pod → pod pe alt nod",en:"Pod → pod on another node"},{ro:"✗ (fără rute în VPC)",en:"✗ (no VPC routes)"},"✓","✓",{ro:"✓ (încapsulat)",en:"✓ (encapsulated)"}],
+    [{ro:"VM din afară → pod direct",en:"Outside VM → pod directly"},"✗","✓","✓",{ro:"✗ (doar prin Service)",en:"✗ (only via a Service)"}],
+    ["Network policy","✗",{ro:"cu Calico sau Dataplane V2",en:"with Calico or Dataplane V2"},"✓",{ro:"✓",en:"✓"}],
+    [{ro:"Legătura din nod",en:"On-node plumbing"},"veth + bridge cbr0","veth + bridge cbr0",{ro:"cali… + rute /32, fără bridge",en:"cali… + /32 routes, no bridge"},{ro:"cali… + vxlan.calico / tunl0",en:"cali… + vxlan.calico / tunl0"}],
+    [{ro:"Octeți în plus pe pachet",en:"Extra bytes per packet"},"0","0","0",{ro:"20 (IPIP) sau 50 (VXLAN)",en:"20 (IPIP) or 50 (VXLAN)"}],
+    [{ro:"Consumă adrese din VPC",en:"Uses VPC addresses"},"—",{ro:"da (/24 per nod)",en:"yes (/24 per node)"},{ro:"da (/24 per nod)",en:"yes (/24 per node)"},{ro:"nu",en:"no"}],
+    [{ro:"Alegi când…",en:"Choose when…"},{ro:"doar pentru teste",en:"testing only"},{ro:"vrei simplitate; implicit pe GKE",en:"you want simplicity; the GKE default"},{ro:"vrei și securitate între pod-uri",en:"you also want pod-to-pod security"},{ro:"vrei independență de cloud sau ai puține adrese",en:"you want cloud independence or have few addresses"}]
+  ];
+  let h=`<div class="ref-stack"><section class="card refcard"><h2>${ro?"Cele patru variante, una lângă alta":"The four options side by side"}</h2><div class="scroll"><table class="cmp" style="min-width:720px"><thead><tr><th></th><th>kubenet</th><th>VPC-native</th><th>${ro?"VPC-native + Calico":"VPC-native + Calico"}</th><th>${ro?"Overlay Calico":"Calico overlay"}</th></tr></thead><tbody>`;
+  rows.forEach(r=>{h+=`<tr>${r.map(c=>`<td>${T(c)}</td>`).join("")}</tr>`});
+  h+=`</tbody></table></div><p class="note">${ro?"Pe GKE, „kubenet” singur nu e folosit fără VPC-native sau rute: e prezentat aici ca pas intermediar, ca să se vadă de ce e nevoie de VPC-native.":"On GKE, plain kubenet isn't used without VPC-native or routes: it's shown here as an intermediate step, to make clear why VPC-native is needed."}</p></section></div>`;
+  h+=`<div class="ref-grid" style="margin-top:12px"><section class="card refcard"><h2>${ro?"Cum arată un pachet VXLAN":"What a VXLAN packet looks like"}</h2>
+<div class="flow"><span>Ethernet 14 B</span><span>IP ${ro?"exterior":"outer"} 20 B</span><span>UDP 8 B</span><span>VXLAN 8 B</span><span>Ethernet ${ro?"interior":"inner"} 14 B</span><span>IP pod 20 B</span><span>TCP 20 B</span><span>${ro?"date":"data"}</span></div>
+<p>${ro?"Cei 50 de octeți în plus sunt: IP exterior (20) + UDP (8) + VXLAN (8) + Ethernet interior (14). La IPIP se adaugă doar un al doilea antet IP (20).":"The 50 extra bytes are: outer IP (20) + UDP (8) + VXLAN (8) + inner Ethernet (14). IPIP just adds a second IP header (20)."}</p>
+<p>${ro?"VNI-ul (VXLAN Network Identifier) din antetul VXLAN spune cărei rețele virtuale îi aparține pachetul.":"The VNI (VXLAN Network Identifier) in the VXLAN header says which virtual network the packet belongs to."}</p></section>
+<section class="card refcard"><h2>${ro?"Comenzi utile":"Useful commands"}</h2><div class="try">${[
+  ["kubectl get pods -o wide",{ro:"IP-ul fiecărui pod și nodul pe care stă.",en:"Each pod's IP and the node it's on."}],
+  ["kubectl exec pod-a -- ip route",{ro:"Rutele văzute din interiorul podului.",en:"The routes seen from inside the pod."}],
+  ["ip route",{ro:"Pe nod: rutele spre pod-uri (cbr0, cali…, vxlan.calico).",en:"On the node: the routes to pods (cbr0, cali…, vxlan.calico)."}],
+  ["gcloud container clusters describe demo --format=\"value(ipAllocationPolicy)\"",{ro:"Intervalele secundare ale unui cluster VPC-native.",en:"A VPC-native cluster's secondary ranges."}],
+  ["calicoctl get ippool -o wide",{ro:"Intervalele de adrese ale Calico și dacă folosesc VXLAN/IPIP.",en:"Calico's address pools and whether they use VXLAN/IPIP."}]
+ ].map(c=>`<div class="cmdrow"><div class="cmd"><code>${c[0]}</code><button type="button" class="copy" data-cmd="${c[0].replace(/"/g,"&quot;")}">${ro?"Copiază":"Copy"}</button></div><p>${T(c[1])}</p></div>`).join("")}</div>
+<p class="note">${ro?"Sursa lecției":"Lesson source"}: <a href="${VIDEO}">Project Calico, „Kubernetes networking on Google Cloud”</a>.</p></section></div>`;
+  return h;
+},
+
+gloss:[
+ ["GKE","Google Kubernetes Engine",{ro:"Serviciul Google care îți administrează cluster-ul Kubernetes.",en:"Google's managed Kubernetes service."}],
+ ["GCE","Google Compute Engine",{ro:"Mașinile virtuale Google; nodurile GKE sunt VM-uri GCE.",en:"Google's virtual machines; GKE nodes are GCE VMs."}],
+ ["VPC","Virtual Private Cloud",{ro:"Rețeaua virtuală privată din Google Cloud în care stau VM-urile.",en:"The private virtual network in Google Cloud where VMs live."}],
+ ["CNI","Container Network Interface",{ro:"Standardul de plugin-uri care leagă pod-urile la rețea.",en:"The plugin standard that connects pods to the network."}],
+ ["IPAM","IP Address Management",{ro:"Partea din CNI care alege ce IP primește fiecare pod.",en:"The part of CNI that picks each pod's IP."}],
+ ["Pod CIDR",null,{ro:"Intervalul mare de adrese din care primesc IP-uri toate pod-urile cluster-ului.",en:"The big address range all the cluster's pods get IPs from."}],
+ ["kubenet",null,{ro:"Varianta simplă de rețea: bridge pe fiecare nod, /24 per nod, fără network policy.",en:"The simple networking option: a bridge on each node, a /24 per node, no network policy."}],
+ ["Network namespace",null,{ro:"Mediu de rețea separat în Linux: interfețe, rute și reguli proprii.",en:"A separate network environment in Linux: its own interfaces, routes and rules."}],
+ [{ro:"Pereche veth",en:"veth pair"},"virtual Ethernet",{ro:"Două interfețe virtuale legate ca un cablu: una în pod, una pe nod.",en:"Two virtual interfaces linked like a cable: one in the pod, one on the node."}],
+ ["Bridge (cbr0)",null,{ro:"Switch Ethernet făcut în software, în kernel-ul Linux.",en:"An Ethernet switch built in software, in the Linux kernel."}],
+ ["VPC-native",null,{ro:"Cluster în care VPC-ul cunoaște IP-urile pod-urilor, prin alias IP.",en:"A cluster where the VPC knows the pod IPs, via alias IPs."}],
+ ["Alias IP",null,{ro:"Interval de adrese în plus atașat plăcii de rețea a unui VM.",en:"An extra address range attached to a VM's network card."}],
+ ["Calico",null,{ro:"Plugin CNI open-source pentru rețea și network policy.",en:"An open-source CNI plugin for networking and network policy."}],
+ ["Network Policy",null,{ro:"Reguli Kubernetes care spun ce pod-uri pot vorbi cu ce pod-uri.",en:"Kubernetes rules saying which pods may talk to which."}],
+ ["netd",{ro:"GCP netd",en:"GCP netd"},{ro:"Componentă GKE care configurează rețeaua nodurilor, de ex. pentru intranode visibility.",en:"A GKE component that configures node networking, e.g. for intranode visibility."}],
+ ["Hairpin",null,{ro:"Trafic trimis afară și întors înapoi pe aceeași mașină.",en:"Traffic sent out and turned back to the same machine."}],
+ ["Flow logs",null,{ro:"Jurnal cu conexiunile din rețea: cine, cu cine, câți octeți.",en:"A log of network connections: who, with whom, how many bytes."}],
+ ["Overlay",null,{ro:"Rețea virtuală construită peste alta, prin încapsulare.",en:"A virtual network built on top of another, via encapsulation."}],
+ ["VXLAN / IPIP",null,{ro:"Două feluri de încapsulare: în UDP (VXLAN) sau direct IP în IP.",en:"Two kinds of encapsulation: inside UDP (VXLAN) or plain IP in IP."}],
+ ["MTU","Maximum Transmission Unit",{ro:"Cel mai mare pachet care poate trece pe o legătură.",en:"The largest packet that can cross a link."}],
+ ["SNAT / NAT",null,{ro:"Înlocuirea adresei sursă (aici: IP-ul podului cu IP-ul nodului).",en:"Replacing the source address (here: the pod IP with the node IP)."}],
+ ["Dataplane V2",null,{ro:"Rețeaua GKE modernă, bazată pe Cilium și eBPF, cu network policy încorporată.",en:"GKE's modern networking, based on Cilium and eBPF, with built-in network policy."}]
+],
+glossEx:{
+ "GKE":{ro:"gcloud container clusters create demo creează un cluster administrat de Google.",en:"gcloud container clusters create demo creates a Google-managed cluster."},
+ "GCE":{ro:"node-1 e VM-ul gke-demo-default-pool-1a2b, cu IP-ul 10.128.0.2.",en:"node-1 is the VM gke-demo-default-pool-1a2b, with IP 10.128.0.2."},
+ "VPC":{ro:"subnet-ul 10.128.0.0/20 din regiunea europe-west3 conține nodurile și VM-ul 10.128.0.50.",en:"the 10.128.0.0/20 subnet in europe-west3 holds the nodes and the VM 10.128.0.50."},
+ "CNI":{ro:"la crearea unui pod, kubelet apelează plugin-ul CNI, care creează perechea veth și îi dă IP.",en:"when a pod is created, the kubelet calls the CNI plugin, which creates the veth pair and assigns an IP."},
+ "IPAM":{ro:"host-local IPAM ține pe disc lista IP-urilor ocupate din 10.4.1.0/24 și o alege pe prima liberă.",en:"host-local IPAM keeps the list of used IPs in 10.4.1.0/24 on disk and picks the first free one."},
+ "Pod CIDR":{ro:"10.4.0.0/14 are ~262.000 de adrese, împărțite în bucăți /24 pentru noduri.",en:"10.4.0.0/14 has ~262,000 addresses, split into /24 slices for nodes."},
+ "kubenet":{ro:"pe un nod kubenet, ip addr arată interfața cbr0 cu adresa 10.4.1.1.",en:"on a kubenet node, ip addr shows the cbr0 interface with address 10.4.1.1."},
+ "Network namespace":{ro:"ip netns list pe nod arată câte un namespace pentru fiecare pod.",en:"ip netns list on the node shows one namespace per pod."},
+ "veth pair":{ro:"eth0 în pod A și veth3a1f pe node-1 sunt cele două capete ale aceluiași „cablu”.",en:"eth0 in pod A and veth3a1f on node-1 are the two ends of the same \"cable\"."},
+ "Bridge (cbr0)":{ro:"bridge link show arată toate interfețele veth legate la cbr0.",en:"bridge link show lists every veth interface attached to cbr0."},
+ "VPC-native":{ro:"în consola Google, cluster-ul are „VPC-native traffic routing: Enabled”.",en:"in the Google console, the cluster shows \"VPC-native traffic routing: Enabled\"."},
+ "Alias IP":{ro:"placa nic0 a lui node-2 are IP-ul 10.128.0.3 și alias-ul 10.4.2.0/24.",en:"node-2's nic0 has IP 10.128.0.3 and alias 10.4.2.0/24."},
+ "Calico":{ro:"pe un nod cu Calico, interfețele pod-urilor se numesc cali3a1f, cali8c2d…",en:"on a node with Calico, pod interfaces are named cali3a1f, cali8c2d…"},
+ "Network Policy":{ro:"„permite spre app=backend doar de la app=frontend pe TCP 8080”, restul e blocat.",en:"\"allow to app=backend only from app=frontend on TCP 8080\", everything else blocked."},
+ "netd":{ro:"podul netd rulează în kube-system pe fiecare nod când intranode visibility e activă.",en:"the netd pod runs in kube-system on every node when intranode visibility is on."},
+ "Hairpin":{ro:"pod A → VPC → înapoi pe node-1 → pod A2, deși erau pe aceeași mașină.",en:"pod A → VPC → back to node-1 → pod A2, even though they were on the same machine."},
+ "Flow logs":{ro:"„10.4.1.5 → 10.4.1.6:8080, 1.240 octeți”: o linie în VPC Flow Logs.",en:"\"10.4.1.5 → 10.4.1.6:8080, 1,240 bytes\": one line in VPC Flow Logs."},
+ "Overlay":{ro:"pachetul 10.4.1.5 → 10.4.2.7 călătorește în interiorul pachetului 10.128.0.2 → 10.128.0.3.",en:"the packet 10.4.1.5 → 10.4.2.7 travels inside the packet 10.128.0.2 → 10.128.0.3."},
+ "VXLAN / IPIP":{ro:"VXLAN folosește portul UDP 4789; IPIP are numărul de protocol IP 4.",en:"VXLAN uses UDP port 4789; IPIP is IP protocol number 4."},
+ "MTU":{ro:"VPC-ul Google are MTU 1460; cu VXLAN, pod-urile trebuie să folosească 1410.",en:"Google's VPC has an MTU of 1460; with VXLAN, pods must use 1410."},
+ "SNAT / NAT":{ro:"10.4.1.5:51544 → 203.0.113.10:443 devine 10.128.0.2:51544 → 203.0.113.10:443.",en:"10.4.1.5:51544 → 203.0.113.10:443 becomes 10.128.0.2:51544 → 203.0.113.10:443."},
+ "Dataplane V2":{ro:"gcloud container clusters create demo --enable-dataplane-v2.",en:"gcloud container clusters create demo --enable-dataplane-v2."}
+},
+
+quiz:[
+ {q:{ro:"Cine alege ce IP primește un pod nou?",en:"Who picks the IP a new pod gets?"},
+  o:[{ro:"VPC-ul Google",en:"Google's VPC"},{ro:"Plugin-ul IPAM al CNI-ului",en:"The CNI's IPAM plugin"},{ro:"Aplicația din pod",en:"The app in the pod"},{ro:"DNS-ul",en:"DNS"}],a:1,
+  e:{ro:"IPAM (IP Address Management) alocă adresele; cu kubenet, din /24-ul nodului.",en:"IPAM (IP Address Management) allocates the addresses; with kubenet, from the node's /24."}},
+ {q:{ro:"Ce e o pereche veth?",en:"What is a veth pair?"},
+  o:[{ro:"Două noduri dintr-un cluster",en:"Two nodes in a cluster"},{ro:"Un cablu virtual cu un capăt în pod (eth0) și unul pe nod (veth…)",en:"A virtual cable with one end in the pod (eth0) and one on the node (veth…)"},{ro:"Două reguli de firewall",en:"Two firewall rules"},{ro:"Un tip de Service",en:"A type of Service"}],a:1,
+  e:{ro:"Ce intră pe un capăt iese pe celălalt; așa iese traficul din namespace-ul podului.",en:"Whatever goes in one end comes out the other; that's how traffic leaves the pod's namespace."}},
+ {q:{ro:"Cu kubenet și fără VPC-native, ce se întâmplă cu un pachet de la pod A (node-1) la pod B (node-2)?",en:"With kubenet and no VPC-native, what happens to a packet from pod A (node-1) to pod B (node-2)?"},
+  o:[{ro:"Ajunge normal",en:"It arrives normally"},{ro:"E aruncat de VPC, care nu știe unde e IP-ul podului",en:"It's dropped by the VPC, which doesn't know where the pod IP is"},{ro:"E încapsulat automat",en:"It's encapsulated automatically"},{ro:"E trimis la toate nodurile",en:"It's sent to every node"}],a:1,
+  e:{ro:"VPC-ul cunoaște doar IP-urile nodurilor; de aceea e nevoie de VPC-native (alias IP) sau de overlay.",en:"The VPC only knows node IPs; that's why you need VPC-native (alias IPs) or an overlay."}},
+ {q:{ro:"Cum află VPC-ul unde sunt pod-urile într-un cluster VPC-native?",en:"How does the VPC learn where pods are in a VPC-native cluster?"},
+  o:[{ro:"Din DNS",en:"From DNS"},{ro:"Fiecare nod primește pe placa de rețea un interval alias IP egal cu /24-ul lui de pod-uri",en:"Each node's network card gets an alias IP range equal to its pod /24"},{ro:"Pod-urile trimit broadcast",en:"Pods send broadcasts"},{ro:"Din network policy",en:"From network policy"}],a:1,
+  e:{ro:"Pod CIDR-ul e un interval secundar al subnet-ului, iar fiecare nod are alias-ul bucății lui.",en:"The pod CIDR is a secondary subnet range, and each node has its slice as an alias."}},
+ {q:{ro:"Ce schimbă Calico față de kubenet în interiorul nodului?",en:"What does Calico change compared with kubenet inside the node?"},
+  o:[{ro:"Elimină bridge-ul și pune câte o rută /32 pentru fiecare pod",en:"It removes the bridge and adds a /32 route per pod"},{ro:"Elimină perechile veth",en:"It removes the veth pairs"},{ro:"Dă tuturor pod-urilor același IP",en:"It gives every pod the same IP"},{ro:"Oprește traficul între noduri",en:"It stops traffic between nodes"}],a:0,
+  e:{ro:"Interfețele se numesc cali…, iar pod-urile sunt legate direct la rutarea nodului.",en:"The interfaces are called cali…, and pods are connected straight to the node's routing."}},
+ {q:{ro:"Cu ce seamănă cel mai bine Network Policy?",en:"What is Network Policy most like?"},
+  o:[{ro:"Un DNS",en:"A DNS"},{ro:"Un firewall virtual în fața fiecărui pod, bazat pe etichete",en:"A virtual firewall in front of every pod, based on labels"},{ro:"Un load balancer",en:"A load balancer"},{ro:"O copie de rezervă",en:"A backup"}],a:1,
+  e:{ro:"Regulile spun ce pod-uri (după etichete) pot vorbi cu ce pod-uri, pe ce porturi.",en:"The rules say which pods (by label) may talk to which pods, on which ports."}},
+ {q:{ro:"De ce ar activa cineva intranode visibility, deși adaugă un ocol?",en:"Why would someone enable intranode visibility, even though it adds a detour?"},
+  o:[{ro:"Ca traficul să fie mai rapid",en:"To make traffic faster"},{ro:"Ca toate conexiunile între pod-uri, chiar și locale, să apară în VPC Flow Logs",en:"So every pod-to-pod connection, even local ones, appears in VPC Flow Logs"},{ro:"Ca să economisească adrese IP",en:"To save IP addresses"},{ro:"Ca să nu mai fie nevoie de Service-uri",en:"So Services are no longer needed"}],a:1,
+  e:{ro:"Traficul local face hairpin prin VPC, unde e înregistrat.",en:"Local traffic hairpins through the VPC, where it's recorded."}},
+ {q:{ro:"Într-un overlay VXLAN, ce IP-uri vede VPC-ul pe pachetul de la pod A la pod B?",en:"In a VXLAN overlay, which IPs does the VPC see on the packet from pod A to pod B?"},
+  o:[{ro:"IP-urile pod-urilor",en:"The pod IPs"},{ro:"IP-urile nodurilor, din antetul exterior",en:"The node IPs, from the outer header"},{ro:"Niciun IP",en:"No IP at all"},{ro:"IP-ul Service-ului",en:"The Service's IP"}],a:1,
+  e:{ro:"Pachetul podului e ascuns în interiorul unui pachet de la node-1 la node-2.",en:"The pod's packet is hidden inside a packet from node-1 to node-2."}},
+ {q:{ro:"Câți octeți adaugă VXLAN la fiecare pachet?",en:"How many bytes does VXLAN add to every packet?"},
+  o:[{ro:"0",en:"0"},{ro:"8",en:"8"},{ro:"20",en:"20"},{ro:"50",en:"50"}],a:3,
+  e:{ro:"IP exterior 20 + UDP 8 + VXLAN 8 + Ethernet interior 14 = 50. IPIP adaugă doar 20.",en:"Outer IP 20 + UDP 8 + VXLAN 8 + inner Ethernet 14 = 50. IPIP adds just 20."}},
+ {q:{ro:"Cu overlay, un pod iese spre internet. Ce face nodul cu IP-ul sursă?",en:"With an overlay, a pod goes out to the internet. What does the node do with the source IP?"},
+  o:[{ro:"Îl lasă neschimbat",en:"Leaves it unchanged"},{ro:"Îl înlocuiește cu IP-ul nodului (SNAT) și îl schimbă înapoi la răspuns",en:"Replaces it with the node's IP (SNAT) and changes it back on the reply"},{ro:"Îl șterge",en:"Deletes it"},{ro:"Îl criptează",en:"Encrypts it"}],a:1,
+  e:{ro:"Rețeaua de dincolo nu cunoaște IP-ul podului; conntrack se ocupă de răspuns, iar podul nu observă nimic.",en:"The network beyond doesn't know the pod IP; conntrack handles the reply and the pod notices nothing."}}
+]
+};
+})();
+</script>
+<script src="../assets/engine.js"></script>
+</body>
+</html>
