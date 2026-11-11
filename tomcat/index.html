@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tomcat în producție</title>
+<meta name="description" content="Lecție interactivă: drumul unei cereri HTTP printr-o aplicație Java pe Apache Tomcat: reverse proxy, Connector, thread pool, Engine/Host/Context, filtre, servlet, pool de conexiuni și baza de date. / How a request flows through Apache Tomcat in production.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<script>
+(function(){
+const REQ={srcIp:"203.0.113.25",dstIp:"198.51.100.10",dstPort:"443 (HTTPS)",req:"GET /shop/api/orders/42",host:"shop.example.com",hdrs:"Cookie: JSESSIONID=8F3A…C21"};
+const PROX={...REQ,srcIp:"10.0.1.5 (nginx)",dstIp:"10.0.1.20 (app-01)",dstPort:"8080 (HTTP)",xff:"203.0.113.25",xfp:"https"};
+const PARSED={...PROX,parsed:{ro:"obiecte Java Request + Response",en:"Java Request + Response objects"}};
+const THR={...PARSED,thread:"http-nio-8080-exec-7"};
+const MAP={...THR,mapping:"localhost → /shop → dispatcher (/api/*)"};
+const FIL={...MAP,user:{ro:"ana (din sesiune)",en:"ana (from session)"},reqId:"7c1e-55aa"};
+const CTL={...FIL,handler:"OrderController.getOrder(42)"};
+const SQL={...CTL,dbConn:{ro:"conexiunea #3 din 10",en:"connection #3 of 10"},sql:"SELECT … FROM orders WHERE id = 42"};
+const DBR={...SQL,dbres:{ro:"1 rând · 3 ms",en:"1 row · 3 ms"}};
+const RESP={srcIp:"10.0.1.20 (app-01)",dstIp:"10.0.1.5 (nginx)",dstPort:"8080 → nginx",thread:"http-nio-8080-exec-7",reqId:"7c1e-55aa",status:"200 OK",ctype:"application/json",body:'{"id":42,"status":"PAID","total":249.99}',timing:"18 ms"};
+const OUT={srcIp:"198.51.100.10",dstIp:"203.0.113.25",dstPort:"443 (HTTPS)",status:"200 OK",ctype:"application/json",body:'{"id":42,"status":"PAID","total":249.99}',hdrs:"Content-Encoding: gzip · Strict-Transport-Security"};
+
+window.LESSON={
+docTitle:{ro:"Tomcat în producție",en:"Tomcat in Production"},
+eyebrow:{ro:"Lecție interactivă · Aplicații în producție",en:"Interactive lesson · Production apps"},
+title:{ro:"Tomcat: viața unei cereri într-o aplicație Java",en:"Tomcat: the life of a request in a Java app"},
+sub:{ro:"Urmărește cererea GET /shop/api/orders/42 de la browser, prin reverse proxy, în interiorul lui Apache Tomcat (Connector, thread pool, Engine, Host, Context, filtre, servlet) până la baza de date și înapoi. Apoi vezi ce se întâmplă când serverul e sub presiune.",en:"Follow the request GET /shop/api/orders/42 from the browser, through a reverse proxy, inside Apache Tomcat (Connector, thread pool, Engine, Host, Context, filters, servlet) to the database and back. Then see what happens when the server is under pressure."},
+meta:[{ro:"≈ 25 minute",en:"≈ 25 minutes"},{ro:"15 pași",en:"15 steps"},{ro:"10 întrebări",en:"10 questions"},{ro:"Intermediar",en:"Intermediate"}],
+goals:[{ro:"Ce e Tomcat și cum e organizat (server.xml)",en:"What Tomcat is and how it's organised (server.xml)"},{ro:"De ce fiecare cerere ocupă un thread și ce înseamnă maxThreads",en:"Why every request takes a thread and what maxThreads means"},{ro:"Cum ajunge o cerere la codul tău: filtre, servlet, controller",en:"How a request reaches your code: filters, servlet, controller"},{ro:"Cum recunoști și eviți blocarea sub încărcare",en:"How to recognise and avoid lock-ups under load"}],
+foot:{ro:"Exemplu tipic: Apache Tomcat 10.1, Java 17, Spring MVC, PostgreSQL, nginx. Adresele și numele sunt exemple.",en:"A typical setup: Apache Tomcat 10.1, Java 17, Spring MVC, PostgreSQL, nginx. Addresses and names are examples."},
+ui:{frameT:{ro:"Cererea (live)",en:"The request (live)"},refT:{ro:"Configurare, reglaj și depanare",en:"Configuration, tuning and troubleshooting"},refLead:{ro:"Fișierul server.xml explicat, cele trei feluri de a rula Tomcat, setările care contează în producție și comenzile pentru diagnostic.",en:"server.xml explained, the three ways to run Tomcat, the settings that matter in production, and diagnostic commands."}},
+tryT:{ro:"Încearcă pe un server cu Tomcat (Linux)",en:"Try it on a server running Tomcat (Linux)"},
+legend:[["lg-app","HTTP",{ro:"cerere",en:"request"}],["lg-tcp","HTTP",{ro:"răspuns",en:"response"}],["lg-eth","SQL",{ro:"interogare la baza de date",en:"database query"}]],
+
+nodes:{
+  user:{type:"user",name:"Browser",lines:["203.0.113.25"]},
+  lb:{type:"server",name:"nginx",lines:["reverse proxy :443"]},
+  conn:{type:"box",name:"Connector",lines:["HTTP/1.1 :8080 (NIO)"]},
+  pool:{type:"box",name:"Thread pool",lines:["maxThreads 200"]},
+  cat:{type:"box",name:"Catalina",lines:["Host → Context /shop"]},
+  app:{type:"box",name:"DispatcherServlet",lines:["OrderController"]},
+  hik:{type:"box",name:"HikariCP",lines:[{ro:"max 10 conexiuni",en:"max 10 connections"}]},
+  db:{type:"db",name:"PostgreSQL",lines:["10.0.2.30:5432"]}
+},
+links:[["user","lb"],["lb","conn"],["conn","pool"],["pool","cat"],["cat","app"],["app","hik"],["hik","db"]],
+layouts:{
+  wide:{vb:[0,0,1000,450],n:{user:[55,190],lb:[170,190],conn:[320,190],pool:[460,190],cat:[600,190],app:[740,190],hik:[880,190],db:[640,385]},
+    zones:[{x:245,y:70,w:745,h:230,top:true,l:{ro:"app-01 · 10.0.1.20 · JVM (Java 17) · Apache Tomcat 10.1",en:"app-01 · 10.0.1.20 · JVM (Java 17) · Apache Tomcat 10.1"}}],
+    texts:[{x:596,y:390,a:"end",t:{ro:"server de baze de date →",en:"database server →"}}]},
+  narrow:{vb:[0,0,360,750],n:{user:[60,50],lb:[60,140],conn:[60,240],pool:[60,330],cat:[60,420],app:[60,510],hik:[60,600],db:[60,700]},
+    side:{user:"right",lb:"right",conn:"right",pool:"right",cat:"right",app:"right",hik:"right",db:"right"},
+    zones:[{x:4,y:182,w:352,h:465,top:true,l:{ro:"app-01 · JVM · Tomcat",en:"app-01 · JVM · Tomcat"}}]}
+},
+groups:[
+  {id:"net",color:"l3",fields:["srcIp","dstIp","dstPort"],name:{ro:"Rețea (cine vorbește cu cine)",en:"Network (who talks to whom)"},short:{ro:"Rețea",en:"Network"},grow:3},
+  {id:"http",color:"l7",fields:["req","host","hdrs","xff","xfp","status","ctype","body"],name:"HTTP",short:"HTTP",grow:4},
+  {id:"tc",color:"l2",fields:["parsed","thread","mapping","user","reqId","handler","timing"],name:{ro:"În interiorul Tomcat (nu pleacă pe rețea)",en:"Inside Tomcat (never on the wire)"},short:"Tomcat",grow:4},
+  {id:"db",color:"l4",fields:["dbConn","sql","dbres"],name:{ro:"Baza de date (JDBC)",en:"Database (JDBC)"},short:"JDBC",grow:3}
+],
+fieldLabels:{srcIp:{ro:"De la",en:"From"},dstIp:{ro:"Către",en:"To"},dstPort:"Port",req:{ro:"Cerere",en:"Request"},host:"Host",hdrs:{ro:"Alte antete",en:"Other headers"},xff:"X-Forwarded-For",xfp:"X-Forwarded-Proto",
+  status:{ro:"Stare",en:"Status"},ctype:"Content-Type",body:{ro:"Conținut",en:"Body"},parsed:{ro:"Cererea citită",en:"Parsed request"},thread:"Thread",mapping:{ro:"Potrivire URL",en:"URL mapping"},user:{ro:"Utilizator",en:"User"},reqId:"Request ID",handler:{ro:"Codul apelat",en:"Code called"},timing:{ro:"Durată totală",en:"Total time"},
+  dbConn:{ro:"Conexiune DB",en:"DB connection"},sql:"SQL",dbres:{ro:"Rezultat DB",en:"DB result"}},
+pdu:f=>f.status?{badge:{ro:"Răspuns HTTP",en:"HTTP response"},tok:["HTTP","k-tcp"]}:f.sql&&!f.dbres?{badge:{ro:"Interogare SQL",en:"SQL query"},tok:["SQL","k-data"]}:f.dbres?{badge:{ro:"Rezultat SQL",en:"SQL result"},tok:["SQL","k-data"]}:{badge:{ro:"Cerere HTTP",en:"HTTP request"},tok:["HTTP","k-app"]},
+
+tables:{
+  nginx:{title:{ro:"Configurarea nginx (fragment)",en:"nginx configuration (excerpt)"},cols:[{ro:"Directivă",en:"Directive"},{ro:"Valoare",en:"Value"}],plain:[],
+    rows:()=>[["listen","443 ssl http2"],["location /shop/","proxy_pass http://10.0.1.20:8080"],["proxy_set_header","X-Forwarded-For $proxy_add_x_forwarded_for"],["proxy_set_header","X-Forwarded-Proto $scheme"],["proxy_read_timeout","60s"]]},
+  server:{title:{ro:"conf/server.xml (structura)",en:"conf/server.xml (structure)"},cols:[{ro:"Element",en:"Element"},{ro:"Setări importante",en:"Key settings"}],
+    rows:()=>[["Server",'port="8005" (shutdown)'],["Service",'name="Catalina"'],["Connector",'port="8080" protocol="HTTP/1.1" maxThreads="200" acceptCount="100" connectionTimeout="20000"'],["Engine",'name="Catalina" defaultHost="localhost"'],["Host",'name="localhost" appBase="webapps"'],["Context",{ro:"/shop ← webapps/shop.war",en:"/shop ← webapps/shop.war"}]]},
+  threads:{title:{ro:"Thread-urile Connector-ului (acum)",en:"The Connector's threads (right now)"},cols:["Thread",{ro:"Stare",en:"State"},{ro:"Ce face",en:"Doing"}],
+    rows:()=>[["http-nio-8080-exec-1","RUNNABLE","GET /shop/api/products"],["http-nio-8080-exec-2","RUNNABLE","POST /shop/api/cart"],["http-nio-8080-exec-7","RUNNABLE","GET /shop/api/orders/42"],["http-nio-8080-exec-8 … 50",{ro:"WAITING (liber)",en:"WAITING (idle)"},{ro:"așteaptă o cerere",en:"waiting for a request"}],["",{ro:"Total",en:"Total"},{ro:"38 ocupate · 12 libere · max 200",en:"38 busy · 12 idle · max 200"}]]},
+  mapping:{title:{ro:"Cum se alege codul (web.xml / Spring)",en:"How the code is chosen (web.xml / Spring)"},cols:[{ro:"Nivel",en:"Level"},{ro:"Regulă",en:"Rule"},{ro:"Rezultat",en:"Result"}],
+    rows:()=>[["Host",{ro:"antetul Host: shop.example.com → niciun Host cu acest nume",en:"Host header: shop.example.com → no Host with that name"},{ro:"defaultHost = localhost",en:"defaultHost = localhost"}],["Context",{ro:"calea începe cu /shop",en:"path starts with /shop"},"shop.war"],["Servlet","/api/*","DispatcherServlet"],["Spring","@GetMapping(\"/orders/{id}\")","OrderController.getOrder(42)"]]},
+  filters:{title:{ro:"Lanțul de filtre (în ordine)",en:"The filter chain (in order)"},cols:["#",{ro:"Filtru",en:"Filter"},{ro:"Ce face",en:"What it does"}],idx:true,
+    rows:()=>[["1","CharacterEncodingFilter",{ro:"forțează UTF-8 (diacriticele ajung corect)",en:"forces UTF-8 (accented letters arrive correctly)"}],["2","RequestIdFilter",{ro:"dă cererii un ID, pus și în loguri",en:"gives the request an ID, also written to logs"}],["3","SessionAuthFilter",{ro:"JSESSIONID → sesiune → utilizatorul „ana”",en:"JSESSIONID → session → user \"ana\""}],["4","CorsFilter",{ro:"verifică de pe ce site vine cererea",en:"checks which site the request comes from"}]]},
+  sessions:{title:{ro:"Sesiuni în memoria Tomcat",en:"Sessions in Tomcat's memory"},cols:["JSESSIONID",{ro:"Utilizator",en:"User"},{ro:"Ultima activitate",en:"Last active"}],
+    rows:()=>[["8F3A…C21","ana","15:41:52"],["19BE…07D","mihai","15:39:10"],["…",{ro:"încă 1.240 de sesiuni",en:"1,240 more sessions"},"—"]]},
+  hikari:{title:{ro:"Pool-ul de conexiuni HikariCP",en:"The HikariCP connection pool"},cols:[{ro:"Indicator",en:"Metric"},{ro:"Valoare",en:"Value"}],
+    rows:()=>[["maximumPoolSize","10"],[{ro:"active (folosite acum)",en:"active (in use now)"},"4"],[{ro:"idle (libere)",en:"idle"},"6"],[{ro:"threads care așteaptă",en:"threads waiting"},"0"],["connectionTimeout","30 000 ms"]]},
+  access:{title:{ro:"logs/localhost_access_log.2026-11-11.txt",en:"logs/localhost_access_log.2026-11-11.txt"},cols:[{ro:"Linie",en:"Line"}],
+    rows:()=>[['10.0.1.5 - ana [11/Nov/2026:15:42:07 +0200] "GET /shop/api/orders/42 HTTP/1.1" 200 312 18ms']]},
+  overload:{title:{ro:"Sub presiune: ce arată metricile",en:"Under pressure: what the metrics show"},cols:[{ro:"Indicator",en:"Metric"},{ro:"Normal",en:"Normal"},{ro:"Acum",en:"Now"}],
+    rows:()=>[[{ro:"Threads ocupate",en:"Busy threads"},"38 / 200","200 / 200"],[{ro:"Coada acceptCount",en:"acceptCount queue"},"0 / 100","100 / 100"],[{ro:"Conexiuni DB active",en:"Active DB connections"},"4 / 10","10 / 10"],[{ro:"Threads care așteaptă o conexiune DB",en:"Threads waiting for a DB connection"},"0","190"],[{ro:"Timp de răspuns",en:"Response time"},"18 ms",{ro:"30 s, apoi eroare",en:"30 s, then an error"}]]}
+},
+log:{title:{ro:"Jurnalul cererii",en:"Request log"},lead:{ro:"Unde e cererea la fiecare pas. Câmpurile Tomcat (mov) există doar în memoria JVM-ului și nu pleacă niciodată pe rețea.",en:"Where the request is at each step. The Tomcat fields (purple) only exist in the JVM's memory and never go over the wire."},
+  first:{ro:"Moment",en:"Moment"},minWidth:560,
+  cols:[{h:{ro:"De la",en:"From"},v:f=>f.srcIp,cls:"ip"},{h:{ro:"Către",en:"To"},v:f=>f.dstIp,cls:"mac"},{h:{ro:"Conținut",en:"Content"},v:f=>f.status?f.status+" · "+f.ctype:f.sql&&!f.dbres?f.sql:f.req||"—"}]},
+
+steps:[
+{at:["user","conn","cat"],frame:null,kind:"none",tables:["server"],
+ title:{ro:"Scenariul: un magazin online în Java",en:"The scenario: an online shop in Java"},
+ body:{ro:`<p>Magazinul <code>shop.example.com</code> e o aplicație Java împachetată ca <strong>shop.war</strong> și rulată de <strong>Apache Tomcat</strong> pe serverul <code>app-01</code>. În față stă <strong>nginx</strong>, iar datele sunt într-o bază <strong>PostgreSQL</strong>.</p>
+<p>Tomcat e un <strong>container de servlet-uri</strong>: un program Java care ascultă pe un port, primește cereri HTTP, le transformă în obiecte Java și le dă codului tău. Partea care face asta se numește <strong>Catalina</strong>.</p>
+<p>Structura lui e descrisă în <code>conf/server.xml</code> (în dreapta): <strong>Server → Service → Connector + Engine → Host → Context</strong>. Vom trece prin fiecare piesă.</p>`,
+ en:`<p>The shop <code>shop.example.com</code> is a Java application packaged as <strong>shop.war</strong> and run by <strong>Apache Tomcat</strong> on the server <code>app-01</code>. In front of it sits <strong>nginx</strong>, and the data lives in a <strong>PostgreSQL</strong> database.</p>
+<p>Tomcat is a <strong>servlet container</strong>: a Java program that listens on a port, receives HTTP requests, turns them into Java objects and hands them to your code. The part that does this is called <strong>Catalina</strong>.</p>
+<p>Its structure is described in <code>conf/server.xml</code> (on the right): <strong>Server → Service → Connector + Engine → Host → Context</strong>. We'll go through every piece.</p>`},
+ more:{ro:`<p>Un <strong>servlet</strong> e o clasă Java care primește un <code>HttpServletRequest</code> și completează un <code>HttpServletResponse</code>. Framework-uri ca Spring MVC au un singur servlet mare (<code>DispatcherServlet</code>) care trimite apoi cererea la metoda potrivită din codul tău.</p><p>Tomcat 10 folosește pachetele <code>jakarta.servlet.*</code>; Tomcat 9 și mai vechi folosesc <code>javax.servlet.*</code>. De aceea o aplicație veche nu pornește pe Tomcat 10 fără migrare.</p>`,
+  en:`<p>A <strong>servlet</strong> is a Java class that receives an <code>HttpServletRequest</code> and fills in an <code>HttpServletResponse</code>. Frameworks like Spring MVC have one big servlet (<code>DispatcherServlet</code>) that then sends the request to the right method in your code.</p><p>Tomcat 10 uses the <code>jakarta.servlet.*</code> packages; Tomcat 9 and older use <code>javax.servlet.*</code>. That's why an old app won't start on Tomcat 10 without migrating.</p>`},
+ try:[{cmd:"systemctl status tomcat",d:{ro:"Pornit sau oprit? Arată și PID-ul procesului Java.",en:"Running or stopped? Also shows the Java process PID."}},{cmd:"ls $CATALINA_HOME/webapps",d:{ro:"Aplicațiile instalate: fiecare .war devine un Context.",en:"The installed apps: every .war becomes a Context."}}]},
+
+{at:"user",frame:REQ,kind:"req",move:[[["user","lb"]]],log:{ro:"browser → nginx",en:"browser → nginx"},who:"Browser",
+ title:{ro:"Browserul cere comanda 42",en:"The browser asks for order 42"},
+ body:{ro:`<p>Ana are deschisă pagina comenzilor. Browserul trimite <code>GET /shop/api/orders/42</code> la <code>shop.example.com</code>, pe <strong>HTTPS</strong> (portul 443).</p>
+<p>Trimite automat și cookie-ul <code>JSESSIONID</code>, primit de la Tomcat când Ana s-a autentificat: așa știe serverul cine e ea.</p>`,
+ en:`<p>Ana has the orders page open. The browser sends <code>GET /shop/api/orders/42</code> to <code>shop.example.com</code> over <strong>HTTPS</strong> (port 443).</p>
+<p>It also automatically sends the <code>JSESSIONID</code> cookie Tomcat gave her when she logged in: that's how the server knows who she is.</p>`},
+ more:{ro:`<p>Numele <code>shop.example.com</code> a fost transformat în IP prin DNS (vezi <a href="../dns/index.html">lecția DNS</a>), iar pachetele au călătorit ca în <a href="../ethernet/index.html">lecția Ethernet</a>.</p>`,
+  en:`<p>The name <code>shop.example.com</code> was turned into an IP via DNS (see the <a href="../dns/index.html">DNS lesson</a>), and the packets travelled as in the <a href="../ethernet/index.html">Ethernet lesson</a>.</p>`}},
+
+{at:"lb",frame:PROX,kind:"req",move:[[["lb","conn"]]],log:{ro:"nginx → Tomcat",en:"nginx → Tomcat"},tables:["nginx"],hl:{nginx:["location /shop/","proxy_set_header"]},who:"nginx",
+ title:{ro:"nginx primește și trimite mai departe (reverse proxy)",en:"nginx receives and forwards (reverse proxy)"},
+ body:{ro:`<p><strong>nginx</strong> e un <strong>reverse proxy</strong>: primește cererea din internet și o trimite la Tomcat, în rețeaua internă.</p>
+<ul><li><strong>Termină TLS</strong>: decriptează HTTPS-ul; spre Tomcat merge HTTP simplu, pe <code>8080</code>.</li>
+<li>Deschide o conexiune <strong>nouă</strong> spre Tomcat, deci IP-ul sursă devine al lui nginx (<code>10.0.1.5</code>).</li>
+<li>Ca Tomcat să știe totuși clientul real, adaugă <code>X-Forwarded-For: 203.0.113.25</code> și <code>X-Forwarded-Proto: https</code>.</li></ul>`,
+ en:`<p><strong>nginx</strong> is a <strong>reverse proxy</strong>: it receives the request from the internet and passes it to Tomcat on the internal network.</p>
+<ul><li>It <strong>terminates TLS</strong>: it decrypts HTTPS; plain HTTP goes on to Tomcat, on <code>8080</code>.</li>
+<li>It opens a <strong>new</strong> connection to Tomcat, so the source IP becomes nginx's (<code>10.0.1.5</code>).</li>
+<li>So that Tomcat still knows the real client, it adds <code>X-Forwarded-For: 203.0.113.25</code> and <code>X-Forwarded-Proto: https</code>.</li></ul>`},
+ more:{ro:`<p>De ce un proxy în față? Servește fișiere statice și comprimă răspunsurile, ține certificatele TLS într-un singur loc, împarte traficul între mai multe servere Tomcat și ascunde porturile interne.</p><p>În Tomcat, <code>RemoteIpValve</code> citește <code>X-Forwarded-For</code> și <code>X-Forwarded-Proto</code>, ca aplicația să vadă IP-ul real al clientului și să știe că cererea a venit pe HTTPS.</p>`,
+  en:`<p>Why a proxy in front? It serves static files and compresses responses, keeps TLS certificates in one place, spreads traffic across several Tomcat servers, and hides the internal ports.</p><p>In Tomcat, <code>RemoteIpValve</code> reads <code>X-Forwarded-For</code> and <code>X-Forwarded-Proto</code> so the app sees the client's real IP and knows the request came over HTTPS.</p>`},
+ try:[{cmd:"sudo nginx -t",d:{ro:"Verifică dacă configurarea nginx e corectă.",en:"Checks that the nginx configuration is valid."}}]},
+
+{at:"conn",frame:PARSED,kind:"req",log:{ro:"Connector citește cererea",en:"Connector reads the request"},tables:["server"],hl:{server:"Connector"},who:"Connector (Coyote)",
+ title:{ro:"Connector-ul acceptă conexiunea și citește cererea",en:"The Connector accepts the connection and reads the request"},
+ body:{ro:`<p>Connector-ul (numit și <strong>Coyote</strong>) ascultă pe portul <code>8080</code>. În modul <strong>NIO</strong> are câteva roluri:</p>
+<ol><li><strong>Acceptor</strong>: acceptă conexiunea TCP nouă de la nginx.</li>
+<li><strong>Poller</strong>: urmărește mii de conexiuni deschise și observă care are date de citit, fără să țină câte un thread pentru fiecare.</li>
+<li>Când cererea e gata, o <strong>citește și o transformă</strong> în obiecte Java (<code>Request</code> și <code>Response</code>).</li></ol>
+<p>Câmpurile mov din dreapta există doar în memoria Java; nu circulă pe rețea.</p>`,
+ en:`<p>The Connector (also called <strong>Coyote</strong>) listens on port <code>8080</code>. In <strong>NIO</strong> mode it has a few roles:</p>
+<ol><li><strong>Acceptor</strong>: accepts the new TCP connection from nginx.</li>
+<li><strong>Poller</strong>: watches thousands of open connections and notices which have data to read, without holding a thread for each.</li>
+<li>When the request is complete, it <strong>reads and turns it</strong> into Java objects (<code>Request</code> and <code>Response</code>).</li></ol>
+<p>The purple fields on the right only exist in Java's memory; they don't travel over the network.</p>`},
+ more:{ro:`<p>Trei limite diferite, des confundate:</p><ul><li><code>maxConnections</code> (implicit 8192): câte conexiuni TCP poate ține deschise;</li><li><code>maxThreads</code> (implicit 200): câte cereri pot fi procesate <em>în același timp</em>;</li><li><code>acceptCount</code> (implicit 100): câte conexiuni noi așteaptă în coada sistemului de operare când totul e plin.</li></ul><p><code>connectionTimeout</code> (20 s) închide conexiunile care nu trimit nimic.</p>`,
+  en:`<p>Three different limits, often confused:</p><ul><li><code>maxConnections</code> (default 8192): how many TCP connections it can keep open;</li><li><code>maxThreads</code> (default 200): how many requests can be processed <em>at the same time</em>;</li><li><code>acceptCount</code> (default 100): how many new connections wait in the operating system's queue when everything is full.</li></ul><p><code>connectionTimeout</code> (20 s) closes connections that send nothing.</p>`},
+ try:[{cmd:"ss -tlnp | grep 8080",d:{ro:"Arată că procesul Java ascultă pe portul 8080.",en:"Shows the Java process listening on port 8080."}}]},
+
+{at:"pool",frame:THR,kind:"req",move:[[["conn","pool"]]],log:{ro:"un thread preia cererea",en:"a thread takes the request"},tables:["threads"],hl:{threads:"http-nio-8080-exec-7"},who:"Thread pool (Executor)",
+ title:{ro:"Un thread din pool preia cererea",en:"A thread from the pool takes the request"},
+ body:{ro:`<p>Cererea primește un <strong>thread</strong> din pool: <code>http-nio-8080-exec-7</code>. De acum, acest thread o duce de la un capăt la altul: filtre, cod, baza de date, răspuns.</p>
+<p class="key">Regula de aur: <strong>o cerere = un thread</strong>, cât timp e procesată. Dacă codul așteaptă 2 secunde după baza de date, thread-ul stă blocat 2 secunde.</p>
+<p>Pool-ul are cel mult <code>maxThreads="200"</code>. Acum 38 sunt ocupate, deci mai e loc.</p>`,
+ en:`<p>The request gets a <strong>thread</strong> from the pool: <code>http-nio-8080-exec-7</code>. From now on this thread carries it from start to finish: filters, code, database, response.</p>
+<p class="key">The golden rule: <strong>one request = one thread</strong>, for as long as it's being processed. If the code waits 2 seconds for the database, the thread is stuck for 2 seconds.</p>
+<p>The pool has at most <code>maxThreads="200"</code>. 38 are busy right now, so there's room.</p>`},
+ more:{ro:`<p>Thread-urile sunt refolosite: nu se creează unul nou la fiecare cerere, pentru că ar fi lent. Dacă cererile vin mai repede decât se termină, toate cele 200 se ocupă, iar cererile noi așteaptă (vezi pasul 14).</p><p>Din Java 21, Tomcat poate folosi <strong>thread-uri virtuale</strong>: foarte ieftine, așa că așteptarea după baza de date nu mai blochează un thread scump al sistemului de operare.</p>`,
+  en:`<p>Threads are reused: a new one isn't created for every request, as that would be slow. If requests arrive faster than they finish, all 200 get busy and new requests wait (see step 14).</p><p>Since Java 21, Tomcat can use <strong>virtual threads</strong>: very cheap, so waiting for the database no longer ties up an expensive operating-system thread.</p>`},
+ try:[{cmd:"jstack $(pgrep -f catalina) | grep -c 'http-nio-8080-exec'",d:{ro:"Numără thread-urile Connector-ului.",en:"Counts the Connector's threads."}}]},
+
+{at:"cat",frame:MAP,kind:"req",move:[[["pool","cat"]]],log:{ro:"Engine → Host → Context",en:"Engine → Host → Context"},tables:["mapping"],hl:{mapping:["Context","Servlet"]},who:"Catalina (Engine, Host, Context)",
+ title:{ro:"Catalina alege aplicația și servlet-ul",en:"Catalina picks the application and the servlet"},
+ body:{ro:`<p>Un singur Tomcat poate rula multe aplicații. <strong>Mapper</strong>-ul alege, pe niveluri:</p>
+<ol><li><strong>Engine</strong> „Catalina”: motorul care procesează cererile pentru acest Service.</li>
+<li><strong>Host</strong>: după antetul <code>Host</code> (un fel de „site”). Aici se folosește <code>localhost</code>, Host-ul implicit.</li>
+<li><strong>Context</strong>: după începutul căii. <code>/shop</code> → aplicația din <code>shop.war</code>.</li>
+<li><strong>Wrapper</strong> (servlet-ul): după restul căii. <code>/api/*</code> → <code>DispatcherServlet</code>.</li></ol>`,
+ en:`<p>One Tomcat can run many applications. The <strong>Mapper</strong> picks, level by level:</p>
+<ol><li><strong>Engine</strong> "Catalina": the engine that processes requests for this Service.</li>
+<li><strong>Host</strong>: by the <code>Host</code> header (a kind of "site"). Here the default Host, <code>localhost</code>, is used.</li>
+<li><strong>Context</strong>: by the start of the path. <code>/shop</code> → the app from <code>shop.war</code>.</li>
+<li><strong>Wrapper</strong> (the servlet): by the rest of the path. <code>/api/*</code> → <code>DispatcherServlet</code>.</li></ol>`},
+ more:{ro:`<p>Fiecare Context are propriul <strong>class loader</strong>: două aplicații pot folosi versiuni diferite ale aceleiași biblioteci fără să se încurce. De aceea poți și reinstala o aplicație (redeploy) fără să oprești tot Tomcat-ul.</p><p>Pe drum, cererea trece prin <strong>valve</strong> (de ex. AccessLogValve, RemoteIpValve): „filtre” ale lui Tomcat, valabile pentru toate aplicațiile.</p>`,
+  en:`<p>Each Context has its own <strong>class loader</strong>: two apps can use different versions of the same library without clashing. It's also why you can redeploy one app without stopping the whole Tomcat.</p><p>On the way, the request passes through <strong>valves</strong> (e.g. AccessLogValve, RemoteIpValve): Tomcat-level "filters" that apply to every app.</p>`}},
+
+{at:"cat",frame:FIL,kind:"req",log:{ro:"filtre: sesiune, ID",en:"filters: session, ID"},tables:["filters","sessions"],hl:{sessions:"8F3A…C21"},who:{ro:"Aplicația shop (filtre)",en:"The shop app (filters)"},
+ title:{ro:"Lanțul de filtre: cine ești, ce ID are cererea",en:"The filter chain: who you are, the request's ID"},
+ body:{ro:`<p>Înainte de servlet, cererea trece prin <strong>filtre</strong>, în ordine. Fiecare poate citi cererea, adăuga ceva sau o poate opri (de ex. cu <code>401 Unauthorized</code>).</p>
+<ul><li>Filtrul de ID dă cererii <code>7c1e-55aa</code>; apare în toate liniile de log, ca s-o poți urmări.</li>
+<li>Filtrul de autentificare caută <code>JSESSIONID=8F3A…C21</code> în <strong>sesiunile</strong> din memoria Tomcat și găsește utilizatorul <strong>ana</strong>.</li></ul>`,
+ en:`<p>Before the servlet, the request goes through <strong>filters</strong>, in order. Each one can read the request, add something, or stop it (e.g. with <code>401 Unauthorized</code>).</p>
+<ul><li>The ID filter gives the request <code>7c1e-55aa</code>; it appears on every log line so you can trace it.</li>
+<li>The auth filter looks up <code>JSESSIONID=8F3A…C21</code> in the <strong>sessions</strong> in Tomcat's memory and finds the user <strong>ana</strong>.</li></ul>`},
+ more:{ro:`<p>Sesiunile ținute în memoria unui singur Tomcat au o problemă: dacă ai 2 servere și nginx trimite următoarea cerere la celălalt, sesiunea nu există acolo. Soluții: <strong>sticky sessions</strong> (același client la același server), sesiuni într-un depozit comun (Redis) sau autentificare fără sesiune (token JWT). Microserviciile folosesc de obicei JWT (vezi <a href="../microservicii/index.html">lecția despre microservicii</a>).</p>`,
+  en:`<p>Sessions kept in one Tomcat's memory have a problem: with 2 servers, if nginx sends the next request to the other one, the session doesn't exist there. Solutions: <strong>sticky sessions</strong> (same client to the same server), sessions in a shared store (Redis), or session-less authentication (a JWT token). Microservices usually use JWT (see the <a href="../microservicii/index.html">microservices lesson</a>).</p>`}},
+
+{at:"app",frame:CTL,kind:"req",move:[[["cat","app"]]],log:{ro:"DispatcherServlet → controller",en:"DispatcherServlet → controller"},who:"DispatcherServlet",
+ title:{ro:"Codul tău: controller-ul și serviciul",en:"Your code: the controller and the service"},
+ body:{ro:`<p><strong>DispatcherServlet</strong> (Spring MVC) găsește metoda marcată cu <code>@GetMapping("/orders/{id}")</code> și o apelează cu <code>id = 42</code>:</p>
+<div class="flow"><span>OrderController.getOrder(42)</span><i>→</i><span>OrderService</span><i>→</i><span>OrderRepository</span></div>
+<p>Abia aici rulează <strong>codul scris de echipă</strong>. Pentru comandă e nevoie de date din baza de date.</p>`,
+ en:`<p><strong>DispatcherServlet</strong> (Spring MVC) finds the method marked <code>@GetMapping("/orders/{id}")</code> and calls it with <code>id = 42</code>:</p>
+<div class="flow"><span>OrderController.getOrder(42)</span><i>→</i><span>OrderService</span><i>→</i><span>OrderRepository</span></div>
+<p>Only here does the <strong>team's own code</strong> run. The order needs data from the database.</p>`},
+ more:{ro:`<p>Controller-ul verifică și dacă Ana are voie să vadă comanda 42 (să nu fie a altcuiva). Asta e <strong>autorizare</strong>, diferită de autentificare (cine ești).</p>`,
+  en:`<p>The controller also checks that Ana is allowed to see order 42 (that it isn't someone else's). That's <strong>authorisation</strong>, different from authentication (who you are).</p>`}},
+
+{at:"hik",frame:SQL,kind:"req",move:[[["app","hik"]],[["hik","db"]]],log:{ro:"interogare SQL",en:"SQL query"},tables:["hikari"],hl:{hikari:"maximumPoolSize"},who:"HikariCP",
+ title:{ro:"O conexiune din pool și interogarea SQL",en:"A pooled connection and the SQL query"},
+ body:{ro:`<p>Deschiderea unei conexiuni noi la PostgreSQL durează zeci de milisecunde (TCP, autentificare). De aceea aplicația ține un <strong>pool de conexiuni</strong> deja deschise: <strong>HikariCP</strong>, cu maximum 10.</p>
+<p>Thread-ul <code>exec-7</code> <strong>împrumută</strong> conexiunea #3 și trimite prin <strong>JDBC</strong>: <code>SELECT … FROM orders WHERE id = 42</code>.</p>`,
+ en:`<p>Opening a new connection to PostgreSQL takes tens of milliseconds (TCP, authentication). That's why the app keeps a <strong>pool of already-open connections</strong>: <strong>HikariCP</strong>, with at most 10.</p>
+<p>Thread <code>exec-7</code> <strong>borrows</strong> connection #3 and sends over <strong>JDBC</strong>: <code>SELECT … FROM orders WHERE id = 42</code>.</p>`},
+ more:{ro:`<p>Atenție la raport: 200 de thread-uri Tomcat împart doar 10 conexiuni la baza de date. E în regulă cât timp interogările sunt rapide. Dacă devin lente, thread-urile încep să <strong>stea la coadă după o conexiune</strong>; e cea mai des întâlnită cauză de blocare în producție.</p><p>Un pool mai mare nu e mereu soluția: și baza de date are o limită (<code>max_connections</code>), iar mai multe conexiuni pot face totul și mai lent.</p>`,
+  en:`<p>Mind the ratio: 200 Tomcat threads share just 10 database connections. That's fine as long as queries are fast. If they get slow, threads start <strong>queueing for a connection</strong>; it's the most common cause of lock-ups in production.</p><p>A bigger pool isn't always the answer: the database has a limit too (<code>max_connections</code>), and more connections can make everything even slower.</p>`}},
+
+{at:"db",frame:DBR,kind:"req",move:[[["db","hik"]],[["hik","app"]]],who:"PostgreSQL",
+ title:{ro:"Baza de date răspunde",en:"The database answers"},
+ body:{ro:`<p>PostgreSQL găsește rândul după cheia primară (folosind un <strong>index</strong>) în 3 ms și îl trimite înapoi.</p>
+<p>Conexiunea #3 e <strong>returnată în pool</strong> imediat, pentru alt thread. Codul transformă rândul într-un obiect <code>Order</code>.</p>`,
+ en:`<p>PostgreSQL finds the row by its primary key (using an <strong>index</strong>) in 3 ms and sends it back.</p>
+<p>Connection #3 is <strong>returned to the pool</strong> straight away, for another thread. The code turns the row into an <code>Order</code> object.</p>`},
+ more:{ro:`<p>Fără index, aceeași interogare ar citi tot tabelul. La un milion de comenzi poate dura secunde, iar fiecare secundă ține ocupate un thread Tomcat și o conexiune din pool.</p>`,
+  en:`<p>Without an index, the same query would read the whole table. With a million orders it could take seconds, and every second ties up a Tomcat thread and a pool connection.</p>`}},
+
+{at:"app",frame:RESP,kind:"req",move:[[["app","cat"]],[["cat","pool"]],[["pool","conn"]],[["conn","lb"]]],log:{ro:"Tomcat → nginx",en:"Tomcat → nginx"},tables:["access"],hl:{access:[0]},who:{ro:"Răspunsul",en:"The response"},
+ title:{ro:"Răspunsul pleacă înapoi, thread-ul e liber",en:"The response goes back, the thread is free"},
+ body:{ro:`<p>Controller-ul întoarce obiectul, Spring îl transformă în <strong>JSON</strong>, iar Tomcat scrie răspunsul: <code>200 OK</code>, <code>Content-Type: application/json</code>.</p>
+<ul><li>Thread-ul <code>exec-7</code> se întoarce în pool, gata pentru următoarea cerere. A fost ocupat <strong>18 ms</strong>.</li>
+<li><strong>AccessLogValve</strong> scrie o linie în jurnalul de acces (în dreapta).</li></ul>
+<p>Observă câmpurile <strong>eliminate</strong>: thread-ul, potrivirea URL, SQL-ul rămân în server. Clientul primește doar HTTP.</p>`,
+ en:`<p>The controller returns the object, Spring turns it into <strong>JSON</strong>, and Tomcat writes the response: <code>200 OK</code>, <code>Content-Type: application/json</code>.</p>
+<ul><li>Thread <code>exec-7</code> goes back to the pool, ready for the next request. It was busy for <strong>18 ms</strong>.</li>
+<li><strong>AccessLogValve</strong> writes a line to the access log (on the right).</li></ul>
+<p>Note the <strong>removed</strong> fields: the thread, URL mapping and SQL stay on the server. The client only gets HTTP.</p>`},
+ try:[{cmd:"tail -f $CATALINA_HOME/logs/localhost_access_log.$(date +%F).txt",d:{ro:"Urmărește cererile în timp real.",en:"Watches requests in real time."}},{cmd:"tail -f $CATALINA_HOME/logs/catalina.out",d:{ro:"Jurnalul principal: pornire, erori, excepții Java.",en:"The main log: startup, errors, Java exceptions."}}]},
+
+{at:"lb",frame:OUT,kind:"req",move:[[["lb","user"]]],log:{ro:"nginx → browser",en:"nginx → browser"},who:"nginx",
+ title:{ro:"nginx livrează răspunsul pe HTTPS",en:"nginx delivers the response over HTTPS"},
+ body:{ro:`<p>nginx primește răspunsul de la Tomcat, îl <strong>comprimă</strong> (gzip), adaugă antete de securitate (de ex. <code>Strict-Transport-Security</code>), îl <strong>criptează</strong> și îl trimite browserului.</p>
+<p>Ana vede comanda 42: <em>PAID, 249,99</em>. Totul a durat sub 30 ms.</p>`,
+ en:`<p>nginx receives the response from Tomcat, <strong>compresses</strong> it (gzip), adds security headers (e.g. <code>Strict-Transport-Security</code>), <strong>encrypts</strong> it and sends it to the browser.</p>
+<p>Ana sees order 42: <em>PAID, 249.99</em>. The whole thing took under 30 ms.</p>`}},
+
+{at:"conn",frame:null,kind:"none",tables:["server"],hl:{server:["Connector","Context"]},who:{ro:"Ciclul de viață",en:"Lifecycle"},
+ title:{ro:"Pornirea și instalarea unei versiuni noi",en:"Startup and deploying a new version"},
+ body:{ro:`<p>Ce se întâmplă când pornește Tomcat (<code>bin/startup.sh</code> sau serviciul systemd):</p>
+<ol><li>Pornește <strong>JVM</strong>-ul, cu memoria setată (de ex. <code>-Xmx2g</code>).</li>
+<li>Citește <code>server.xml</code> și creează Service-ul, Connector-ul și Engine-ul.</li>
+<li>Despachetează fiecare <code>.war</code> din <code>webapps/</code> și pornește aplicația: Spring se inițializează și deschide pool-ul de conexiuni.</li>
+<li>Abia la final Connector-ul începe să accepte cereri.</li></ol>
+<p>O <strong>versiune nouă</strong> înseamnă de obicei: copiezi noul <code>shop.war</code>, Tomcat oprește vechiul Context și pornește noul. Cât durează, cererile la <code>/shop</code> eșuează; de aceea în producție se folosesc mai multe servere și se actualizează pe rând.</p>`,
+ en:`<p>What happens when Tomcat starts (<code>bin/startup.sh</code> or the systemd service):</p>
+<ol><li>The <strong>JVM</strong> starts, with its memory set (e.g. <code>-Xmx2g</code>).</li>
+<li>It reads <code>server.xml</code> and creates the Service, the Connector and the Engine.</li>
+<li>It unpacks every <code>.war</code> in <code>webapps/</code> and starts the app: Spring initialises and opens the connection pool.</li>
+<li>Only at the end does the Connector start accepting requests.</li></ol>
+<p>A <strong>new version</strong> usually means: you copy the new <code>shop.war</code>, Tomcat stops the old Context and starts the new one. Meanwhile, requests to <code>/shop</code> fail; that's why production uses several servers and updates them one at a time.</p>`},
+ more:{ro:`<p>„Redeploy” repetat fără restart poate produce <strong>scurgeri de memorie</strong> (class loader-ul vechi nu e eliberat). Multe echipe preferă să repornească tot Tomcat-ul sau să ruleze câte o aplicație per Tomcat, de obicei în containere (vezi lecția despre microservicii).</p>`,
+  en:`<p>Repeated redeploys without a restart can cause <strong>memory leaks</strong> (the old class loader isn't freed). Many teams prefer restarting the whole Tomcat, or running one app per Tomcat, usually in containers (see the microservices lesson).</p>`},
+ try:[{cmd:"sudo systemctl restart tomcat && tail -f $CATALINA_HOME/logs/catalina.out",d:{ro:"Repornește și urmărește mesajele de pornire („Server startup in … ms”).",en:"Restarts and follows the startup messages (\"Server startup in … ms\")."}}]},
+
+{at:["pool","hik"],frame:null,kind:"none",tables:["overload"],hl:{overload:[]},marks:{pool:{k:"drop",t:{ro:"200/200 ocupate",en:"200/200 busy"}},hik:{k:"drop",t:{ro:"10/10 ocupate",en:"10/10 busy"}}},who:{ro:"Sub presiune",en:"Under pressure"},
+ title:{ro:"Ce se întâmplă când serverul e copleșit",en:"What happens when the server is overwhelmed"},
+ body:{ro:`<p>E Black Friday. O interogare a devenit lentă (2 s în loc de 3 ms) pentru că lipsește un index. Reacția în lanț:</p>
+<ol><li>Fiecare cerere ține <strong>o conexiune DB 2 s</strong>; cele 10 conexiuni se ocupă imediat.</li>
+<li>Thread-urile Tomcat <strong>stau la coadă</strong> după o conexiune; în câteva secunde toate cele <strong>200 sunt ocupate</strong>.</li>
+<li>Conexiunile noi intră în coada <code>acceptCount</code> (100); când se umple, sunt <strong>refuzate</strong>.</li>
+<li>nginx nu primește răspuns în 60 s și întoarce <strong>502/504</strong> utilizatorilor.</li></ol>
+<p class="key">Serverul nu e „căzut”: procesul rulează, dar toate thread-urile așteaptă. Cauza reală e la baza de date.</p>`,
+ en:`<p>It's Black Friday. A query has become slow (2 s instead of 3 ms) because an index is missing. The chain reaction:</p>
+<ol><li>Each request holds <strong>a DB connection for 2 s</strong>; the 10 connections fill up instantly.</li>
+<li>Tomcat threads <strong>queue</strong> for a connection; within seconds all <strong>200 are busy</strong>.</li>
+<li>New connections go into the <code>acceptCount</code> queue (100); when it's full they're <strong>refused</strong>.</li>
+<li>nginx gets no answer within 60 s and returns <strong>502/504</strong> to users.</li></ol>
+<p class="key">The server isn't "down": the process is running, but every thread is waiting. The real cause is at the database.</p>`},
+ more:{ro:`<p>Cum previi și cum diagnostichezi:</p><ul><li><strong>Timeout-uri</strong> peste tot: la interogări (<code>statement_timeout</code>), la pool (<code>connectionTimeout</code> mai mic, de ex. 2 s), la apeluri externe.</li><li><strong>Metrici și alerte</strong> pe thread-uri ocupate și conexiuni active, înainte să ajungă la 100%.</li><li><strong>Thread dump</strong> (<code>jstack</code>): dacă sute de thread-uri sunt în <code>HikariPool.getConnection</code>, problema e la baza de date.</li><li>Să nu crești orbește <code>maxThreads</code>: mai multe thread-uri care așteaptă aceeași bază de date nu ajută.</li></ul>`,
+  en:`<p>How to prevent and diagnose it:</p><ul><li><strong>Timeouts</strong> everywhere: on queries (<code>statement_timeout</code>), on the pool (a lower <code>connectionTimeout</code>, e.g. 2 s), on outside calls.</li><li><strong>Metrics and alerts</strong> on busy threads and active connections, before they reach 100%.</li><li>A <strong>thread dump</strong> (<code>jstack</code>): if hundreds of threads are in <code>HikariPool.getConnection</code>, the problem is the database.</li><li>Don't blindly raise <code>maxThreads</code>: more threads waiting for the same database won't help.</li></ul>`},
+ try:[{cmd:"jstack $(pgrep -f catalina) > dump.txt && grep -c getConnection dump.txt",d:{ro:"Câte thread-uri așteaptă o conexiune la baza de date?",en:"How many threads are waiting for a database connection?"}}]},
+
+{at:["lb","conn","pool","cat","app","hik"],frame:null,kind:"none",summary:true,
+ title:{ro:"Recapitulare",en:"Recap"},
+ body:{ro:`<div class="flow"><span>nginx</span><i>→</i><span>Connector</span><i>→</i><span>thread</span><i>→</i><span>Host / Context</span><i>→</i><span>filtre</span><i>→</i><span>servlet</span><i>→</i><span>pool DB</span></div>
+<ul><li><strong>Tomcat</strong> e un container de servlet-uri: transformă HTTP în obiecte Java și apelează codul tău.</li>
+<li><strong>Connector</strong>-ul acceptă conexiuni; <strong>thread pool</strong>-ul dă fiecărei cereri un thread (maxThreads).</li>
+<li><strong>Engine → Host → Context → Servlet</strong> aleg aplicația și codul după nume și cale.</li>
+<li><strong>Filtrele</strong> se ocupă de lucruri comune: autentificare, ID de cerere, codare.</li>
+<li><strong>Pool-ul de conexiuni</strong> refolosește conexiunile la baza de date; e de obicei primul care se umple.</li>
+<li>Sub presiune, totul se blochează de la cea mai lentă resursă: de aceea contează timeout-urile și metricile.</li></ul>
+<p><button type="button" class="btn primary" data-goto="quiz">Mergi la test ↓</button></p>`,
+ en:`<div class="flow"><span>nginx</span><i>→</i><span>Connector</span><i>→</i><span>thread</span><i>→</i><span>Host / Context</span><i>→</i><span>filters</span><i>→</i><span>servlet</span><i>→</i><span>DB pool</span></div>
+<ul><li><strong>Tomcat</strong> is a servlet container: it turns HTTP into Java objects and calls your code.</li>
+<li>The <strong>Connector</strong> accepts connections; the <strong>thread pool</strong> gives each request a thread (maxThreads).</li>
+<li><strong>Engine → Host → Context → Servlet</strong> pick the app and the code by name and path.</li>
+<li><strong>Filters</strong> handle shared concerns: authentication, request IDs, encoding.</li>
+<li>The <strong>connection pool</strong> reuses database connections; it's usually the first thing to fill up.</li>
+<li>Under pressure, everything locks up from the slowest resource: that's why timeouts and metrics matter.</li></ul>
+<p><button type="button" class="btn primary" data-goto="quiz">Go to the quiz ↓</button></p>`},
+ more:{ro:`<p>Următorul pas: <a href="../microservicii/index.html">lecția despre microservicii</a>, unde fiecare serviciu are propriul Tomcat (încorporat în Spring Boot) și rulează în Kubernetes.</p>`,en:`<p>Next: the <a href="../microservicii/index.html">microservices lesson</a>, where every service has its own Tomcat (embedded in Spring Boot) and runs in Kubernetes.</p>`}}
+],
+
+reference:(T,lang)=>{
+  const ro=lang==="ro";
+  let h=`<div class="ref-grid"><section class="card refcard"><h2>${ro?"conf/server.xml, comentat":"conf/server.xml, annotated"}</h2>
+<pre class="yaml">&lt;Server port="8005" shutdown="SHUTDOWN"&gt;
+  &lt;Service name="Catalina"&gt;
+    <span class="c">&lt;!-- ${ro?"ascultă HTTP pe 8080":"listens for HTTP on 8080"} --&gt;</span>
+    &lt;Connector port="8080" protocol="HTTP/1.1"
+               maxThreads="200" minSpareThreads="10"
+               acceptCount="100" maxConnections="8192"
+               connectionTimeout="20000" /&gt;
+    &lt;Engine name="Catalina" defaultHost="localhost"&gt;
+      &lt;Host name="localhost" appBase="webapps"
+            autoDeploy="false"&gt;
+        <span class="c">&lt;!-- ${ro?"IP-ul real al clientului":"the client's real IP"} --&gt;</span>
+        &lt;Valve className="org.apache.catalina.valves.RemoteIpValve"/&gt;
+        &lt;Valve className="org.apache.catalina.valves.AccessLogValve"
+               pattern="%a %u %t &amp;quot;%r&amp;quot; %s %b %Dms"/&gt;
+      &lt;/Host&gt;
+    &lt;/Engine&gt;
+  &lt;/Service&gt;
+&lt;/Server&gt;</pre></section>`;
+  const modes=[
+    [{ro:"Clasic (standalone)",en:"Classic (standalone)"},{ro:"Instalezi Tomcat pe server, copiezi shop.war în webapps/.",en:"You install Tomcat on the server and copy shop.war into webapps/."},{ro:"Mai multe aplicații pe același Tomcat; aplicații vechi, enterprise.",en:"Several apps on one Tomcat; older, enterprise apps."}],
+    [{ro:"Încorporat (Spring Boot)",en:"Embedded (Spring Boot)"},{ro:"Tomcat e o bibliotecă în aplicație; pornești cu java -jar shop.jar.",en:"Tomcat is a library inside the app; you start it with java -jar shop.jar."},{ro:"Microservicii: o aplicație = un Tomcat = un proces.",en:"Microservices: one app = one Tomcat = one process."}],
+    [{ro:"În container",en:"In a container"},{ro:"Imagine Docker (de ex. tomcat:10.1-jdk17 sau aplicația Spring Boot), rulată de Kubernetes.",en:"A Docker image (e.g. tomcat:10.1-jdk17 or the Spring Boot app), run by Kubernetes."},{ro:"Scalare automată, actualizări pe rând, fără servere de administrat manual.",en:"Autoscaling, rolling updates, no servers to manage by hand."}]
+  ];
+  h+=`<section class="card refcard"><h2>${ro?"Trei feluri de a rula Tomcat":"Three ways to run Tomcat"}</h2><div class="scroll"><table class="cmp" style="min-width:460px"><thead><tr><th>${ro?"Mod":"Mode"}</th><th>${ro?"Cum":"How"}</th><th>${ro?"Potrivit pentru":"Good for"}</th></tr></thead><tbody>`;
+  modes.forEach(r=>{h+=`<tr><td><b>${T(r[0])}</b></td><td>${T(r[1])}</td><td>${T(r[2])}</td></tr>`});
+  h+=`</tbody></table></div><h3>${ro?"Directoarele importante":"The important folders"}</h3><div class="scroll"><table><tbody>
+<tr><td class="m">bin/</td><td>${ro?"startup.sh, shutdown.sh, catalina.sh, setenv.sh (opțiuni JVM)":"startup.sh, shutdown.sh, catalina.sh, setenv.sh (JVM options)"}</td></tr>
+<tr><td class="m">conf/</td><td>server.xml, web.xml, context.xml, tomcat-users.xml</td></tr>
+<tr><td class="m">webapps/</td><td>${ro?"aplicațiile (.war și directoarele despachetate)":"the apps (.war files and unpacked folders)"}</td></tr>
+<tr><td class="m">logs/</td><td>catalina.out, localhost_access_log.*.txt</td></tr>
+<tr><td class="m">work/, temp/</td><td>${ro?"fișiere temporare și JSP-uri compilate":"temporary files and compiled JSPs"}</td></tr>
+</tbody></table></div></section></div>`;
+  const tune=[
+    ["maxThreads","200",{ro:"Cereri procesate simultan.",en:"Requests processed at once."},{ro:"Prea mic: cereri care așteaptă deși CPU e liber. Prea mare: memorie risipită, baza de date copleșită.",en:"Too low: requests wait while the CPU is idle. Too high: wasted memory, an overwhelmed database."}],
+    ["acceptCount","100",{ro:"Coada de conexiuni când toate thread-urile sunt ocupate.",en:"The connection queue when every thread is busy."},{ro:"Plin: conexiuni refuzate, nginx întoarce 502.",en:"Full: connections refused, nginx returns 502."}],
+    ["connectionTimeout","20000 ms",{ro:"Cât așteaptă date pe o conexiune nouă.",en:"How long it waits for data on a new connection."},{ro:"Prea mare: clienți lenți țin resurse ocupate.",en:"Too high: slow clients hold resources."}],
+    ["keepAliveTimeout",{ro:"= connectionTimeout",en:"= connectionTimeout"},{ro:"Cât ține deschisă o conexiune între cereri.",en:"How long a connection stays open between requests."},{ro:"Trebuie să fie mai mare decât keep-alive-ul din nginx, altfel apar erori 502 rare.",en:"Should be longer than nginx's keep-alive, or rare 502 errors appear."}],
+    ["maximumPoolSize (HikariCP)","10",{ro:"Conexiuni la baza de date.",en:"Database connections."},{ro:"Threads care așteaptă getConnection(); pentru mai multe instanțe, înmulțește cu numărul lor.",en:"Threads waiting in getConnection(); with several instances, multiply by their number."}],
+    ["-Xmx",{ro:"de ex. 2g",en:"e.g. 2g"},{ro:"Memoria maximă (heap) a JVM-ului.",en:"The JVM's maximum (heap) memory."},{ro:"Prea mic: OutOfMemoryError, pauze lungi de garbage collection.",en:"Too low: OutOfMemoryError, long garbage-collection pauses."}]
+  ];
+  h+=`<div class="ref-stack" style="margin-top:12px"><section class="card refcard"><h2>${ro?"Setările care contează în producție":"The settings that matter in production"}</h2><div class="scroll"><table class="cmp" style="min-width:600px"><thead><tr><th>${ro?"Setare":"Setting"}</th><th>${ro?"Implicit":"Default"}</th><th>${ro?"Ce controlează":"What it controls"}</th><th>${ro?"Semn că e greșită":"Sign it's wrong"}</th></tr></thead><tbody>`;
+  tune.forEach(r=>{h+=`<tr><td><span class="pill">${r[0]}</span></td><td class="m">${T(r[1])}</td><td>${T(r[2])}</td><td>${T(r[3])}</td></tr>`});
+  h+=`</tbody></table></div></section>`;
+  const sym=[
+    [{ro:"502 Bad Gateway din nginx",en:"502 Bad Gateway from nginx"},{ro:"Tomcat e oprit, nu ascultă pe 8080 sau a refuzat conexiunea (acceptCount plin).",en:"Tomcat is stopped, not listening on 8080, or refused the connection (acceptCount full)."}],
+    [{ro:"504 Gateway Timeout",en:"504 Gateway Timeout"},{ro:"Tomcat a acceptat, dar nu a răspuns în proxy_read_timeout: thread-uri blocate, interogări lente.",en:"Tomcat accepted but didn't answer within proxy_read_timeout: stuck threads, slow queries."}],
+    [{ro:"404 pentru toată aplicația",en:"404 for the whole app"},{ro:"Context-ul nu a pornit: caută excepția în catalina.out (eroare la pornirea Spring, baza de date indisponibilă).",en:"The Context didn't start: look for the exception in catalina.out (Spring startup error, database unavailable)."}],
+    ["OutOfMemoryError",{ro:"Heap prea mic sau scurgere de memorie; fă un heap dump și analizează-l.",en:"Heap too small or a memory leak; take a heap dump and analyse it."}],
+    [{ro:"Redirecționări infinite sau linkuri http://",en:"Endless redirects or http:// links"},{ro:"Lipsește RemoteIpValve / X-Forwarded-Proto: aplicația crede că cererea a venit pe HTTP.",en:"RemoteIpValve / X-Forwarded-Proto is missing: the app thinks the request came over HTTP."}]
+  ];
+  h+=`<section class="card refcard"><h2>${ro?"Depanare: simptom → cauză":"Troubleshooting: symptom → cause"}</h2><div class="scroll"><table class="cmp" style="min-width:460px"><thead><tr><th>${ro?"Simptom":"Symptom"}</th><th>${ro?"Cauza probabilă":"Likely cause"}</th></tr></thead><tbody>`;
+  sym.forEach(r=>{h+=`<tr><td>${T(r[0])}</td><td>${T(r[1])}</td></tr>`});
+  h+=`</tbody></table></div></section></div>`;
+  return h;
+},
+
+gloss:[
+ ["Apache Tomcat",null,{ro:"Server open-source care rulează aplicații web Java (servlet-uri).",en:"An open-source server that runs Java web applications (servlets)."}],
+ ["Servlet",null,{ro:"Clasă Java care primește o cerere HTTP și produce un răspuns.",en:"A Java class that receives an HTTP request and produces a response."}],
+ ["Catalina",null,{ro:"Containerul de servlet-uri din Tomcat: Engine, Host, Context.",en:"Tomcat's servlet container: Engine, Host, Context."}],
+ ["Connector / Coyote",null,{ro:"Partea care ascultă pe port, acceptă conexiuni și citește HTTP-ul.",en:"The part that listens on a port, accepts connections and reads HTTP."}],
+ ["NIO","Non-blocking I/O",{ro:"Mod în care puține thread-uri urmăresc multe conexiuni deschise.",en:"A mode where a few threads watch many open connections."}],
+ ["Thread pool",{ro:"bazin de thread-uri",en:null},{ro:"Grup refolosit de thread-uri care procesează cererile; maxim maxThreads.",en:"A reused group of threads that process requests; at most maxThreads."}],
+ ["maxThreads",null,{ro:"Câte cereri pot fi procesate în același timp.",en:"How many requests can be processed at the same time."}],
+ ["acceptCount",null,{ro:"Câte conexiuni așteaptă la coadă când toate thread-urile sunt ocupate.",en:"How many connections wait in the queue when every thread is busy."}],
+ ["Engine / Host / Context",null,{ro:"Niveluri din Tomcat: motorul, site-ul (după nume) și aplicația (după cale).",en:"Tomcat levels: the engine, the site (by name) and the app (by path)."}],
+ ["WAR","Web Application Archive",{ro:"Arhivă cu o aplicație web Java (cod, biblioteci, configurare), instalată în webapps/.",en:"An archive of a Java web app (code, libraries, config), deployed into webapps/."}],
+ ["Filter",{ro:"filtru",en:null},{ro:"Cod care rulează înainte și după servlet, pentru toate cererile potrivite.",en:"Code that runs before and after the servlet, for every matching request."}],
+ ["Valve",null,{ro:"„Filtru” la nivel de Tomcat, valabil pentru toate aplicațiile unui Host sau Engine.",en:"A Tomcat-level \"filter\" that applies to every app in a Host or Engine."}],
+ ["DispatcherServlet",null,{ro:"Servlet-ul central din Spring MVC; trimite cererea la metoda @Controller potrivită.",en:"Spring MVC's central servlet; sends the request to the right @Controller method."}],
+ ["JSESSIONID",null,{ro:"Cookie-ul care leagă browserul de o sesiune din memoria Tomcat.",en:"The cookie linking the browser to a session in Tomcat's memory."}],
+ ["Reverse proxy",null,{ro:"Server în fața aplicației (nginx, Apache httpd, un load balancer) care primește cererile și le trimite mai departe.",en:"A server in front of the app (nginx, Apache httpd, a load balancer) that receives requests and passes them on."}],
+ ["X-Forwarded-For",null,{ro:"Antet adăugat de proxy cu IP-ul real al clientului.",en:"A header added by the proxy with the client's real IP."}],
+ ["JDBC","Java Database Connectivity",{ro:"Interfața standard prin care Java vorbește cu bazele de date.",en:"The standard interface Java uses to talk to databases."}],
+ ["HikariCP",null,{ro:"Pool de conexiuni la baza de date, folosit implicit de Spring Boot.",en:"A database connection pool, used by default in Spring Boot."}],
+ ["JVM","Java Virtual Machine",{ro:"Programul care rulează codul Java; Tomcat e un proces JVM.",en:"The program that runs Java code; Tomcat is a JVM process."}],
+ ["Heap",null,{ro:"Memoria JVM-ului pentru obiecte; limita e -Xmx.",en:"The JVM's memory for objects; the limit is -Xmx."}],
+ ["Thread dump",null,{ro:"Fotografie a tuturor thread-urilor JVM: ce face fiecare chiar acum.",en:"A snapshot of every JVM thread: what each one is doing right now."}],
+ ["Access log",{ro:"jurnal de acces",en:null},{ro:"O linie pentru fiecare cerere: cine, ce, cod de răspuns, durată.",en:"One line per request: who, what, status code, duration."}]
+],
+glossEx:{
+ "Apache Tomcat":{ro:"multe aplicații bancare și de e-commerce rulează pe Tomcat, iar orice aplicație Spring Boot web pornește un Tomcat încorporat.",en:"many banking and e-commerce apps run on Tomcat, and every Spring Boot web app starts an embedded Tomcat."},
+ "Servlet":{ro:"o clasă OrderServlet cu metoda doGet(request, response) care scrie JSON-ul comenzii.",en:"an OrderServlet class with a doGet(request, response) method that writes the order's JSON."},
+ "Catalina":{ro:"mesajul „org.apache.catalina.startup.Catalina.start Server startup in [3450] milliseconds” din catalina.out.",en:"the message \"org.apache.catalina.startup.Catalina.start Server startup in [3450] milliseconds\" in catalina.out."},
+ "Connector / Coyote":{ro:"poți avea doi Connector-i: unul HTTP pe 8080 pentru nginx și unul HTTPS pe 8443 pentru acces direct.",en:"you can have two Connectors: HTTP on 8080 for nginx and HTTPS on 8443 for direct access."},
+ "NIO":{ro:"cu NIO, 10.000 de conexiuni keep-alive inactive nu țin ocupate 10.000 de thread-uri.",en:"with NIO, 10,000 idle keep-alive connections don't tie up 10,000 threads."},
+ "Thread pool":{ro:"numele thread-urilor http-nio-8080-exec-1 … exec-200 arată pool-ul Connector-ului de pe portul 8080.",en:"the thread names http-nio-8080-exec-1 … exec-200 show the pool of the Connector on port 8080."},
+ "maxThreads":{ro:"cu maxThreads=200 și cereri de 100 ms, serverul poate procesa teoretic ~2.000 de cereri pe secundă.",en:"with maxThreads=200 and 100 ms requests, the server can in theory handle ~2,000 requests per second."},
+ "acceptCount":{ro:"cu 200 de thread-uri ocupate și acceptCount=100, a 301-a conexiune simultană e refuzată.",en:"with 200 busy threads and acceptCount=100, the 301st simultaneous connection is refused."},
+ "Engine / Host / Context":{ro:"shop.example.com/shop → Host localhost → Context /shop; shop.example.com/admin → Context /admin (altă aplicație).",en:"shop.example.com/shop → Host localhost → Context /shop; shop.example.com/admin → Context /admin (another app)."},
+ "WAR":{ro:"mvn package produce target/shop.war; copiat în webapps/, devine disponibil la /shop.",en:"mvn package produces target/shop.war; copied into webapps/, it becomes available at /shop."},
+ "Filter":{ro:"un filtru care măsoară durata fiecărei cereri și o scrie în log.",en:"a filter that measures each request's duration and logs it."},
+ "Valve":{ro:"AccessLogValve scrie jurnalul de acces pentru toate aplicațiile, fără să modifici codul vreuneia.",en:"AccessLogValve writes the access log for every app, without changing any app's code."},
+ "DispatcherServlet":{ro:"@GetMapping(\"/orders/{id}\") pe o metodă: DispatcherServlet o apelează pentru /shop/api/orders/42.",en:"@GetMapping(\"/orders/{id}\") on a method: DispatcherServlet calls it for /shop/api/orders/42."},
+ "JSESSIONID":{ro:"Set-Cookie: JSESSIONID=8F3A…C21; Path=/shop; HttpOnly; Secure, primit la autentificare.",en:"Set-Cookie: JSESSIONID=8F3A…C21; Path=/shop; HttpOnly; Secure, received at login."},
+ "Reverse proxy":{ro:"nginx primește https://shop.example.com/shop/… și trimite la http://10.0.1.20:8080/shop/….",en:"nginx receives https://shop.example.com/shop/… and sends to http://10.0.1.20:8080/shop/…."},
+ "X-Forwarded-For":{ro:"X-Forwarded-For: 203.0.113.25, 10.0.0.7 – clientul real, apoi un proxy intermediar.",en:"X-Forwarded-For: 203.0.113.25, 10.0.0.7 – the real client, then an intermediate proxy."},
+ "JDBC":{ro:"URL-ul jdbc:postgresql://10.0.2.30:5432/shop din application.properties.",en:"the URL jdbc:postgresql://10.0.2.30:5432/shop in application.properties."},
+ "HikariCP":{ro:"eroarea „Connection is not available, request timed out after 30000ms” = pool-ul a fost plin 30 de secunde.",en:"the error \"Connection is not available, request timed out after 30000ms\" = the pool was full for 30 seconds."},
+ "JVM":{ro:"ps aux | grep java arată procesul Tomcat, cu opțiunile -Xmx2g -Dcatalina.base=….",en:"ps aux | grep java shows the Tomcat process with options like -Xmx2g -Dcatalina.base=…."},
+ "Heap":{ro:"-Xms1g -Xmx2g: pornește cu 1 GB și poate crește până la 2 GB.",en:"-Xms1g -Xmx2g: starts with 1 GB and can grow up to 2 GB."},
+ "Thread dump":{ro:"„http-nio-8080-exec-41 WAITING at com.zaxxer.hikari.pool.HikariPool.getConnection” = thread-ul așteaptă baza de date.",en:"\"http-nio-8080-exec-41 WAITING at com.zaxxer.hikari.pool.HikariPool.getConnection\" = the thread is waiting for the database."},
+ "Access log":{ro:"10.0.1.5 - ana [11/Nov/2026:15:42:07 +0200] \"GET /shop/api/orders/42 HTTP/1.1\" 200 312 18ms",en:"10.0.1.5 - ana [11/Nov/2026:15:42:07 +0200] \"GET /shop/api/orders/42 HTTP/1.1\" 200 312 18ms"}
+},
+
+quiz:[
+ {q:{ro:"Ce face Tomcat, pe scurt?",en:"What does Tomcat do, in short?"},
+  o:[{ro:"E o bază de date pentru Java",en:"It's a database for Java"},{ro:"Primește cereri HTTP, le transformă în obiecte Java și apelează codul aplicației",en:"It receives HTTP requests, turns them into Java objects and calls the app's code"},{ro:"Doar servește fișiere statice",en:"It only serves static files"},{ro:"E un sistem de operare",en:"It's an operating system"}],a:1,
+  e:{ro:"Tomcat e un container de servlet-uri: legătura dintre HTTP și codul Java.",en:"Tomcat is a servlet container: the link between HTTP and Java code."}},
+ {q:{ro:"Ce înseamnă maxThreads=\"200\"?",en:"What does maxThreads=\"200\" mean?"},
+  o:[{ro:"Maximum 200 de utilizatori înregistrați",en:"At most 200 registered users"},{ro:"Maximum 200 de cereri procesate în același timp",en:"At most 200 requests processed at the same time"},{ro:"Maximum 200 de cereri pe zi",en:"At most 200 requests per day"},{ro:"200 de conexiuni la baza de date",en:"200 database connections"}],a:1,
+  e:{ro:"Fiecare cerere ocupă un thread cât e procesată; peste 200, cererile noi așteaptă.",en:"Each request holds a thread while it's processed; beyond 200, new requests wait."}},
+ {q:{ro:"De unde știe Tomcat IP-ul real al clientului când în față e nginx?",en:"How does Tomcat know the client's real IP when nginx is in front?"},
+  o:[{ro:"Din IP-ul sursă al conexiunii",en:"From the connection's source IP"},{ro:"Din antetul X-Forwarded-For adăugat de nginx",en:"From the X-Forwarded-For header added by nginx"},{ro:"Din cookie-ul JSESSIONID",en:"From the JSESSIONID cookie"},{ro:"Nu are cum să știe",en:"It has no way to know"}],a:1,
+  e:{ro:"IP-ul sursă e al lui nginx. RemoteIpValve citește X-Forwarded-For.",en:"The source IP is nginx's. RemoteIpValve reads X-Forwarded-For."}},
+ {q:{ro:"Cererea /shop/api/orders/42 ajunge la aplicația din shop.war. Ce nivel a ales-o?",en:"The request /shop/api/orders/42 reaches the app from shop.war. Which level picked it?"},
+  o:[{ro:"Engine",en:"Engine"},{ro:"Host",en:"Host"},{ro:"Context (după /shop)",en:"Context (by /shop)"},{ro:"Connector",en:"Connector"}],a:2,
+  e:{ro:"Host-ul alege după nume, Context-ul după începutul căii, servlet-ul după restul.",en:"The Host picks by name, the Context by the start of the path, the servlet by the rest."}},
+ {q:{ro:"De ce folosește aplicația un pool de conexiuni (HikariCP)?",en:"Why does the app use a connection pool (HikariCP)?"},
+  o:[{ro:"Ca să cripteze datele",en:"To encrypt the data"},{ro:"Pentru că deschiderea unei conexiuni noi la fiecare cerere e lentă",en:"Because opening a new connection for every request is slow"},{ro:"Ca să nu mai fie nevoie de SQL",en:"So SQL is no longer needed"},{ro:"Ca să țină sesiunile",en:"To hold sessions"}],a:1,
+  e:{ro:"Conexiunile deschise sunt refolosite; un thread împrumută una și o dă înapoi.",en:"Open connections are reused; a thread borrows one and gives it back."}},
+ {q:{ro:"200 de thread-uri Tomcat, 10 conexiuni DB, interogările devin lente (2 s). Ce se umple primul?",en:"200 Tomcat threads, 10 DB connections, queries become slow (2 s). What fills up first?"},
+  o:[{ro:"Thread pool-ul Tomcat",en:"The Tomcat thread pool"},{ro:"Pool-ul de conexiuni la baza de date",en:"The database connection pool"},{ro:"Disc-ul",en:"The disk"},{ro:"Coada acceptCount",en:"The acceptCount queue"}],a:1,
+  e:{ro:"Cele 10 conexiuni se ocupă primele; apoi thread-urile stau la coadă după ele, până se umple tot.",en:"The 10 connections go first; then threads queue for them until everything is full."}},
+ {q:{ro:"nginx întoarce 504 Gateway Timeout, dar procesul Tomcat rulează. Ce e cel mai probabil?",en:"nginx returns 504 Gateway Timeout, but the Tomcat process is running. What's most likely?"},
+  o:[{ro:"Tomcat e oprit",en:"Tomcat is stopped"},{ro:"Thread-urile Tomcat sunt ocupate cu cereri care așteaptă ceva lent (de ex. baza de date)",en:"Tomcat's threads are busy with requests waiting on something slow (e.g. the database)"},{ro:"Certificatul TLS a expirat",en:"The TLS certificate expired"},{ro:"Lipsește fișierul WAR",en:"The WAR file is missing"}],a:1,
+  e:{ro:"504 = proxy-ul a așteptat prea mult un răspuns. Fă un thread dump ca să vezi la ce așteaptă thread-urile.",en:"504 = the proxy waited too long for an answer. Take a thread dump to see what the threads are waiting on."}},
+ {q:{ro:"Ce câmp NU ajunge niciodată la browser?",en:"Which field never reaches the browser?"},
+  o:[{ro:"Content-Type",en:"Content-Type"},{ro:"Codul de stare 200 OK",en:"The 200 OK status"},{ro:"Numele thread-ului http-nio-8080-exec-7",en:"The thread name http-nio-8080-exec-7"},{ro:"Conținutul JSON",en:"The JSON body"}],a:2,
+  e:{ro:"Thread-ul, potrivirea URL și SQL-ul există doar în JVM. Pe rețea pleacă doar HTTP.",en:"The thread, URL mapping and SQL only exist in the JVM. Only HTTP goes over the network."}},
+ {q:{ro:"Ce diferență e între Tomcat clasic și Spring Boot?",en:"What's the difference between classic Tomcat and Spring Boot?"},
+  o:[{ro:"Spring Boot nu folosește Tomcat",en:"Spring Boot doesn't use Tomcat"},{ro:"În Spring Boot, Tomcat e încorporat în aplicație și pornește cu java -jar",en:"In Spring Boot, Tomcat is embedded in the app and starts with java -jar"},{ro:"Tomcat clasic nu are thread pool",en:"Classic Tomcat has no thread pool"},{ro:"Nu e nicio diferență",en:"There's no difference"}],a:1,
+  e:{ro:"Clasic: instalezi Tomcat și pui WAR-ul în webapps/. Spring Boot: Tomcat e o bibliotecă din JAR-ul aplicației.",en:"Classic: you install Tomcat and drop the WAR into webapps/. Spring Boot: Tomcat is a library inside the app's JAR."}},
+ {q:{ro:"Unde cauți întâi când aplicația nu pornește după un deploy?",en:"Where do you look first when the app doesn't start after a deploy?"},
+  o:[{ro:"În jurnalul de acces",en:"In the access log"},{ro:"În logs/catalina.out (excepția de la pornire)",en:"In logs/catalina.out (the startup exception)"},{ro:"În cache-ul browserului",en:"In the browser cache"},{ro:"În fișierul hosts",en:"In the hosts file"}],a:1,
+  e:{ro:"catalina.out conține mesajele de pornire și excepțiile Java, de ex. „Unable to connect to database”.",en:"catalina.out holds the startup messages and Java exceptions, e.g. \"Unable to connect to database\"."}}
+]
+};
+})();
+</script>
+<script src="../assets/engine.js"></script>
+</body>
+</html>

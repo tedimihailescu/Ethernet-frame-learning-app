@@ -13,6 +13,8 @@ Lecții web interactive despre rețele. Fiecare lecție e o simulare animată: u
 | 1 | [Drumul unui cadru Ethernet](https://tedimihailescu.github.io/Ethernet-frame-learning-app/ethernet/) | Încapsulare, ARP, switch-uri și tabela MAC, routere, TTL, FCS, de ce MAC-urile se schimbă și IP-urile nu |
 | 2 | [Cum funcționează DNS](https://tedimihailescu.github.io/Ethernet-frame-learning-app/dns/) | Cache local și fișierul hosts, resolver recursiv, server rădăcină → .com → server autoritar, tipuri de înregistrări, TTL și cache |
 | 3 | [Kubernetes: Service-uri și DNS în cluster](https://tedimihailescu.github.io/Ethernet-frame-learning-app/kubernetes/) | Pod-uri, etichete, Service și EndpointSlice, CoreDNS și `backend.shop.svc.cluster.local`, kube-proxy și DNAT, conntrack, CNI, NodePort și LoadBalancer |
+| 4 | [Tomcat: viața unei cereri](https://tedimihailescu.github.io/Ethernet-frame-learning-app/tomcat/) | nginx ca reverse proxy, Connector, thread pool, Engine/Host/Context, filtre, DispatcherServlet, HikariCP, blocarea sub încărcare |
+| 5 | [Microservicii pe Tomcat în producție](https://tedimihailescu.github.io/Ethernet-frame-learning-app/microservicii/) | Spring Boot cu Tomcat încorporat, API gateway, REST, Kafka și outbox, timeout, circuit breaker, bulkhead, tracing, health checks |
 
 Fiecare lecție are: diagramă animată, pachetul „live” cu câmpurile schimbate colorate, tabele (MAC, rutare, ARP, DNS, conntrack…), secțiuni „Află mai mult”, comenzi de încercat, referință, dicționar și test. Totul în română și engleză, temă luminoasă/întunecată, funcționează pe telefon.
 
@@ -43,6 +45,8 @@ Interactive networking lessons. Each one is an animated simulation: follow the p
 | 1 | [The journey of an Ethernet frame](https://tedimihailescu.github.io/Ethernet-frame-learning-app/ethernet/) | Encapsulation, ARP, switches and MAC tables, routers, TTL, FCS, why MACs change and IPs don't |
 | 2 | [How DNS works](https://tedimihailescu.github.io/Ethernet-frame-learning-app/dns/) | Local cache and hosts file, recursive resolver, root → .com → authoritative server, record types, TTL and caching |
 | 3 | [Kubernetes: Services and cluster DNS](https://tedimihailescu.github.io/Ethernet-frame-learning-app/kubernetes/) | Pods, labels, Services and EndpointSlices, CoreDNS and `backend.shop.svc.cluster.local`, kube-proxy and DNAT, conntrack, CNI, NodePort and LoadBalancer |
+| 4 | [Tomcat: the life of a request](https://tedimihailescu.github.io/Ethernet-frame-learning-app/tomcat/) | nginx reverse proxy, Connector, thread pool, Engine/Host/Context, filters, DispatcherServlet, HikariCP, lock-ups under load |
+| 5 | [Microservices on Tomcat in production](https://tedimihailescu.github.io/Ethernet-frame-learning-app/microservicii/) | Spring Boot with embedded Tomcat, API gateway, REST, Kafka and outbox, timeouts, circuit breakers, bulkheads, tracing, health checks |
 
 Every lesson has an animated diagram, a live packet view with changed fields highlighted, tables, "Learn more" sections, commands to try, a reference section, a glossary and a quiz. Romanian and English, light/dark theme, works on phones.
 

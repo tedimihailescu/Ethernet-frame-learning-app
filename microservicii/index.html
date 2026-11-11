@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Microservicii în producție</title>
+<meta name="description" content="Lecție interactivă: cum funcționează o aplicație cu microservicii Spring Boot (Tomcat încorporat) în Kubernetes: API gateway, apeluri REST, trace ID, Kafka, timeout-uri, circuit breaker, health checks. / Interactive lesson on microservices on embedded Tomcat in production.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<script>
+(function(){
+const TR="4bf92f35…a0c1";
+const sp=n=>"trace "+TR+" · span "+n;
+const M1={from:{ro:"aplicația mobilă",en:"mobile app"},to:"api.shop.example.com",req:"POST /api/orders",auth:"Bearer eyJhbGciOi… (JWT)",body:'{"sku":"SKU-123","qty":1}'};
+const M2={from:"gateway",to:"orders.shop.svc:8080",req:"POST /orders",xuser:"X-User-Id: ana-1042",trace:sp(1),body:'{"sku":"SKU-123","qty":1}'};
+const M3={...M2,thread:"orders · http-nio-8080-exec-3"};
+const M4={from:"orders",to:"inventory.shop.svc:8080",req:"GET /stock/SKU-123",trace:sp(2),thread:"orders · http-nio-8080-exec-3",timeout:"2 s"};
+const M5={from:"inventory",to:"orders",trace:sp(2),thread:"orders · http-nio-8080-exec-3",status:"200 OK",body:'{"sku":"SKU-123","available":5}'};
+const M6={from:"orders",to:"payments.shop.svc:8080",req:"POST /charges",trace:sp(3),idem:"Idempotency-Key: ord-7781",thread:"orders · http-nio-8080-exec-3",timeout:"3 s",body:'{"amount":249.99,"currency":"RON"}'};
+const M7={from:"payments",to:"orders",trace:sp(3),thread:"orders · http-nio-8080-exec-3",status:"201 Created",body:'{"chargeId":"ch_93a1"}'};
+const M8={from:"orders",to:"orders-db:5432",trace:sp(4),thread:"orders · http-nio-8080-exec-3",sql:"INSERT INTO orders … ; INSERT INTO outbox …"};
+const M9={from:"orders",to:"kafka:9092",trace:sp(5),topic:"orders",event:'{"type":"OrderCreated","orderId":7781}'};
+const M10={from:"orders → gateway",to:{ro:"aplicația mobilă",en:"mobile app"},trace:sp(1),status:"201 Created",body:'{"orderId":7781,"status":"CONFIRMED"}'};
+const M11={from:"kafka",to:"notification",trace:sp(6),topic:"orders",event:'{"type":"OrderCreated","orderId":7781}',thread:"notification · consumer-1"};
+const SLOW={...M6,status:{ro:"… niciun răspuns de 30 s",en:"… no answer for 30 s"},timeout:{ro:"nesetat",en:"not set"}};
+const FAST={...M6,status:{ro:"503 imediat (circuit breaker OPEN)",en:"503 immediately (circuit breaker OPEN)"},timeout:"3 s"};
+
+window.LESSON={
+docTitle:{ro:"Microservicii în producție",en:"Microservices in Production"},
+eyebrow:{ro:"Lecție interactivă · Aplicații în producție",en:"Interactive lesson · Production apps"},
+title:{ro:"Microservicii pe Tomcat: o comandă prin tot sistemul",en:"Microservices on Tomcat: one order through the whole system"},
+sub:{ro:"Un magazin împărțit în servicii Spring Boot, fiecare cu propriul Tomcat încorporat, rulând în Kubernetes. Urmărește o comandă: gateway, apeluri REST între servicii, baza de date, evenimente Kafka. Apoi vezi cum o singură dependență lentă poate opri totul și cum se previne asta.",en:"A shop split into Spring Boot services, each with its own embedded Tomcat, running in Kubernetes. Follow one order: the gateway, REST calls between services, the database, Kafka events. Then see how one slow dependency can stop everything, and how that's prevented."},
+meta:[{ro:"≈ 25 minute",en:"≈ 25 minutes"},{ro:"17 pași",en:"17 steps"},{ro:"10 întrebări",en:"10 questions"},{ro:"Intermediar",en:"Intermediate"}],
+goals:[{ro:"Cum „ține” Tomcat-ul încorporat fiecare microserviciu",en:"How the embedded Tomcat \"carries\" each microservice"},{ro:"Ce face un API gateway și cum se cheamă serviciile între ele",en:"What an API gateway does and how services call each other"},{ro:"Apeluri sincrone (REST) vs. asincrone (Kafka)",en:"Synchronous (REST) vs asynchronous (Kafka) calls"},{ro:"Timeout, retry, circuit breaker, health checks, tracing",en:"Timeouts, retries, circuit breakers, health checks, tracing"}],
+foot:{ro:"Arhitectură tipică: Spring Boot 3 (Tomcat 10.1 încorporat), Kubernetes, Kafka, PostgreSQL, Resilience4j, OpenTelemetry. Numele și cifrele sunt exemple.",en:"A typical architecture: Spring Boot 3 (embedded Tomcat 10.1), Kubernetes, Kafka, PostgreSQL, Resilience4j, OpenTelemetry. Names and numbers are examples."},
+ui:{frameT:{ro:"Mesajul (live)",en:"The message (live)"},refT:{ro:"Tipare de producție și configurare",en:"Production patterns and configuration"},refLead:{ro:"Monolit vs. microservicii, tiparele de reziliență, configurarea Spring Boot și Kubernetes pentru un serviciu.",en:"Monolith vs microservices, resilience patterns, and Spring Boot and Kubernetes configuration for one service."}},
+tryT:{ro:"Încearcă (într-un proiect Spring Boot sau cluster)",en:"Try it (in a Spring Boot project or cluster)"},
+legend:[["lg-app","HTTP",{ro:"cerere",en:"request"}],["lg-tcp","HTTP",{ro:"răspuns",en:"response"}],["lg-arp","EVENT",{ro:"eveniment Kafka",en:"Kafka event"}],["lg-eth","SQL",{ro:"bază de date",en:"database"}]],
+
+nodes:{
+  user:{type:"user",name:{ro:"Aplicația mobilă",en:"Mobile app"},lines:["203.0.113.40"]},
+  gw:{type:"box",name:"API Gateway",lines:["Ingress"]},
+  orders:{type:"pod",name:"orders",lines:["Tomcat :8080 ×3"]},
+  inv:{type:"pod",name:"inventory",lines:["Tomcat :8080 ×2"]},
+  pay:{type:"pod",name:"payments",lines:["Tomcat :8080 ×2"]},
+  odb:{type:"db",name:"orders-db",lines:["PostgreSQL"]},
+  kafka:{type:"queue",name:"Kafka",lines:["topic: orders"]},
+  notif:{type:"pod",name:"notification",lines:[{ro:"consumator",en:"consumer"}]}
+},
+links:[["user","gw"],["gw","orders"],["orders","inv"],["orders","pay"],["orders","odb"],["orders","kafka"],["kafka","notif"]],
+layouts:{
+  wide:{vb:[0,0,1000,480],n:{user:[60,230],gw:[210,230],orders:[400,230],inv:[640,90],pay:[640,230],odb:[180,400],kafka:[640,390],notif:[860,390]},
+    side:{inv:"right"},
+    zones:[{x:135,y:20,w:855,h:450,top:true,l:{ro:"Cluster Kubernetes · namespace shop",en:"Kubernetes cluster · namespace shop"}}]},
+  narrow:{vb:[0,0,360,650],n:{user:[60,60],gw:[60,195],orders:[180,300],odb:[60,335],inv:[300,175],pay:[300,300],kafka:[318,430],notif:[318,570]},
+    side:{user:"right",notif:"left",kafka:"left"},
+    zones:[{x:4,y:122,w:352,h:520,top:true,l:{ro:"Cluster · namespace shop",en:"Cluster · namespace shop"}}]}
+},
+groups:[
+  {id:"route",color:"l3",fields:["from","to"],name:{ro:"Cine → cine",en:"Who → whom"},short:{ro:"Drum",en:"Route"},grow:2},
+  {id:"http",color:"l7",fields:["req","auth","xuser","trace","idem","status","body"],name:"HTTP",short:"HTTP",grow:4},
+  {id:"svc",color:"l2",fields:["thread","timeout"],name:{ro:"În serviciu (Tomcat)",en:"Inside the service (Tomcat)"},short:"Tomcat",grow:2},
+  {id:"evt",color:"arp",fields:["topic","event"],name:{ro:"Eveniment Kafka",en:"Kafka event"},short:"Kafka",grow:2},
+  {id:"db",color:"l4",fields:["sql"],name:"SQL",short:"SQL",grow:2}
+],
+fieldLabels:{from:{ro:"De la",en:"From"},to:{ro:"Către",en:"To"},req:{ro:"Cerere",en:"Request"},auth:"Authorization",xuser:{ro:"Utilizator (de la gateway)",en:"User (from gateway)"},trace:"traceparent",idem:"Idempotency-Key",status:{ro:"Stare",en:"Status"},body:{ro:"Conținut",en:"Body"},
+  thread:"Thread",timeout:"Timeout",topic:"Topic",event:{ro:"Eveniment",en:"Event"},sql:"SQL"},
+pdu:f=>f.topic?{badge:{ro:"Eveniment Kafka",en:"Kafka event"},tok:["EVENT","k-arp"]}:f.sql?{badge:{ro:"Tranzacție SQL",en:"SQL transaction"},tok:["SQL","k-data"]}:f.status?{badge:{ro:"Răspuns HTTP",en:"HTTP response"},tok:["HTTP","k-tcp"]}:{badge:{ro:"Cerere HTTP",en:"HTTP request"},tok:["HTTP","k-app"]},
+
+tables:{
+  services:{title:{ro:"Serviciile (fiecare = un Deployment)",en:"The services (each = a Deployment)"},cols:[{ro:"Serviciu",en:"Service"},{ro:"Rulează",en:"Runs"},{ro:"Replici",en:"Replicas"},{ro:"Date proprii",en:"Own data"}],
+    rows:()=>[["gateway","Spring Cloud Gateway (Netty)","2","—"],["orders","Spring Boot 3 · Tomcat 10.1","3","orders-db"],["inventory","Spring Boot 3 · Tomcat 10.1","2","inventory-db"],["payments","Spring Boot 3 · Tomcat 10.1","2","payments-db"],["notification",{ro:"Spring Boot 3 · consumator Kafka",en:"Spring Boot 3 · Kafka consumer"},"2","—"]]},
+  routes:{title:{ro:"Rutele gateway-ului",en:"Gateway routes"},cols:[{ro:"Cale",en:"Path"},{ro:"Merge la",en:"Goes to"},{ro:"Reguli",en:"Rules"}],
+    rows:()=>[["/api/orders/**","http://orders:8080",{ro:"StripPrefix=1 · JWT obligatoriu · 100 cereri/min",en:"StripPrefix=1 · JWT required · 100 req/min"}],["/api/stock/**","http://inventory:8080",{ro:"public, cache 10 s",en:"public, 10 s cache"}],["/api/pay/**",{ro:"— (nu e expus în exterior)",en:"— (not exposed outside)"},""]]},
+  tomcatOrders:{title:{ro:"Tomcat-ul din podul orders-7c9d",en:"Tomcat in pod orders-7c9d"},cols:[{ro:"Indicator",en:"Metric"},{ro:"Valoare",en:"Value"}],
+    rows:()=>[["server.tomcat.threads.max","200"],[{ro:"Threads ocupate",en:"Busy threads"},"14"],["tomcat_sessions_active","0 (stateless, JWT)"],[{ro:"Pornit în",en:"Started in"},"4.1 s"],[{ro:"Memorie (heap)",en:"Memory (heap)"},"312 MB / 768 MB"]]},
+  calls:{title:{ro:"Apelurile făcute de orders pentru o comandă",en:"Calls orders makes for one order"},cols:[{ro:"Către",en:"To"},{ro:"Tip",en:"Kind"},{ro:"Timeout",en:"Timeout"},{ro:"Dacă eșuează",en:"If it fails"}],
+    rows:()=>[["inventory",{ro:"REST sincron",en:"sync REST"},"2 s",{ro:"comanda e respinsă (stoc necunoscut)",en:"order rejected (unknown stock)"}],["payments",{ro:"REST sincron",en:"sync REST"},"3 s",{ro:"comanda rămâne PENDING, se reîncearcă",en:"order stays PENDING, retried"}],["orders-db","JDBC","2 s",{ro:"rollback, eroare 500",en:"rollback, 500 error"}],["kafka",{ro:"asincron (outbox)",en:"async (outbox)"},"—",{ro:"se retrimite automat mai târziu",en:"resent automatically later"}]]},
+  outbox:{title:{ro:"Tabelul outbox din orders-db",en:"The outbox table in orders-db"},cols:["id",{ro:"Eveniment",en:"Event"},{ro:"Trimis la Kafka",en:"Sent to Kafka"}],
+    rows:()=>[["991","OrderCreated #7781",{ro:"da, după 40 ms",en:"yes, after 40 ms"}]]},
+  kafkaT:{title:{ro:"Topic-ul „orders” în Kafka",en:"The \"orders\" topic in Kafka"},cols:[{ro:"Consumator (grup)",en:"Consumer (group)"},{ro:"Poziție citită",en:"Offset read"},{ro:"Rămas de citit",en:"Lag"}],
+    rows:()=>[["notification","18 204","0"],["analytics","18 150","54"],["loyalty-points","18 204","0"]]},
+  cascade:{title:{ro:"Fără timeout: ce arată metricile",en:"Without timeouts: what the metrics show"},cols:[{ro:"Serviciu",en:"Service"},{ro:"Threads Tomcat ocupate",en:"Busy Tomcat threads"},{ro:"Stare",en:"State"}],
+    rows:()=>[["payments","200 / 200",{ro:"lent (bancă externă lentă)",en:"slow (external bank is slow)"}],["orders","200 / 200",{ro:"toate așteaptă după payments",en:"all waiting on payments"}],["gateway",{ro:"mii de conexiuni deschise",en:"thousands of open connections"},{ro:"504 pentru tot /api/orders",en:"504 for all /api/orders"}],["inventory","3 / 200",{ro:"sănătos, dar nimeni nu mai ajunge la el",en:"healthy, but nobody reaches it"}]]},
+  breaker:{title:{ro:"Circuit breaker „payments” (în orders)",en:"Circuit breaker \"payments\" (in orders)"},cols:[{ro:"Setare / stare",en:"Setting / state"},{ro:"Valoare",en:"Value"}],
+    rows:()=>[[{ro:"Stare",en:"State"},"OPEN"],[{ro:"Rata de eșec (ultimele 50 apeluri)",en:"Failure rate (last 50 calls)"},"62% > 50%"],[{ro:"Rămâne deschis",en:"Stays open for"},"30 s"],[{ro:"Apoi",en:"Then"},{ro:"HALF_OPEN: lasă 5 apeluri de probă",en:"HALF_OPEN: lets 5 trial calls through"}],[{ro:"Threads orders ocupate",en:"Busy orders threads"},"21 / 200"]]},
+  trace:{title:{ro:"Trace 4bf92f35…a0c1 (OpenTelemetry)",en:"Trace 4bf92f35…a0c1 (OpenTelemetry)"},cols:["Span",{ro:"Serviciu",en:"Service"},{ro:"Început",en:"Start"},{ro:"Durată",en:"Duration"}],idx:true,
+    rows:()=>[["1","gateway → orders POST /orders","0 ms","214 ms"],["2","orders → inventory GET /stock","6 ms","12 ms"],["3","orders → payments POST /charges","20 ms","151 ms"],["4","orders → orders-db INSERT","174 ms","9 ms"],["5","orders → kafka (outbox)","186 ms","3 ms"],["6","kafka → notification","226 ms","38 ms"]]},
+  probes:{title:{ro:"Cum află Kubernetes starea unui serviciu",en:"How Kubernetes learns a service's state"},cols:[{ro:"Verificare",en:"Check"},{ro:"Adresă (Spring Actuator)",en:"Endpoint (Spring Actuator)"},{ro:"Dacă eșuează",en:"If it fails"}],
+    rows:()=>[["startupProbe","/actuator/health/liveness",{ro:"încă pornește; nu e verificat altceva",en:"still starting; nothing else is checked"}],["readinessProbe","/actuator/health/readiness",{ro:"scos din Service: nu mai primește trafic",en:"removed from the Service: no more traffic"}],["livenessProbe","/actuator/health/liveness",{ro:"containerul e repornit",en:"the container is restarted"}],[{ro:"Metrici",en:"Metrics"},"/actuator/prometheus","tomcat_threads_busy_threads, http_server_requests_seconds"]]}
+},
+log:{title:{ro:"Jurnalul mesajelor",en:"Message log"},lead:{ro:"Toate mesajele unei comenzi au același trace ID; doar „span”-ul se schimbă. Așa le găsești împreună în sistemul de tracing.",en:"Every message of one order shares the same trace ID; only the \"span\" changes. That's how you find them together in the tracing system."},
+  first:{ro:"Moment",en:"Moment"},minWidth:620,
+  cols:[{h:{ro:"De la",en:"From"},v:f=>f.from,cls:"ip"},{h:{ro:"Către",en:"To"},v:f=>f.to,cls:"mac"},{h:"Span",v:f=>f.trace?f.trace.split("span ")[1]:"—"},{h:{ro:"Conținut",en:"Content"},v:f=>f.status||f.event||f.sql||f.req}]},
+
+steps:[
+{at:["orders","inv","pay","notif"],frame:null,kind:"none",tables:["services"],
+ title:{ro:"Scenariul: un magazin împărțit în servicii",en:"The scenario: a shop split into services"},
+ body:{ro:`<p>În <a href="../tomcat/index.html">lecția Tomcat</a>, tot magazinul era o singură aplicație (un <strong>monolit</strong>). Acum echipa l-a împărțit în <strong>microservicii</strong>: programe mici, fiecare cu o singură responsabilitate și cu <strong>propria bază de date</strong>.</p>
+<ul><li><strong>orders</strong>: comenzile; <strong>inventory</strong>: stocul; <strong>payments</strong>: plățile; <strong>notification</strong>: e-mailuri și notificări.</li>
+<li>Fiecare e o aplicație <strong>Spring Boot</strong> cu <strong>Tomcat încorporat</strong>, rulată în mai multe copii (pod-uri) în Kubernetes.</li></ul>
+<p>Ana plasează o comandă din aplicația mobilă. Hai s-o urmărim.</p>`,
+ en:`<p>In the <a href="../tomcat/index.html">Tomcat lesson</a>, the whole shop was a single application (a <strong>monolith</strong>). Now the team has split it into <strong>microservices</strong>: small programs, each with one responsibility and its <strong>own database</strong>.</p>
+<ul><li><strong>orders</strong>: orders; <strong>inventory</strong>: stock; <strong>payments</strong>: payments; <strong>notification</strong>: emails and notifications.</li>
+<li>Each one is a <strong>Spring Boot</strong> app with an <strong>embedded Tomcat</strong>, running as several copies (pods) in Kubernetes.</li></ul>
+<p>Ana places an order from the mobile app. Let's follow it.</p>`},
+ more:{ro:`<p>De ce microservicii? Echipe diferite pot lansa independent, fiecare serviciu se scalează după nevoie (de ex. 10 copii de inventory de Black Friday), iar o eroare într-un serviciu nu ar trebui să le oprească pe celelalte. Prețul: mult mai multe apeluri prin rețea, deci mai multe lucruri care pot eșua. Restul lecției arată cum se gestionează asta.</p>`,
+  en:`<p>Why microservices? Different teams can release independently, each service scales as needed (e.g. 10 inventory copies on Black Friday), and a bug in one service shouldn't stop the others. The price: far more network calls, so more things that can fail. The rest of the lesson shows how that's handled.</p>`}},
+
+{at:"orders",frame:null,kind:"none",tables:["tomcatOrders"],who:"orders (Spring Boot)",
+ title:{ro:"Tomcat-ul încorporat: cum „ține” un serviciu",en:"The embedded Tomcat: how it \"carries\" a service"},
+ body:{ro:`<p>Fiecare pod pornește cu <code>java -jar orders.jar</code>. Spring Boot creează <strong>în același proces</strong> un Tomcat cu un singur Connector (<code>:8080</code>), un thread pool și un singur Context: aplicația orders.</p>
+<p>E exact mecanismul din lecția Tomcat (Connector → thread → filtre → DispatcherServlet), dar:</p>
+<ul><li><strong>o aplicație = un Tomcat = un container</strong>; nu mai copiezi WAR-uri în <code>webapps/</code>;</li>
+<li>configurarea e în <code>application.yml</code> (<code>server.tomcat.threads.max</code>), nu în <code>server.xml</code>;</li>
+<li>o versiune nouă = o imagine Docker nouă, lansată pe rând, pod cu pod, fără întrerupere.</li></ul>`,
+ en:`<p>Each pod starts with <code>java -jar orders.jar</code>. Spring Boot creates, <strong>in the same process</strong>, a Tomcat with one Connector (<code>:8080</code>), a thread pool and a single Context: the orders app.</p>
+<p>It's exactly the mechanism from the Tomcat lesson (Connector → thread → filters → DispatcherServlet), but:</p>
+<ul><li><strong>one app = one Tomcat = one container</strong>; you no longer copy WARs into <code>webapps/</code>;</li>
+<li>configuration lives in <code>application.yml</code> (<code>server.tomcat.threads.max</code>), not in <code>server.xml</code>;</li>
+<li>a new version = a new Docker image, rolled out pod by pod with no downtime.</li></ul>`},
+ more:{ro:`<p>Gateway-ul nu folosește Tomcat: Spring Cloud Gateway rulează pe <strong>Netty</strong>, un server „reactiv” care nu ține un thread per cerere. E potrivit pentru un serviciu care doar trimite mai departe mii de cereri și așteaptă răspunsuri. Serviciile cu logică de business și acces la baza de date rămân de obicei pe Tomcat, mai simplu de scris și de depanat.</p>`,
+  en:`<p>The gateway doesn't use Tomcat: Spring Cloud Gateway runs on <strong>Netty</strong>, a "reactive" server that doesn't hold a thread per request. It suits a service that only forwards thousands of requests and waits for responses. Services with business logic and database access usually stay on Tomcat, which is simpler to write and debug.</p>`},
+ try:[{cmd:"kubectl logs -n shop deploy/orders | grep 'Tomcat started'",d:{ro:"Mesajul „Tomcat started on port 8080 (http)” de la pornire.",en:"The startup message \"Tomcat started on port 8080 (http)\"."}},{cmd:"./mvnw spring-boot:run",d:{ro:"Pornește local un proiect Spring Boot, cu Tomcat-ul încorporat.",en:"Starts a Spring Boot project locally, with its embedded Tomcat."}}]},
+
+{at:"user",frame:M1,kind:"req",move:[[["user","gw"]]],log:{ro:"app → gateway",en:"app → gateway"},who:{ro:"Aplicația mobilă",en:"Mobile app"},
+ title:{ro:"Comanda pleacă spre API gateway",en:"The order heads to the API gateway"},
+ body:{ro:`<p>Aplicația trimite <code>POST /api/orders</code> cu produsul și cantitatea. Ana s-a autentificat mai devreme, așa că cererea are antetul <code>Authorization: Bearer …</code> cu un <strong>token JWT</strong>: un document semnat care spune cine e ea.</p>
+<p>Clientul vede <strong>o singură adresă</strong>, <code>api.shop.example.com</code>. Nu știe că în spate sunt cinci servicii.</p>`,
+ en:`<p>The app sends <code>POST /api/orders</code> with the product and quantity. Ana logged in earlier, so the request carries an <code>Authorization: Bearer …</code> header with a <strong>JWT token</strong>: a signed document saying who she is.</p>
+<p>The client sees <strong>one address</strong>, <code>api.shop.example.com</code>. It doesn't know there are five services behind it.</p>`}},
+
+{at:"gw",frame:M2,kind:"req",move:[[["gw","orders"]]],log:{ro:"gateway → orders",en:"gateway → orders"},tables:["routes"],hl:{routes:"/api/orders/**"},who:"API Gateway",
+ title:{ro:"Gateway-ul verifică și trimite la orders",en:"The gateway checks and forwards to orders"},
+ body:{ro:`<p><strong>API gateway</strong>-ul e poarta de intrare. Pentru <code>/api/orders/**</code>:</p>
+<ol><li><strong>Verifică JWT-ul</strong> (semnătură, expirare). Fără token valid → <code>401</code>.</li>
+<li><strong>Limitează</strong> numărul de cereri (100/minut pe utilizator).</li>
+<li>Scoate <code>/api</code> din cale și trimite <code>POST /orders</code> la <code>orders:8080</code>; numele e rezolvat de CoreDNS, ca în <a href="../kubernetes/index.html">lecția Kubernetes</a>.</li>
+<li>Adaugă <code>X-User-Id</code> și pornește un <strong>trace</strong>: antetul <code>traceparent</code>, care va însoți comanda prin toate serviciile.</li></ol>`,
+ en:`<p>The <strong>API gateway</strong> is the front door. For <code>/api/orders/**</code> it:</p>
+<ol><li><strong>Checks the JWT</strong> (signature, expiry). No valid token → <code>401</code>.</li>
+<li><strong>Rate-limits</strong> requests (100/minute per user).</li>
+<li>Strips <code>/api</code> from the path and sends <code>POST /orders</code> to <code>orders:8080</code>; the name is resolved by CoreDNS, as in the <a href="../kubernetes/index.html">Kubernetes lesson</a>.</li>
+<li>Adds <code>X-User-Id</code> and starts a <strong>trace</strong>: the <code>traceparent</code> header, which will follow the order through every service.</li></ol>`}},
+
+{at:"orders",frame:M3,kind:"req",log:{ro:"orders: thread Tomcat",en:"orders: Tomcat thread"},tables:["tomcatOrders"],hl:{tomcatOrders:[1]},who:"orders",
+ title:{ro:"Tomcat-ul din orders preia cererea",en:"orders' Tomcat takes the request"},
+ body:{ro:`<p>Service-ul Kubernetes a ales unul dintre cele 3 pod-uri orders. În el, Tomcat-ul încorporat face ce știi deja: Connector-ul acceptă conexiunea, un thread (<code>exec-3</code>) preia cererea, filtrele citesc <code>traceparent</code> și utilizatorul, iar <code>OrderController.create()</code> începe lucrul.</p>
+<p class="key">Thread-ul <code>exec-3</code> rămâne ocupat <strong>până când orders răspunde</strong>, inclusiv cât timp așteaptă după inventory și payments.</p>`,
+ en:`<p>The Kubernetes Service picked one of the 3 orders pods. Inside it, the embedded Tomcat does what you already know: the Connector accepts the connection, a thread (<code>exec-3</code>) takes the request, filters read <code>traceparent</code> and the user, and <code>OrderController.create()</code> starts work.</p>
+<p class="key">Thread <code>exec-3</code> stays busy <strong>until orders replies</strong>, including while it waits for inventory and payments.</p>`},
+ more:{ro:`<p>Serviciile nu țin sesiuni (sunt <strong>stateless</strong>): orice informație despre utilizator vine în cerere (JWT sau X-User-Id). Așa, oricare dintre cele 3 copii poate răspunde, iar Kubernetes poate porni sau opri copii oricând.</p>`,
+  en:`<p>The services keep no sessions (they're <strong>stateless</strong>): everything about the user comes in the request (JWT or X-User-Id). So any of the 3 copies can answer, and Kubernetes can start or stop copies at any time.</p>`}},
+
+{at:"orders",frame:M4,kind:"req",move:[[["orders","inv"]]],log:{ro:"orders → inventory",en:"orders → inventory"},tables:["calls"],hl:{calls:"inventory"},who:"orders",
+ title:{ro:"Apel sincron: e produsul pe stoc?",en:"Synchronous call: is the product in stock?"},
+ body:{ro:`<p>Orders întreabă inventory, prin <strong>REST</strong>: <code>GET /stock/SKU-123</code>. E un apel <strong>sincron</strong>: thread-ul <code>exec-3</code> din orders așteaptă răspunsul.</p>
+<ul><li>Antetul <code>traceparent</code> merge mai departe, cu același trace ID și un <strong>span</strong> nou (2).</li>
+<li>Apelul are un <strong>timeout de 2 s</strong>: dacă inventory nu răspunde la timp, orders renunță în loc să aștepte la nesfârșit.</li></ul>`,
+ en:`<p>Orders asks inventory over <strong>REST</strong>: <code>GET /stock/SKU-123</code>. It's a <strong>synchronous</strong> call: thread <code>exec-3</code> in orders waits for the answer.</p>
+<ul><li>The <code>traceparent</code> header is passed on, with the same trace ID and a new <strong>span</strong> (2).</li>
+<li>The call has a <strong>2 s timeout</strong>: if inventory doesn't answer in time, orders gives up instead of waiting forever.</li></ul>`}},
+
+{at:"inv",frame:M5,kind:"req",move:[[["inv","orders"]]],log:{ro:"inventory → orders",en:"inventory → orders"},who:"inventory",
+ title:{ro:"Inventory răspunde: 5 bucăți",en:"Inventory answers: 5 in stock"},
+ body:{ro:`<p>În podul inventory, <strong>alt Tomcat</strong> a dat cererii un thread al lui, a citit din <code>inventory-db</code> și a răspuns în 12 ms: <code>{"available": 5}</code>.</p>
+<p>Orders nu știe nimic despre baza de date a lui inventory; vorbește doar cu API-ul lui. Asta permite echipei inventory să-și schimbe baza de date fără să afecteze pe nimeni.</p>`,
+ en:`<p>In the inventory pod, <strong>another Tomcat</strong> gave the request one of its threads, read from <code>inventory-db</code> and answered in 12 ms: <code>{"available": 5}</code>.</p>
+<p>Orders knows nothing about inventory's database; it only talks to its API. That lets the inventory team change their database without affecting anyone.</p>`}},
+
+{at:"orders",frame:M6,kind:"req",move:[[["orders","pay"]]],log:{ro:"orders → payments",en:"orders → payments"},tables:["calls"],hl:{calls:"payments"},who:"orders",
+ title:{ro:"Plata, cu cheie de idempotență",en:"The payment, with an idempotency key"},
+ body:{ro:`<p>Orders cere plata: <code>POST /charges</code>, 249,99 RON. Apar două lucruri noi:</p>
+<ul><li><code>Idempotency-Key: ord-7781</code>: dacă orders retrimite cererea (de ex. după un timeout), payments recunoaște cheia și <strong>nu încasează de două ori</strong>.</li>
+<li>Timeout de <strong>3 s</strong>, pentru că payments vorbește la rândul lui cu banca.</li></ul>`,
+ en:`<p>Orders asks for the payment: <code>POST /charges</code>, 249.99 RON. Two new things appear:</p>
+<ul><li><code>Idempotency-Key: ord-7781</code>: if orders resends the request (e.g. after a timeout), payments recognises the key and <strong>doesn't charge twice</strong>.</li>
+<li>A <strong>3 s</strong> timeout, because payments in turn talks to the bank.</li></ul>`},
+ more:{ro:`<p>Retry-urile sunt utile pentru erori trecătoare, dar periculoase pentru operații care modifică ceva. Regula: reîncerci doar cereri <strong>idempotente</strong> (GET-uri sau cereri cu cheie de idempotență), cu <strong>pauze tot mai mari</strong> între încercări (backoff), ca să nu copleșești un serviciu deja în dificultate.</p>`,
+  en:`<p>Retries help with transient errors but are dangerous for operations that change something. The rule: only retry <strong>idempotent</strong> requests (GETs, or requests with an idempotency key), with <strong>growing pauses</strong> between attempts (backoff), so you don't swamp a service that's already struggling.</p>`}},
+
+{at:"pay",frame:M7,kind:"req",move:[[["pay","orders"]]],log:{ro:"payments → orders",en:"payments → orders"},who:"payments",
+ title:{ro:"Plata e aprobată",en:"The payment is approved"},
+ body:{ro:`<p>Payments a vorbit cu banca și răspunde <code>201 Created</code>, cu ID-ul plății. A durat 151 ms, cea mai lungă parte a comenzii.</p>`,
+ en:`<p>Payments talked to the bank and answers <code>201 Created</code> with the charge ID. It took 151 ms, the longest part of the order.</p>`}},
+
+{at:"orders",frame:M8,kind:"req",move:[[["orders","odb"]]],log:{ro:"orders → orders-db",en:"orders → orders-db"},tables:["outbox"],who:"orders",
+ title:{ro:"Salvarea comenzii, într-o singură tranzacție",en:"Saving the order, in a single transaction"},
+ body:{ro:`<p>Orders scrie comanda în <strong>propria</strong> bază de date. În <strong>aceeași tranzacție</strong> scrie și un rând în tabelul <code>outbox</code>: „trebuie anunțat OrderCreated #7781”.</p>
+<p>De ce așa? Dacă orders ar scrie în baza de date și apoi ar trimite separat la Kafka, o cădere între cele două ar pierde evenimentul. Cu <strong>outbox</strong>, ori se salvează amândouă, ori niciuna.</p>`,
+ en:`<p>Orders writes the order into its <strong>own</strong> database. In the <strong>same transaction</strong> it also writes a row to the <code>outbox</code> table: "OrderCreated #7781 must be announced".</p>
+<p>Why? If orders wrote to the database and then sent to Kafka separately, a crash between the two would lose the event. With the <strong>outbox</strong>, either both are saved or neither is.</p>`}},
+
+{at:"orders",frame:M9,kind:"req",move:[[["orders","kafka"]]],log:{ro:"orders → Kafka",en:"orders → Kafka"},tables:["kafkaT"],who:"orders",
+ title:{ro:"Evenimentul pleacă în Kafka (asincron)",en:"The event goes to Kafka (asynchronously)"},
+ body:{ro:`<p>Un proces din orders citește outbox-ul și publică <code>OrderCreated</code> în topic-ul <strong>orders</strong> din <strong>Kafka</strong>.</p>
+<p>Comunicarea e <strong>asincronă</strong>: orders nu știe și nu așteaptă cine citește evenimentul. Pe topic sunt abonate trei servicii (notification, analytics, loyalty-points), fiecare citind în ritmul lui.</p>`,
+ en:`<p>A process in orders reads the outbox and publishes <code>OrderCreated</code> to the <strong>orders</strong> topic in <strong>Kafka</strong>.</p>
+<p>The communication is <strong>asynchronous</strong>: orders doesn't know or wait for whoever reads the event. Three services subscribe to the topic (notification, analytics, loyalty-points), each reading at its own pace.</p>`},
+ more:{ro:`<p>Regula practică: folosește apeluri <strong>sincrone</strong> când ai nevoie de răspuns <em>acum</em> (e pe stoc? a trecut plata?) și <strong>evenimente</strong> pentru ce poate întârzia câteva secunde (e-mail, statistici, puncte de fidelitate). Fiecare apel sincron în plus înseamnă încă un serviciu care, dacă e lent, te face și pe tine lent.</p>`,
+  en:`<p>Rule of thumb: use <strong>synchronous</strong> calls when you need an answer <em>now</em> (in stock? payment through?) and <strong>events</strong> for things that can wait a few seconds (email, analytics, loyalty points). Every extra synchronous call is one more service that, when it's slow, makes you slow too.</p>`}},
+
+{at:"orders",frame:M10,kind:"req",move:[[["orders","gw"]],[["gw","user"]]],log:{ro:"orders → app",en:"orders → app"},who:"orders",
+ title:{ro:"Răspunsul: comanda e confirmată",en:"The reply: the order is confirmed"},
+ body:{ro:`<p>Orders răspunde <code>201 Created</code>, iar gateway-ul trimite răspunsul aplicației. Thread-ul <code>exec-3</code> se întoarce în pool. Total: <strong>214 ms</strong>.</p>
+<p>Ana vede „Comanda #7781 a fost confirmată”, deși e-mailul de confirmare <strong>nu a plecat încă</strong>. Asta se întâmplă în paralel.</p>`,
+ en:`<p>Orders answers <code>201 Created</code> and the gateway passes the reply to the app. Thread <code>exec-3</code> returns to the pool. Total: <strong>214 ms</strong>.</p>
+<p>Ana sees "Order #7781 confirmed", even though the confirmation email <strong>hasn't gone out yet</strong>. That happens in parallel.</p>`}},
+
+{at:"kafka",frame:M11,kind:"req",move:[[["kafka","notif"]]],log:{ro:"Kafka → notification",en:"Kafka → notification"},tables:["kafkaT"],hl:{kafkaT:"notification"},who:"notification",
+ title:{ro:"Notificarea citește evenimentul și trimite e-mailul",en:"Notification reads the event and sends the email"},
+ body:{ro:`<p>Serviciul notification citește <code>OrderCreated #7781</code> și trimite e-mailul. Dacă ar fi fost oprit pentru o actualizare, evenimentul l-ar fi așteptat în Kafka; la repornire, ar fi continuat de unde a rămas (<strong>offset</strong>-ul).</p>
+<p class="key">Avantajul asincron: o problemă la notification <strong>nu împiedică</strong> plasarea comenzilor.</p>`,
+ en:`<p>The notification service reads <code>OrderCreated #7781</code> and sends the email. Had it been stopped for an update, the event would have waited in Kafka; on restart it would have carried on from where it left off (the <strong>offset</strong>).</p>
+<p class="key">The asynchronous advantage: a problem in notification <strong>doesn't block</strong> placing orders.</p>`}},
+
+{at:["pay","orders","gw"],frame:SLOW,kind:"fail",move:[[["orders","pay"]]],tables:["cascade"],marks:{pay:{k:"drop",t:{ro:"lent",en:"slow"}},orders:{k:"drop",t:{ro:"200/200 blocate",en:"200/200 stuck"}},gw:{k:"drop",t:"504"}},who:{ro:"Defecțiune în cascadă",en:"Cascading failure"},
+ title:{ro:"Problema: un serviciu lent le blochează pe toate",en:"The problem: one slow service blocks them all"},
+ body:{ro:`<p>Vineri seara, banca răspunde greu, iar payments ajunge să răspundă în 30 s. Imaginează-ți că apelul din orders <strong>nu are timeout</strong>:</p>
+<ol><li>Fiecare comandă ține un thread Tomcat din orders <strong>30 de secunde</strong>.</li>
+<li>În câteva secunde, <strong>toate cele 200 de thread-uri</strong> din fiecare pod orders așteaptă după payments.</li>
+<li>Orders nu mai poate răspunde la <em>nimic</em>, nici măcar la „lista comenzilor mele”, care nu are legătură cu plățile.</li>
+<li>Gateway-ul acumulează conexiuni și întoarce <code>504</code>.</li></ol>
+<p class="key">Exact blocarea din lecția Tomcat, dar mutată între servicii: <strong>un thread pool plin se propagă în amonte</strong>.</p>`,
+ en:`<p>Friday evening, the bank is slow and payments ends up taking 30 s to answer. Imagine the call from orders <strong>has no timeout</strong>:</p>
+<ol><li>Every order holds an orders Tomcat thread for <strong>30 seconds</strong>.</li>
+<li>Within seconds, <strong>all 200 threads</strong> in each orders pod are waiting on payments.</li>
+<li>Orders can't answer <em>anything</em> any more, not even "my orders list", which has nothing to do with payments.</li>
+<li>The gateway piles up connections and returns <code>504</code>.</li></ol>
+<p class="key">Exactly the lock-up from the Tomcat lesson, but spread between services: <strong>a full thread pool propagates upstream</strong>.</p>`}},
+
+{at:"orders",frame:FAST,kind:"fail",move:[[["orders","pay"]],[["pay","orders"]]],tables:["breaker"],hl:{breaker:[0]},marks:{orders:{k:"ok",t:{ro:"21/200 ocupate",en:"21/200 busy"}}},who:{ro:"Reziliență",en:"Resilience"},
+ title:{ro:"Soluția: timeout, circuit breaker, bulkhead",en:"The fix: timeouts, a circuit breaker, a bulkhead"},
+ body:{ro:`<p>Cu protecțiile puse (de ex. cu <strong>Resilience4j</strong>):</p>
+<ul><li><strong>Timeout 3 s</strong>: un thread nu mai așteaptă 30 s.</li>
+<li><strong>Circuit breaker</strong>: după ce 50% din ultimele apeluri au eșuat, „circuitul se deschide” și orders <strong>nu mai sună deloc</strong> la payments 30 s, ci răspunde imediat cu o eroare sau o alternativă (comanda rămâne <em>PENDING</em>, plata se reîncearcă mai târziu).</li>
+<li><strong>Bulkhead</strong>: cel mult 20 de thread-uri pot fi ocupate cu payments în același timp; restul rămân libere pentru celelalte funcții.</li></ul>
+<p>Rezultat: payments e tot lent, dar orders, gateway-ul și restul magazinului <strong>funcționează</strong>.</p>`,
+ en:`<p>With the protections in place (e.g. with <strong>Resilience4j</strong>):</p>
+<ul><li>A <strong>3 s timeout</strong>: a thread no longer waits 30 s.</li>
+<li>A <strong>circuit breaker</strong>: once 50% of recent calls have failed, "the circuit opens" and orders <strong>stops calling</strong> payments for 30 s, answering straight away with an error or a fallback instead (the order stays <em>PENDING</em> and the payment is retried later).</li>
+<li>A <strong>bulkhead</strong>: at most 20 threads can be busy with payments at once; the rest stay free for other features.</li></ul>
+<p>The result: payments is still slow, but orders, the gateway and the rest of the shop <strong>keep working</strong>.</p>`},
+ try:[{cmd:"curl -s localhost:8080/actuator/circuitbreakers",d:{ro:"Starea circuit breaker-elor într-un serviciu Spring Boot cu Resilience4j.",en:"The circuit breakers' state in a Spring Boot service with Resilience4j."}}]},
+
+{at:["orders","inv","pay","notif"],frame:null,kind:"none",tables:["trace","probes"],who:{ro:"Operare",en:"Operations"},
+ title:{ro:"Cum vezi ce se întâmplă: tracing, metrici, health checks",en:"How you see what's going on: tracing, metrics, health checks"},
+ body:{ro:`<p>Cu cinci servicii, „unde e problema?” devine greu de răspuns. Trei instrumente:</p>
+<ul><li><strong>Tracing</strong> (OpenTelemetry, Jaeger, Tempo): toate span-urile cu același trace ID formează „cascada” din dreapta: vezi imediat că plata a luat 151 din cele 214 ms.</li>
+<li><strong>Metrici</strong> (Prometheus, Grafana): <code>tomcat_threads_busy_threads</code>, durata cererilor, rata de erori, pentru fiecare serviciu.</li>
+<li><strong>Health checks</strong>: Kubernetes întreabă periodic <code>/actuator/health/readiness</code> și <code>/liveness</code>, scoate din trafic copiile bolnave și le repornește.</li></ul>
+<p>Plus <strong>loguri</strong> centralizate, cu trace ID în fiecare linie.</p>`,
+ en:`<p>With five services, "where's the problem?" gets hard to answer. Three tools:</p>
+<ul><li><strong>Tracing</strong> (OpenTelemetry, Jaeger, Tempo): all spans with the same trace ID form the "waterfall" on the right: you instantly see payments took 151 of the 214 ms.</li>
+<li><strong>Metrics</strong> (Prometheus, Grafana): <code>tomcat_threads_busy_threads</code>, request duration, error rate, per service.</li>
+<li><strong>Health checks</strong>: Kubernetes regularly calls <code>/actuator/health/readiness</code> and <code>/liveness</code>, takes sick copies out of traffic and restarts them.</li></ul>
+<p>Plus centralised <strong>logs</strong>, with the trace ID on every line.</p>`},
+ more:{ro:`<p>Atenție la readiness: dacă verificarea de readiness a lui orders verifică și payments, o problemă la payments scoate <em>toate</em> pod-urile orders din trafic. Readiness ar trebui să verifice doar ce ține de serviciul însuși (de ex. propria bază de date).</p><p><strong>Scalare automată</strong>: HorizontalPodAutoscaler adaugă copii când crește CPU-ul sau numărul de cereri, iar fiecare copie nouă are propriul Tomcat cu 200 de thread-uri.</p>`,
+  en:`<p>Careful with readiness: if orders' readiness check also checks payments, a problem in payments takes <em>every</em> orders pod out of traffic. Readiness should only check what belongs to the service itself (e.g. its own database).</p><p><strong>Autoscaling</strong>: the HorizontalPodAutoscaler adds copies when CPU or request count rises, and every new copy brings its own Tomcat with 200 threads.</p>`},
+ try:[{cmd:"kubectl get hpa -n shop",d:{ro:"Câte copii are fiecare serviciu și de ce s-a scalat.",en:"How many copies each service has and why it scaled."}},{cmd:"kubectl describe pod -n shop -l app=orders | grep -A3 Readiness",d:{ro:"Configurarea verificării de readiness.",en:"The readiness check configuration."}}]},
+
+{at:["gw","orders","kafka"],frame:null,kind:"none",summary:true,
+ title:{ro:"Recapitulare",en:"Recap"},
+ body:{ro:`<div class="flow"><span>app</span><i>→</i><span>gateway</span><i>→</i><span>orders</span><i>⇄</i><span>inventory</span><i>⇄</i><span>payments</span><i>→</i><span>DB + outbox</span><i>⇢</i><span>Kafka</span><i>⇢</i><span>notification</span></div>
+<ul><li>Fiecare microserviciu e o aplicație Spring Boot cu <strong>propriul Tomcat încorporat</strong>: un Connector, un thread pool, un Context.</li>
+<li><strong>Gateway</strong>-ul verifică identitatea, limitează traficul, rutează și pornește trace-ul.</li>
+<li>Apelurile <strong>sincrone</strong> țin un thread ocupat; fiecare are nevoie de <strong>timeout</strong>.</li>
+<li><strong>Evenimentele</strong> (Kafka + outbox) decuplează serviciile pentru tot ce poate aștepta.</li>
+<li>Un serviciu lent poate umple thread pool-urile celor care îl apelează: <strong>circuit breaker</strong> și <strong>bulkhead</strong> opresc cascada.</li>
+<li><strong>Tracing, metrici, health checks</strong> îți arată unde e problema și scot automat copiile bolnave.</li></ul>
+<p><button type="button" class="btn primary" data-goto="quiz">Mergi la test ↓</button></p>`,
+ en:`<div class="flow"><span>app</span><i>→</i><span>gateway</span><i>→</i><span>orders</span><i>⇄</i><span>inventory</span><i>⇄</i><span>payments</span><i>→</i><span>DB + outbox</span><i>⇢</i><span>Kafka</span><i>⇢</i><span>notification</span></div>
+<ul><li>Each microservice is a Spring Boot app with its <strong>own embedded Tomcat</strong>: one Connector, one thread pool, one Context.</li>
+<li>The <strong>gateway</strong> checks identity, limits traffic, routes and starts the trace.</li>
+<li><strong>Synchronous</strong> calls hold a thread; each one needs a <strong>timeout</strong>.</li>
+<li><strong>Events</strong> (Kafka + outbox) decouple services for anything that can wait.</li>
+<li>A slow service can fill the thread pools of its callers: a <strong>circuit breaker</strong> and a <strong>bulkhead</strong> stop the cascade.</li>
+<li><strong>Tracing, metrics and health checks</strong> show you where the problem is and remove sick copies automatically.</li></ul>
+<p><button type="button" class="btn primary" data-goto="quiz">Go to the quiz ↓</button></p>`}}
+],
+
+reference:(T,lang)=>{
+  const ro=lang==="ro";
+  const cmp=[
+    [{ro:"Lansare",en:"Releasing"},{ro:"Tot sau nimic; o singură echipă coordonează",en:"All or nothing; one team coordinates"},{ro:"Fiecare serviciu separat, de echipa lui",en:"Each service separately, by its own team"}],
+    [{ro:"Scalare",en:"Scaling"},{ro:"Copiezi toată aplicația",en:"You copy the whole app"},{ro:"Doar serviciul aglomerat",en:"Only the busy service"}],
+    [{ro:"Apeluri între părți",en:"Calls between parts"},{ro:"Apeluri de funcții în același proces (nanosecunde)",en:"Function calls in one process (nanoseconds)"},{ro:"Apeluri prin rețea (milisecunde, pot eșua)",en:"Network calls (milliseconds, can fail)"}],
+    [{ro:"Date",en:"Data"},{ro:"O bază de date comună, tranzacții simple",en:"One shared database, simple transactions"},{ro:"O bază per serviciu, consistență prin evenimente",en:"One database per service, consistency via events"}],
+    [{ro:"Depanare",en:"Debugging"},{ro:"Un log, un stack trace",en:"One log, one stack trace"},{ro:"Nevoie de tracing distribuit și loguri centralizate",en:"Needs distributed tracing and central logs"}],
+    [{ro:"Potrivit pentru",en:"Good for"},{ro:"Echipe mici, produse noi",en:"Small teams, new products"},{ro:"Multe echipe, părți cu încărcări foarte diferite",en:"Many teams, parts with very different loads"}]
+  ];
+  let h=`<div class="ref-grid"><section class="card refcard"><h2>${ro?"Monolit sau microservicii?":"Monolith or microservices?"}</h2><div class="scroll"><table class="cmp" style="min-width:480px"><thead><tr><th></th><th>${ro?"Monolit (un Tomcat, un WAR)":"Monolith (one Tomcat, one WAR)"}</th><th>${ro?"Microservicii (un Tomcat per serviciu)":"Microservices (one Tomcat per service)"}</th></tr></thead><tbody>`;
+  cmp.forEach(r=>{h+=`<tr><td>${T(r[0])}</td><td>${T(r[1])}</td><td>${T(r[2])}</td></tr>`});
+  h+=`</tbody></table></div><p class="note">${ro?"Multe companii pornesc cu un monolit bine organizat și scot servicii separate doar când chiar e nevoie.":"Many companies start with a well-organised monolith and split out services only when there's a real need."}</p></section>`;
+  const pat=[
+    ["Timeout",{ro:"Limitează cât aștepți un răspuns.",en:"Limits how long you wait for an answer."},{ro:"Orice apel prin rețea, fără excepție.",en:"Every network call, no exceptions."}],
+    ["Retry + backoff",{ro:"Reîncearcă după pauze tot mai mari.",en:"Retries after growing pauses."},{ro:"Erori trecătoare, doar pentru cereri idempotente.",en:"Transient errors, idempotent requests only."}],
+    ["Circuit breaker",{ro:"Oprește apelurile spre un serviciu care eșuează des.",en:"Stops calls to a service that keeps failing."},{ro:"Dependențe care pot cădea sau încetini.",en:"Dependencies that can go down or slow down."}],
+    ["Bulkhead",{ro:"Limitează câte thread-uri poate ocupa o dependență.",en:"Limits how many threads one dependency can use."},{ro:"Ca o problemă să nu ocupe tot thread pool-ul.",en:"So one problem can't take the whole thread pool."}],
+    ["Rate limiting",{ro:"Limitează câte cereri primești.",en:"Limits how many requests you accept."},{ro:"La gateway, contra abuzului și vârfurilor.",en:"At the gateway, against abuse and spikes."}],
+    ["Outbox",{ro:"Salvează evenimentul în aceeași tranzacție cu datele.",en:"Saves the event in the same transaction as the data."},{ro:"Ca să nu pierzi evenimente la o cădere.",en:"So events aren't lost in a crash."}],
+    [{ro:"Idempotență",en:"Idempotency"},{ro:"Aceeași cerere de două ori are același efect ca o dată.",en:"The same request twice has the same effect as once."},{ro:"Plăți, comenzi, orice cu retry.",en:"Payments, orders, anything retried."}]
+  ];
+  h+=`<section class="card refcard"><h2>${ro?"Tipare de reziliență":"Resilience patterns"}</h2><div class="scroll"><table class="cmp" style="min-width:460px"><thead><tr><th>${ro?"Tipar":"Pattern"}</th><th>${ro?"Ce face":"What it does"}</th><th>${ro?"Când":"When"}</th></tr></thead><tbody>`;
+  pat.forEach(r=>{h+=`<tr><td><span class="pill">${T(r[0])}</span></td><td>${T(r[1])}</td><td>${T(r[2])}</td></tr>`});
+  h+=`</tbody></table></div></section></div>`;
+  h+=`<div class="ref-grid" style="margin-top:12px"><section class="card refcard"><h2>${ro?"application.yml al serviciului orders":"The orders service's application.yml"}</h2>
+<pre class="yaml">server:
+  port: 8080
+  shutdown: graceful            <span class="c"># ${ro?"termină cererile în curs la oprire":"finish in-flight requests on stop"}</span>
+  tomcat:
+    threads:
+      max: 200                  <span class="c"># ${ro?"maxThreads":"maxThreads"}</span>
+    accept-count: 100
+    connection-timeout: 5s
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: 10
+      connection-timeout: 2000  <span class="c"># ms</span>
+management:
+  endpoint.health.probes.enabled: true
+  endpoints.web.exposure.include: health,prometheus
+resilience4j:
+  circuitbreaker.instances.payments:
+    failure-rate-threshold: 50
+    wait-duration-in-open-state: 30s
+  timelimiter.instances.payments:
+    timeout-duration: 3s
+  bulkhead.instances.payments:
+    max-concurrent-calls: 20</pre></section>
+<section class="card refcard"><h2>${ro?"Deployment-ul Kubernetes (fragment)":"The Kubernetes Deployment (excerpt)"}</h2>
+<pre class="yaml">apiVersion: apps/v1
+kind: Deployment
+metadata: { name: orders, namespace: shop }
+spec:
+  replicas: 3
+  strategy:
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+  template:
+    spec:
+      containers:
+        - name: orders
+          image: registry.example.com/orders:1.14.2
+          ports: [ { containerPort: 8080 } ]
+          resources:
+            requests: { cpu: 500m, memory: 768Mi }
+            limits:   { memory: 1Gi }
+          env:
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:MaxRAMPercentage=75"
+          readinessProbe:
+            httpGet: { path: /actuator/health/readiness, port: 8080 }
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: 8080 }
+            initialDelaySeconds: 30</pre>
+<p class="note">${ro?"maxUnavailable: 0 + readinessProbe = lansare fără întrerupere: un pod nou primește trafic doar după ce Tomcat-ul și aplicația au pornit.":"maxUnavailable: 0 + a readinessProbe = zero-downtime releases: a new pod only gets traffic once its Tomcat and app have started."}</p></section></div>`;
+  return h;
+},
+
+gloss:[
+ [{ro:"Microserviciu",en:"Microservice"},null,{ro:"Aplicație mică, cu o singură responsabilitate și propriile date, lansată independent.",en:"A small app with one responsibility and its own data, released independently."}],
+ [{ro:"Monolit",en:"Monolith"},null,{ro:"O singură aplicație care conține toate funcțiile.",en:"A single application that contains every feature."}],
+ ["Spring Boot",null,{ro:"Framework Java care pornește o aplicație completă, cu server web încorporat, dintr-un singur JAR.",en:"A Java framework that starts a complete app, with an embedded web server, from a single JAR."}],
+ [{ro:"Tomcat încorporat",en:"Embedded Tomcat"},null,{ro:"Tomcat folosit ca bibliotecă în aplicație, nu instalat separat.",en:"Tomcat used as a library inside the app, not installed separately."}],
+ ["API Gateway",null,{ro:"Punctul unic de intrare: autentificare, limitare, rutare spre servicii.",en:"The single entry point: authentication, rate limiting, routing to services."}],
+ ["JWT","JSON Web Token",{ro:"Token semnat care spune cine e utilizatorul; serviciile îl verifică fără sesiune.",en:"A signed token saying who the user is; services check it without a session."}],
+ ["REST",null,{ro:"Stil de API peste HTTP: resurse (/orders/7781) și verbe (GET, POST, PUT, DELETE).",en:"An API style over HTTP: resources (/orders/7781) and verbs (GET, POST, PUT, DELETE)."}],
+ [{ro:"Sincron / asincron",en:"Synchronous / asynchronous"},null,{ro:"Sincron: aștepți răspunsul. Asincron: trimiți un mesaj și mergi mai departe.",en:"Synchronous: you wait for the answer. Asynchronous: you send a message and move on."}],
+ ["Kafka",null,{ro:"Sistem de mesaje: serviciile publică evenimente în topic-uri, alții le citesc.",en:"A messaging system: services publish events to topics, others read them."}],
+ ["Offset",null,{ro:"Poziția până la care un consumator a citit un topic Kafka.",en:"How far a consumer has read in a Kafka topic."}],
+ ["Outbox",null,{ro:"Tabel în care evenimentul se salvează în aceeași tranzacție cu datele, apoi e trimis.",en:"A table where the event is saved in the same transaction as the data, then sent."}],
+ [{ro:"Idempotență",en:"Idempotency"},null,{ro:"Proprietatea unei operații de a avea același efect oricâte ori ar fi repetată.",en:"An operation's property of having the same effect however many times it's repeated."}],
+ ["Timeout",null,{ro:"Limită de timp după care renunți să mai aștepți un răspuns.",en:"A time limit after which you stop waiting for an answer."}],
+ ["Circuit breaker",null,{ro:"Mecanism care oprește temporar apelurile spre un serviciu care eșuează des.",en:"A mechanism that temporarily stops calls to a service that keeps failing."}],
+ ["Bulkhead",null,{ro:"Compartiment: limitează resursele pe care le poate ocupa o singură dependență.",en:"A compartment: limits the resources one dependency can take."}],
+ [{ro:"Defecțiune în cascadă",en:"Cascading failure"},null,{ro:"Problema unui serviciu care se întinde la toți cei care îl apelează.",en:"One service's problem spreading to everyone who calls it."}],
+ ["Trace / Span",null,{ro:"Trace: tot drumul unei cereri prin servicii. Span: o bucată din el (un apel).",en:"Trace: a request's whole path through services. Span: one piece of it (one call)."}],
+ ["traceparent",null,{ro:"Antetul HTTP standard (W3C) care duce trace ID-ul de la un serviciu la altul.",en:"The standard (W3C) HTTP header that carries the trace ID between services."}],
+ ["Spring Actuator",null,{ro:"Modul Spring Boot care expune sănătatea, metricile și informații despre aplicație.",en:"A Spring Boot module that exposes health, metrics and app info."}],
+ ["Readiness / Liveness",null,{ro:"Readiness: poate primi trafic? Liveness: mai e viu sau trebuie repornit?",en:"Readiness: can it take traffic? Liveness: is it alive, or should it be restarted?"}],
+ ["Stateless",null,{ro:"Serviciul nu ține date despre utilizator între cereri; orice copie poate răspunde.",en:"The service keeps no user data between requests; any copy can answer."}],
+ ["HPA","Horizontal Pod Autoscaler",{ro:"Componenta Kubernetes care adaugă sau scoate copii după încărcare.",en:"The Kubernetes component that adds or removes copies based on load."}]
+],
+glossEx:{
+ "Microservice":{ro:"payments se ocupă doar de plăți și are baza payments-db; nimeni altcineva nu scrie direct în ea.",en:"payments handles only payments and owns payments-db; nobody else writes to it directly."},
+ "Monolith":{ro:"shop.war din lecția Tomcat: comenzi, stoc, plăți și e-mailuri, toate în aceeași aplicație.",en:"shop.war from the Tomcat lesson: orders, stock, payments and emails, all in one app."},
+ "Spring Boot":{ro:"java -jar orders.jar pornește aplicația cu Tomcat, Spring și pool-ul de conexiuni în ~4 secunde.",en:"java -jar orders.jar starts the app with Tomcat, Spring and the connection pool in ~4 seconds."},
+ "Embedded Tomcat":{ro:"dependența spring-boot-starter-web aduce Tomcat-ul; în log apare „Tomcat started on port 8080”.",en:"the spring-boot-starter-web dependency brings Tomcat; the log shows \"Tomcat started on port 8080\"."},
+ "API Gateway":{ro:"/api/orders/** → orders, /api/stock/** → inventory, totul sub api.shop.example.com.",en:"/api/orders/** → orders, /api/stock/** → inventory, all under api.shop.example.com."},
+ "JWT":{ro:"un token are trei părți separate prin puncte: antet.conținut.semnătură; conținutul poate spune {\"sub\":\"ana-1042\",\"exp\":…}.",en:"a token has three dot-separated parts: header.payload.signature; the payload might say {\"sub\":\"ana-1042\",\"exp\":…}."},
+ "REST":{ro:"GET /orders/7781 citește comanda, POST /orders creează una, DELETE /orders/7781 o anulează.",en:"GET /orders/7781 reads the order, POST /orders creates one, DELETE /orders/7781 cancels it."},
+ "Synchronous / asynchronous":{ro:"sincron: orders așteaptă răspunsul de la inventory; asincron: orders publică OrderCreated și nu așteaptă pe nimeni.",en:"sync: orders waits for inventory's answer; async: orders publishes OrderCreated and waits for no one."},
+ "Kafka":{ro:"topic-ul orders cu 3 partiții, citit de notification, analytics și loyalty-points.",en:"the orders topic with 3 partitions, read by notification, analytics and loyalty-points."},
+ "Offset":{ro:"analytics are lag 54: e cu 54 de evenimente în urmă și le va prinde din urmă.",en:"analytics has a lag of 54: it's 54 events behind and will catch up."},
+ "Outbox":{ro:"INSERT INTO orders … și INSERT INTO outbox … în același COMMIT; un proces trimite apoi rândurile din outbox la Kafka.",en:"INSERT INTO orders … and INSERT INTO outbox … in the same COMMIT; a process then sends the outbox rows to Kafka."},
+ "Idempotency":{ro:"a doua cerere POST /charges cu Idempotency-Key: ord-7781 primește același chargeId, fără o nouă încasare.",en:"a second POST /charges with Idempotency-Key: ord-7781 gets the same chargeId, with no new charge."},
+ "Timeout":{ro:"WebClient … .timeout(Duration.ofSeconds(2)) în codul care cheamă inventory.",en:"WebClient … .timeout(Duration.ofSeconds(2)) in the code that calls inventory."},
+ "Circuit breaker":{ro:"stările CLOSED (normal) → OPEN (nu mai sună 30 s) → HALF_OPEN (5 apeluri de probă) → CLOSED.",en:"the states CLOSED (normal) → OPEN (no calls for 30 s) → HALF_OPEN (5 trial calls) → CLOSED."},
+ "Bulkhead":{ro:"max-concurrent-calls: 20 pentru payments: al 21-lea apel simultan e respins imediat.",en:"max-concurrent-calls: 20 for payments: the 21st simultaneous call is rejected at once."},
+ "Cascading failure":{ro:"bancă lentă → payments lent → toate thread-urile orders blocate → gateway 504 → aplicația mobilă „nu merge”.",en:"slow bank → slow payments → all orders threads stuck → gateway 504 → the mobile app \"doesn't work\"."},
+ "Trace / Span":{ro:"trace 4bf92f35…a0c1 are 6 span-uri; span 3 (payments) a luat 151 din 214 ms.",en:"trace 4bf92f35…a0c1 has 6 spans; span 3 (payments) took 151 of the 214 ms."},
+ "traceparent":{ro:"traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",en:"traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"},
+ "Spring Actuator":{ro:"curl localhost:8080/actuator/health întoarce {\"status\":\"UP\"}.",en:"curl localhost:8080/actuator/health returns {\"status\":\"UP\"}."},
+ "Readiness / Liveness":{ro:"în primele 20 s după pornire, readiness e DOWN (Tomcat pornește), deci podul nu primește încă trafic.",en:"for the first 20 s after start, readiness is DOWN (Tomcat is starting), so the pod gets no traffic yet."},
+ "Stateless":{ro:"orders nu ține sesiuni: utilizatorul vine în JWT, deci oricare din cele 3 copii poate răspunde.",en:"orders keeps no sessions: the user comes in the JWT, so any of the 3 copies can answer."},
+ "HPA":{ro:"„min 3, max 10, țintă CPU 70%”: de Black Friday orders crește singur la 10 copii.",en:"\"min 3, max 10, target CPU 70%\": on Black Friday orders grows to 10 copies by itself."}
+},
+
+quiz:[
+ {q:{ro:"Cum rulează Tomcat într-un microserviciu Spring Boot?",en:"How does Tomcat run in a Spring Boot microservice?"},
+  o:[{ro:"Instalat separat pe server, cu WAR în webapps/",en:"Installed separately on the server, with a WAR in webapps/"},{ro:"Încorporat: pornește în același proces cu aplicația (java -jar)",en:"Embedded: it starts in the same process as the app (java -jar)"},{ro:"Un singur Tomcat pentru toate serviciile",en:"One Tomcat for all the services"},{ro:"Nu folosește Tomcat deloc",en:"It doesn't use Tomcat at all"}],a:1,
+  e:{ro:"Fiecare serviciu are propriul Tomcat încorporat: un Connector, un thread pool, un Context.",en:"Each service has its own embedded Tomcat: one Connector, one thread pool, one Context."}},
+ {q:{ro:"Ce NU face de obicei un API gateway?",en:"What does an API gateway usually NOT do?"},
+  o:[{ro:"Verifică token-ul JWT",en:"Check the JWT token"},{ro:"Limitează numărul de cereri",en:"Limit the number of requests"},{ro:"Calculează prețul comenzii",en:"Calculate the order's price"},{ro:"Trimite cererea la serviciul potrivit",en:"Send the request to the right service"}],a:2,
+  e:{ro:"Logica de business stă în servicii (orders). Gateway-ul se ocupă de lucruri comune: securitate, limite, rutare.",en:"Business logic lives in the services (orders). The gateway handles shared concerns: security, limits, routing."}},
+ {q:{ro:"De ce are fiecare apel între servicii un timeout?",en:"Why does every call between services have a timeout?"},
+  o:[{ro:"Ca să fie mai rapid serviciul apelat",en:"To make the called service faster"},{ro:"Ca un serviciu lent să nu țină blocate la nesfârșit thread-urile celui care îl apelează",en:"So a slow service can't keep its caller's threads stuck forever"},{ro:"E cerut de HTTP",en:"HTTP requires it"},{ro:"Ca să economisească memorie la Kafka",en:"To save memory in Kafka"}],a:1,
+  e:{ro:"Un apel sincron ține un thread Tomcat ocupat. Fără timeout, thread pool-ul se poate umple.",en:"A synchronous call holds a Tomcat thread. Without a timeout, the thread pool can fill up."}},
+ {q:{ro:"Ce face un circuit breaker în starea OPEN?",en:"What does a circuit breaker do in the OPEN state?"},
+  o:[{ro:"Trimite toate cererile de două ori",en:"Sends every request twice"},{ro:"Nu mai sună serviciul cu probleme și răspunde imediat cu eroare sau alternativă",en:"Stops calling the troubled service and answers straight away with an error or a fallback"},{ro:"Repornește serviciul",en:"Restarts the service"},{ro:"Mută serviciul pe alt nod",en:"Moves the service to another node"}],a:1,
+  e:{ro:"După o pauză (30 s) trece în HALF_OPEN și încearcă câteva apeluri de probă.",en:"After a pause (30 s) it moves to HALF_OPEN and tries a few trial calls."}},
+ {q:{ro:"Pentru ce e potrivit un eveniment Kafka în loc de un apel REST?",en:"What is a Kafka event better suited for than a REST call?"},
+  o:[{ro:"Verificarea stocului înainte de comandă",en:"Checking stock before the order"},{ro:"Trimiterea e-mailului de confirmare",en:"Sending the confirmation email"},{ro:"Aprobarea plății",en:"Approving the payment"},{ro:"Autentificarea utilizatorului",en:"Authenticating the user"}],a:1,
+  e:{ro:"E-mailul poate întârzia câteva secunde, iar o problemă la notification nu trebuie să oprească comenzile.",en:"The email can wait a few seconds, and a problem in notification mustn't stop orders."}},
+ {q:{ro:"Ce rezolvă tiparul outbox?",en:"What does the outbox pattern solve?"},
+  o:[{ro:"Comenzi duplicate de la client",en:"Duplicate orders from the client"},{ro:"Pierderea evenimentului dacă serviciul cade între salvarea în DB și trimiterea la Kafka",en:"Losing the event if the service crashes between saving to the DB and sending to Kafka"},{ro:"Mesajele prea mari",en:"Messages that are too big"},{ro:"Autentificarea",en:"Authentication"}],a:1,
+  e:{ro:"Datele și evenimentul se salvează în aceeași tranzacție; trimiterea la Kafka se face după aceea și se poate reîncerca.",en:"The data and the event are saved in one transaction; sending to Kafka happens afterwards and can be retried."}},
+ {q:{ro:"De ce trimite orders un Idempotency-Key la payments?",en:"Why does orders send an Idempotency-Key to payments?"},
+  o:[{ro:"Ca să cripteze plata",en:"To encrypt the payment"},{ro:"Ca o cerere retrimisă după un timeout să nu încaseze de două ori",en:"So a request resent after a timeout doesn't charge twice"},{ro:"Ca să fie mai rapidă plata",en:"To make the payment faster"},{ro:"Pentru tracing",en:"For tracing"}],a:1,
+  e:{ro:"Payments recunoaște cheia și întoarce rezultatul plății deja făcute.",en:"Payments recognises the key and returns the result of the payment already made."}},
+ {q:{ro:"Payments e lent și orders nu are timeout. Ce se întâmplă cu cererea „lista comenzilor mele” (care nu folosește payments)?",en:"Payments is slow and orders has no timeout. What happens to \"my orders list\" (which doesn't use payments)?"},
+  o:[{ro:"Merge normal",en:"It works normally"},{ro:"Eșuează și ea, pentru că toate thread-urile Tomcat din orders sunt blocate așteptând payments",en:"It fails too, because every Tomcat thread in orders is stuck waiting on payments"},{ro:"E trimisă automat la inventory",en:"It's automatically sent to inventory"},{ro:"Merge mai repede",en:"It runs faster"}],a:1,
+  e:{ro:"Thread pool-ul e comun pentru toate cererile. De aceea bulkhead-ul limitează câte thread-uri poate ocupa o dependență.",en:"The thread pool is shared by every request. That's why a bulkhead limits how many threads one dependency can take."}},
+ {q:{ro:"Ce leagă împreună toate apelurile unei comenzi în sistemul de tracing?",en:"What ties together all the calls of one order in the tracing system?"},
+  o:[{ro:"Adresa IP a clientului",en:"The client's IP address"},{ro:"Același trace ID, din antetul traceparent",en:"The same trace ID, from the traceparent header"},{ro:"Numele pod-ului",en:"The pod name"},{ro:"Cookie-ul JSESSIONID",en:"The JSESSIONID cookie"}],a:1,
+  e:{ro:"Fiecare serviciu trimite traceparent mai departe, cu același trace ID și un span nou.",en:"Each service passes traceparent on, with the same trace ID and a new span."}},
+ {q:{ro:"Ce face Kubernetes când readinessProbe-ul unui pod orders eșuează?",en:"What does Kubernetes do when an orders pod's readinessProbe fails?"},
+  o:[{ro:"Șterge Deployment-ul",en:"Deletes the Deployment"},{ro:"Scoate podul din Service, deci nu mai primește trafic, dar nu îl repornește",en:"Takes the pod out of the Service, so it gets no traffic, but doesn't restart it"},{ro:"Repornește imediat tot cluster-ul",en:"Restarts the whole cluster at once"},{ro:"Nimic",en:"Nothing"}],a:1,
+  e:{ro:"Readiness decide traficul. Repornirea vine din livenessProbe.",en:"Readiness controls traffic. Restarts come from the livenessProbe."}}
+]
+};
+})();
+</script>
+<script src="../assets/engine.js"></script>
+</body>
+</html>

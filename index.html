@@ -42,7 +42,8 @@
 .ill-tok{fill:var(--l2bg);stroke:var(--l2);stroke-width:1.4}
 .ill-dns{fill:var(--arpbg);stroke:var(--arp);stroke-width:1.4}
 .ill-txt{font:700 9px var(--sans)}
-@media (max-width:900px){.path{grid-template-columns:minmax(0,1fr)}.soon{grid-template-columns:repeat(2,minmax(0,1fr))}.home-hero .hero-in{grid-template-columns:minmax(0,1fr)}}
+.path.two{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (max-width:900px){.path,.path.two{grid-template-columns:minmax(0,1fr)}.soon{grid-template-columns:repeat(2,minmax(0,1fr))}.home-hero .hero-in{grid-template-columns:minmax(0,1fr)}}
 @media (max-width:420px){.soon{grid-template-columns:minmax(0,1fr)}}
 </style>
 <link rel="stylesheet" href="assets/theme.css">
@@ -50,7 +51,7 @@
 <body>
 <header class="topbar" id="top"><div class="topbar-in">
   <a class="brand" href="index.html"><svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="var(--accent)"/><path d="M7 16h18M19 11l6 5-6 5" fill="none" stroke="var(--accent-text)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="16" r="2.6" fill="var(--accent-text)"/></svg><span data-t="brand"></span></a>
-  <nav class="nav" aria-label="Secțiuni / Sections"><a href="#lectii" data-t="navLessons"></a><a href="#curand" data-t="navSoon"></a></nav>
+  <nav class="nav" aria-label="Secțiuni / Sections"><a href="#lectii" data-t="navLessons"></a><a href="#productie" data-t="navProd"></a><a href="#curand" data-t="navSoon"></a></nav>
   <div class="tools"><div class="seg" role="group" aria-label="Limba / Language"><button type="button" data-lang="ro">RO</button><button type="button" data-lang="en">EN</button></div><button type="button" class="icon-btn" id="theme">◐</button></div>
 </div></header>
 
@@ -68,6 +69,9 @@
   <div class="sec-head" id="lectii"><p class="eyebrow" data-t="pathEyebrow"></p><h2 data-t="pathT"></h2><p class="lead" data-t="pathLead"></p></div>
   <div class="path" id="path"></div>
 
+  <div class="sec-head" id="productie"><p class="eyebrow" data-t="prodEyebrow"></p><h2 data-t="prodT"></h2><p class="lead" data-t="prodLead"></p></div>
+  <div class="path two" id="path2"></div>
+
   <div class="sec-head" id="curand"><p class="eyebrow" data-t="soonEyebrow"></p><h2 data-t="soonT"></h2></div>
   <div class="soon" id="soon"></div>
 </div>
@@ -83,8 +87,11 @@ const UI={
   brand:{ro:"Rețea pas cu pas",en:"Network step by step"},navLessons:{ro:"Lecții",en:"Lessons"},navSoon:{ro:"În curând",en:"Coming soon"},
   eyebrow:{ro:"Lecții interactive · gratuite · RO / EN",en:"Interactive lessons · free · RO / EN"},
   h1:{ro:"Înțelege rețelele urmărind pachetele, pas cu pas",en:"Understand networks by following the packets, step by step"},
-  sub:{ro:"Fiecare lecție e o simulare animată: vezi ce face fiecare dispozitiv și ce câmpuri se schimbă la fiecare hop. Pornești de la cadrul Ethernet și ajungi la Service-urile din Kubernetes.",en:"Each lesson is an animated simulation: see what every device does and which fields change at every hop. You start with the Ethernet frame and end with Kubernetes Services."},
-  meta:[{ro:"3 lecții",en:"3 lessons"},{ro:"49 de pași",en:"49 steps"},{ro:"39 de întrebări",en:"39 questions"},{ro:"fără cont, fără instalări",en:"no account, no install"}],
+  sub:{ro:"Fiecare lecție e o simulare animată: vezi ce face fiecare dispozitiv și ce câmpuri se schimbă la fiecare hop. Pornești de la cadrul Ethernet și ajungi la Kubernetes, Tomcat și microservicii în producție.",en:"Each lesson is an animated simulation: see what every device does and which fields change at every hop. You start with the Ethernet frame and end with Kubernetes, Tomcat and microservices in production."},
+  prodEyebrow:{ro:"Aplicații în producție",en:"Production apps"},prodT:{ro:"Cum funcționează o aplicație reală",en:"How a real application works"},
+  prodLead:{ro:"De la rețea la aplicație: ce se întâmplă cu o cerere în interiorul serverului Java și cum colaborează microserviciile.",en:"From the network to the app: what happens to a request inside the Java server, and how microservices work together."},
+  navProd:{ro:"Producție",en:"Production"},
+  meta:[{ro:"5 lecții",en:"5 lessons"},{ro:"81 de pași",en:"81 steps"},{ro:"59 de întrebări",en:"59 questions"},{ro:"fără cont, fără instalări",en:"no account, no install"}],
   how:[["▶",{ro:"Simulare pas cu pas",en:"Step-by-step simulation"},{ro:"Înainte, înapoi sau redare automată, cu animația pachetului pe diagramă.",en:"Forward, back or auto-play, with the packet animated on the diagram."}],
        ["≡",{ro:"Pachetul „live”",en:"The \"live\" packet"},{ro:"Câmpurile noi, schimbate sau eliminate sunt colorate la fiecare pas.",en:"New, changed or removed fields are coloured at every step."}],
        [">_",{ro:"Comenzi reale",en:"Real commands"},{ro:"La fiecare lecție: comenzi de încercat pe Windows sau într-un cluster.",en:"In every lesson: commands to try on Windows or in a cluster."}]],
@@ -114,6 +121,18 @@ const LESSONS=[
   d:{ro:"Un pod cheamă „backend”: CoreDNS, ClusterIP, kube-proxy și DNAT, trecerea între noduri, NodePort și LoadBalancer.",en:"A pod calls \"backend\": CoreDNS, ClusterIP, kube-proxy and DNAT, crossing nodes, NodePort and LoadBalancer."},
   topics:[{ro:"Cluster, noduri, pod-uri, etichete",en:"Cluster, nodes, pods, labels"},{ro:"ClusterIP în detaliu, NodePort, LoadBalancer, headless",en:"ClusterIP in depth, NodePort, LoadBalancer, headless"},{ro:"CoreDNS, lista search și ndots, Corefile, dnsPolicy",en:"CoreDNS, the search list and ndots, Corefile, dnsPolicy"},{ro:"Depanarea DNS-ului din cluster",en:"Troubleshooting cluster DNS"}]}
 ];
+ILL.tc=`<svg viewBox="0 0 300 100" aria-hidden="true"><rect x="70" y="14" width="160" height="72" rx="8" fill="none" stroke="var(--border)" stroke-dasharray="4 3"/><line class="ill-line" x1="30" y1="50" x2="270" y2="50"/><rect class="ill-dev" x="14" y="38" width="30" height="24" rx="3"/><rect class="ill-dev" x="82" y="40" width="40" height="20" rx="4"/><rect class="ill-dev" x="130" y="40" width="40" height="20" rx="4"/><rect class="ill-dev" x="178" y="40" width="40" height="20" rx="4"/><path class="ill-dev" d="M252 38v24c0 4 28 4 28 0v-24"/><ellipse class="ill-dev" cx="266" cy="38" rx="14" ry="4"/><rect class="ill-tok" x="128" y="18" width="44" height="15" rx="4"/><text class="ill-txt" x="150" y="29" text-anchor="middle" fill="var(--l2)">thread</text></svg>`;
+ILL.ms=`<svg viewBox="0 0 300 100" aria-hidden="true"><line class="ill-line" x1="40" y1="50" x2="130" y2="50"/><line class="ill-line" x1="130" y1="50" x2="200" y2="20"/><line class="ill-line" x1="130" y1="50" x2="200" y2="50"/><line class="ill-line" x1="130" y1="50" x2="200" y2="82"/><line class="ill-line" x1="200" y1="82" x2="262" y2="82"/><rect class="ill-dev" x="20" y="38" width="40" height="24" rx="4"/><polygon class="ill-dev" points="130,36 142,43 142,57 130,64 118,57 118,43"/><polygon class="ill-dev" points="200,8 210,14 210,26 200,32 190,26 190,14"/><polygon class="ill-dev" points="200,38 210,44 210,56 200,62 190,56 190,44"/><rect class="ill-dev" x="182" y="72" width="36" height="20" rx="3"/><polygon class="ill-dev" points="262,70 272,76 272,88 262,94 252,88 252,76"/><rect class="ill-dns" x="222" y="54" width="42" height="15" rx="4"/><text class="ill-txt" x="243" y="65" text-anchor="middle" fill="var(--arp)">EVENT</text></svg>`;
+const PROD=[
+ {href:"tomcat/index.html",ill:"tc",lvl:{ro:"Intermediar",en:"Intermediate"},stats:{ro:"15 pași · ≈ 25 min",en:"15 steps · ≈ 25 min"},
+  t:{ro:"Tomcat: viața unei cereri",en:"Tomcat: the life of a request"},
+  d:{ro:"O cerere printr-o aplicație Java pe Apache Tomcat: nginx, Connector, thread pool, Engine/Host/Context, filtre, servlet, pool de conexiuni, baza de date.",en:"A request through a Java app on Apache Tomcat: nginx, Connector, thread pool, Engine/Host/Context, filters, servlet, connection pool, database."},
+  topics:[{ro:"server.xml explicat, maxThreads, acceptCount",en:"server.xml explained, maxThreads, acceptCount"},{ro:"Sesiuni, filtre, DispatcherServlet, HikariCP",en:"Sessions, filters, DispatcherServlet, HikariCP"},{ro:"Blocarea sub încărcare și depanarea ei",en:"Lock-ups under load and how to debug them"}]},
+ {href:"microservicii/index.html",ill:"ms",lvl:{ro:"Intermediar",en:"Intermediate"},stats:{ro:"17 pași · ≈ 25 min",en:"17 steps · ≈ 25 min"},
+  t:{ro:"Microservicii pe Tomcat în producție",en:"Microservices on Tomcat in production"},
+  d:{ro:"O comandă prin servicii Spring Boot cu Tomcat încorporat, în Kubernetes: gateway, REST, Kafka, și cum previi defecțiunile în cascadă.",en:"An order through Spring Boot services with embedded Tomcat, in Kubernetes: gateway, REST, Kafka, and how to prevent cascading failures."},
+  topics:[{ro:"Tomcat încorporat, API gateway, JWT",en:"Embedded Tomcat, API gateway, JWT"},{ro:"Sincron vs. asincron, outbox, idempotență",en:"Sync vs async, outbox, idempotency"},{ro:"Timeout, circuit breaker, bulkhead, tracing",en:"Timeouts, circuit breakers, bulkheads, tracing"}]}
+];
 const SOON=[["VLAN",{ro:"Cum împarte un switch mai multe rețele, cu etichete 802.1Q.",en:"How one switch carries several networks with 802.1Q tags."}],
  ["NAT",{ro:"Cum ies mai multe calculatoare pe internet cu un singur IP public.",en:"How many computers share one public IP on the internet."}],
  ["HTTPS / TLS",{ro:"Negocierea TLS, certificate și de ce e sigur lacătul din browser.",en:"The TLS handshake, certificates and why the browser padlock is safe."}],
@@ -123,6 +142,8 @@ function render(){
   document.querySelectorAll("[data-t]").forEach(e=>{e.textContent=T(UI[e.dataset.t])});
   document.getElementById("meta").innerHTML=UI.meta.map(m=>`<li>${T(m)}</li>`).join("");
   document.getElementById("how").innerHTML=UI.how.map(([i,b,s])=>`<li><i aria-hidden="true">${i}</i><div><b>${T(b)}</b><span>${T(s)}</span></div></li>`).join("");
+  const card=(l,i)=>`<a class="lesson" href="${l.href}"><div class="top"><span class="num">${lang==="ro"?"LECȚIA":"LESSON"} ${String(i+1).padStart(2,"0")}</span><span class="lvl">${T(l.lvl)}</span></div>${ILL[l.ill]}<h3>${T(l.t)}</h3><p>${T(l.d)}</p><ul>${l.topics.map(t=>`<li>${T(t)}</li>`).join("")}</ul><span class="stats">${T(l.stats)}</span><span class="go">${T(UI.start)}</span></a>`;
+  document.getElementById("path2").innerHTML=PROD.map((l,i)=>card(l,i+LESSONS.length)).join("");
   document.getElementById("path").innerHTML=LESSONS.map((l,i)=>`<a class="lesson" href="${l.href}"><div class="top"><span class="num">${lang==="ro"?"LECȚIA":"LESSON"} ${String(i+1).padStart(2,"0")}</span><span class="lvl">${T(l.lvl)}</span></div>${ILL[l.ill]}<h3>${T(l.t)}</h3><p>${T(l.d)}</p><ul>${l.topics.map(t=>`<li>${T(t)}</li>`).join("")}</ul><span class="stats">${T(l.stats)}</span><span class="go">${T(UI.start)}</span></a>`).join("");
   document.getElementById("soon").innerHTML=SOON.map(([b,p])=>`<div><b>${b}</b><p>${T(p)}</p></div>`).join("");
   const th=document.getElementById("theme");th.setAttribute("aria-label",T(UI.theme));th.title=T(UI.theme);

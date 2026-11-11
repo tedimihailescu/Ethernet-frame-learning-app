@@ -69,7 +69,7 @@ document.getElementById("app").innerHTML=`
 <footer class="foot"><div class="foot-in"><p id="foot"></p><p><a href="https://github.com/tedimihailescu/Ethernet-frame-learning-app" data-t="src"></a></p></div></footer>`;
 
 /* ---------- diagram ---------- */
-const TYPE={host:[28,44],router:[28,44],switch:[33,47],server:[28,44],globe:[28,44],pod:[28,44],svc:[35,46],user:[28,44]};
+const TYPE={host:[28,44],router:[28,44],switch:[33,47],server:[28,44],globe:[28,44],pod:[28,44],svc:[35,46],user:[28,44],box:[34,48],db:[28,44],queue:[34,46]};
 const ty=t=>TYPE[t]||[28,44];
 function icon(t,x,y,virt){
   const v=virt?" virt":"";
@@ -82,6 +82,9 @@ function icon(t,x,y,virt){
   case "pod":{const p=[];for(let k=0;k<6;k++){const a=Math.PI/180*(60*k-30);p.push((x+22*Math.cos(a)).toFixed(1)+","+(y+22*Math.sin(a)).toFixed(1))}
     return `<polygon class="dev${v}" points="${p.join(" ")}"/><path class="dev-ink" d="M${x} ${y-9}l9 5v10l-9 5l-9 -5v-10z M${x-9} ${y-4}l9 5l9 -5M${x} ${y+1}v10"/>`}
   case "svc":return `<rect class="dev virt" x="${x-31}" y="${y-15}" width="62" height="30" rx="15"/><path class="dev-ink" d="M${x-14} ${y}h28M${x+8} ${y-5}l6 5l-6 5"/><circle class="dev-fill" cx="${x-18}" cy="${y}" r="3"/>`;
+  case "box":return `<rect class="dev${v}" x="${x-30}" y="${y-17}" width="60" height="34" rx="6"/><path class="dev-ink" d="M${x-20} ${y-6}h28M${x-20} ${y+1}h40M${x-20} ${y+8}h18"/>`;
+  case "db":return `<path class="dev" d="M${x-17} ${y-14}v28c0 5 34 5 34 0v-28"/><ellipse class="dev" cx="${x}" cy="${y-14}" rx="17" ry="5"/><path class="dev-ink" d="M${x-17} ${y-3}c0 5 34 5 34 0M${x-17} ${y+7}c0 5 34 5 34 0"/>`;
+  case "queue":return `<rect class="dev" x="${x-30}" y="${y-14}" width="60" height="28" rx="4"/><path class="dev-ink" d="M${x-18} ${y-14}v28M${x-6} ${y-14}v28M${x+6} ${y-14}v28M${x+18} ${y-14}v28"/>`;
   case "user":return `<circle class="dev" cx="${x}" cy="${y-9}" r="8"/><path class="dev" d="M${x-15} ${y+17}c0-12 6-17 15-17s15 5 15 17z"/>`;
   }
   return `<circle class="dev" cx="${x}" cy="${y}" r="20"/>`;
