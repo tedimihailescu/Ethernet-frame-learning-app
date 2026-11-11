@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rezultate teste</title>
+<meta name="description" content="Rezultatele testelor: ale tale și, pentru administrator, ale tuturor participanților. / Quiz results.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/theme.css">
+<style>
+.page{max-width:1180px;margin:0 auto;padding-block:24px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.page h1{font:700 clamp(1.5rem,3vw,2.1rem) var(--head);margin:0 0 6px}
+.lead{color:var(--muted);margin:0 0 18px;max-width:70ch}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:0 0 16px}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;min-width:0}
+.kpi b{display:block;font:700 1.6rem var(--head);font-variant-numeric:tabular-nums}
+.kpi span{font-size:.82rem;color:var(--muted)}
+.block{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px}
+.block h2{font:700 1.1rem var(--head);margin:0 0 10px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;margin-bottom:10px}
+.row input{font:500 .92rem var(--sans);padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);min-width:0;flex:1 1 220px;max-width:340px}
+table{border-collapse:collapse;width:100%;font-size:.88rem}
+th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--border);vertical-align:top}
+th{font-size:.76rem;color:var(--muted);font-weight:600;white-space:nowrap}
+td.n{font-variant-numeric:tabular-nums;white-space:nowrap}
+.scroll{overflow-x:auto}
+.bar{height:8px;border-radius:4px;background:var(--surface2);overflow:hidden;min-width:60px}
+.bar i{display:block;height:100%;background:var(--text)}
+.pct{display:flex;align-items:center;gap:8px}
+.pill{display:inline-block;font:600 .72rem var(--mono);padding:1px 7px;border-radius:999px;border:1px solid var(--border)}
+.good{color:var(--ok)} .mid{color:var(--chgfg)} .low{color:var(--bad)}
+.empty{color:var(--muted);font-style:italic}
+details.admin-help{font-size:.86rem;color:var(--muted)}
+details.admin-help code{user-select:all}
+.btn-sm{border:1px solid var(--border);background:var(--surface2);color:var(--text);border-radius:7px;padding:6px 10px;font:600 .82rem var(--sans);cursor:pointer}
+@media (max-width:720px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<header class="topbar" id="top"><div class="topbar-in">
+  <a class="brand" href="../index.html"><svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="var(--accent)"/><path d="M7 16h18M19 11l6 5-6 5" fill="none" stroke="var(--accent-text)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="16" r="2.6" fill="var(--accent-text)"/></svg><span data-t="brand"></span></a>
+  <nav class="nav"><a href="../index.html" data-t="home"></a></nav>
+  <div class="tools"><div class="seg" role="group" aria-label="Limba / Language"><button type="button" data-lang="ro">RO</button><button type="button" data-lang="en">EN</button></div><button type="button" class="icon-btn" id="theme">◐</button></div>
+</div></header>
+
+<main class="page">
+  <h1 data-t="title"></h1>
+  <p class="lead" data-t="lead"></p>
+
+  <section class="block" id="mine">
+    <h2 data-t="mineT"></h2>
+    <div id="mineBody"><p class="empty" data-t="loading"></p></div>
+  </section>
+
+  <div id="admin" hidden>
+    <div class="kpis" id="kpis"></div>
+    <section class="block"><div class="row"><h2 data-t="peopleT"></h2><button type="button" class="btn-sm" id="csv" data-t="csv"></button></div><div class="scroll" id="people"></div></section>
+    <section class="block"><h2 data-t="lessonsT"></h2><div class="scroll" id="lessons"></div></section>
+    <section class="block"><div class="row"><h2 data-t="allT"></h2><input id="filter" type="search" autocomplete="off"></div><div class="scroll" id="all"></div></section>
+  </div>
+
+  <details class="admin-help" id="help"><summary data-t="helpT"></summary><p id="helpBody"></p></details>
+</main>
+
+<script type="module" src="../assets/auth.js"></script>
+<script type="module">
+import { auth, db } from "../assets/firebase.js";
+import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import { collection, query, where, getDocs, getDoc, doc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+let lang=store.get("cadru-lang")==="en"?"en":"ro";
+const UI={
+  brand:["Rețea pas cu pas","Network step by step"],home:["← Lecții","← Lessons"],
+  title:["Rezultatele testelor","Quiz results"],lead:["Fiecare test terminat din finalul unei lecții e salvat aici, cu scorul obținut.","Every quiz finished at the end of a lesson is saved here, with the score."],
+  mineT:["Rezultatele mele","My results"],loading:["Se încarcă…","Loading…"],noMine:["Încă n-ai terminat niciun test. Deschide o lecție și răspunde la toate întrebările din „Test final”.","You haven't finished a quiz yet. Open a lesson and answer every question in the \"Final quiz\"."],
+  lesson:["Lecție","Lesson"],score:["Scor","Score"],best:["Cel mai bun","Best"],attempts:["Încercări","Attempts"],last:["Ultima dată","Last time"],when:["Când","When"],
+  peopleT:["Participanți","Participants"],lessonsT:["Pe lecții","By lesson"],allT:["Toate încercările","Every attempt"],
+  name:["Nume","Name"],email:["E-mail","Email"],avg:["Medie","Average"],lessonsDone:["Lecții","Lessons"],participants:["Participanți","Participants"],
+  kPeople:["participanți","participants"],kAttempts:["teste terminate","quizzes finished"],kAvg:["scor mediu","average score"],kLessons:["lecții încercate","lessons attempted"],
+  filter:["Caută după nume, e-mail sau lecție","Search by name, email or lesson"],csv:["Descarcă CSV","Download CSV"],
+  helpT:["Ești administratorul site-ului?","Are you the site administrator?"],
+  help:["Ca să vezi rezultatele tuturor, adaugă în Firestore (consola Firebase → Firestore Database) un document în colecția admins, cu ID-ul de mai jos (orice câmp, de ex. role = \"admin\"). Reîncarcă apoi pagina. ID-ul tău:","To see everyone's results, add a document in Firestore (Firebase console → Firestore Database) to the admins collection, with the ID below (any field, e.g. role = \"admin\"). Then reload this page. Your ID:"],
+  err:["Rezultatele nu au putut fi încărcate.","The results couldn't be loaded."]
+};
+const T=k=>UI[k][lang==="en"?1:0];
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
+const pct=(s,t)=>t?Math.round(100*s/t):0;
+const cls=p=>p>=80?"good":p>=50?"mid":"low";
+const fmt=d=>d?d.toLocaleString(lang==="en"?"en-GB":"ro-RO",{dateStyle:"medium",timeStyle:"short"}):"—";
+const bar=p=>`<span class="pct"><span class="bar"><i style="width:${p}%"></i></span><b class="${cls(p)}">${p}%</b></span>`;
+let mine=[],all=null,me=null;
+
+function render(){
+  document.documentElement.lang=lang;document.title=T("title");
+  document.querySelectorAll("[data-t]").forEach(e=>{const k=e.dataset.t;if(UI[k])e.textContent=T(k)});
+  $("#filter").placeholder=T("filter");
+  document.querySelectorAll("[data-lang]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.lang===lang?"true":"false"));
+  if(me){$("#helpBody").innerHTML=esc(T("help"))+` <code>${esc(me.uid)}</code>`}
+  renderMine();if(all)renderAdmin();
+}
+function renderMine(){
+  if(!me)return;
+  if(!mine.length){$("#mineBody").innerHTML=`<p class="empty">${T("noMine")}</p>`;return}
+  const by={};mine.forEach(r=>{(by[r.lesson]=by[r.lesson]||[]).push(r)});
+  let h=`<div class="scroll"><table><thead><tr><th>${T("lesson")}</th><th>${T("best")}</th><th>${T("attempts")}</th><th>${T("last")}</th></tr></thead><tbody>`;
+  Object.values(by).sort((a,b)=>b[0].d-a[0].d).forEach(list=>{const best=list.reduce((m,r)=>Math.max(m,pct(r.score,r.total)),0);const lastR=list[0];
+    h+=`<tr><td><a href="../${esc(lastR.lesson)}/index.html">${esc(lastR.title)}</a></td><td>${bar(best)}</td><td class="n">${list.length}</td><td class="n">${lastR.score}/${lastR.total} · ${fmt(lastR.d)}</td></tr>`});
+  $("#mineBody").innerHTML=h+`</tbody></table></div>`;
+}
+function renderAdmin(){
+  const people={},lessons={};
+  all.forEach(r=>{const p=people[r.uid]=people[r.uid]||{name:r.name,email:r.email,n:0,sum:0,lessons:new Set(),last:null};p.n++;p.sum+=pct(r.score,r.total);p.lessons.add(r.lesson);if(!p.last||r.d>p.last)p.last=r.d;
+    const l=lessons[r.lesson]=lessons[r.lesson]||{title:r.title,n:0,sum:0,people:new Set()};l.n++;l.sum+=pct(r.score,r.total);l.people.add(r.uid)});
+  const avg=all.length?Math.round(all.reduce((s,r)=>s+pct(r.score,r.total),0)/all.length):0;
+  $("#kpis").innerHTML=[[Object.keys(people).length,T("kPeople")],[all.length,T("kAttempts")],[avg+"%",T("kAvg")],[Object.keys(lessons).length,T("kLessons")]].map(([b,s])=>`<div class="kpi"><b>${b}</b><span>${s}</span></div>`).join("");
+  let h=`<table style="min-width:620px"><thead><tr><th>${T("name")}</th><th>${T("email")}</th><th>${T("attempts")}</th><th>${T("lessonsDone")}</th><th>${T("avg")}</th><th>${T("last")}</th></tr></thead><tbody>`;
+  Object.values(people).sort((a,b)=>b.last-a.last).forEach(p=>{h+=`<tr><td>${esc(p.name)}</td><td>${esc(p.email)}</td><td class="n">${p.n}</td><td class="n">${p.lessons.size}</td><td>${bar(Math.round(p.sum/p.n))}</td><td class="n">${fmt(p.last)}</td></tr>`});
+  $("#people").innerHTML=h+`</tbody></table>`;
+  h=`<table style="min-width:520px"><thead><tr><th>${T("lesson")}</th><th>${T("participants")}</th><th>${T("attempts")}</th><th>${T("avg")}</th></tr></thead><tbody>`;
+  Object.entries(lessons).sort((a,b)=>b[1].n-a[1].n).forEach(([id,l])=>{h+=`<tr><td><a href="../${esc(id)}/index.html">${esc(l.title)}</a></td><td class="n">${l.people.size}</td><td class="n">${l.n}</td><td>${bar(Math.round(l.sum/l.n))}</td></tr>`});
+  $("#lessons").innerHTML=h+`</tbody></table>`;
+  renderAll();
+}
+function renderAll(){
+  const q=$("#filter").value.trim().toLowerCase();
+  const rows=all.filter(r=>!q||(r.name+" "+r.email+" "+r.title).toLowerCase().includes(q)).slice(0,300);
+  let h=`<table style="min-width:620px"><thead><tr><th>${T("when")}</th><th>${T("name")}</th><th>${T("email")}</th><th>${T("lesson")}</th><th>${T("score")}</th></tr></thead><tbody>`;
+  rows.forEach(r=>{const p=pct(r.score,r.total);h+=`<tr><td class="n">${fmt(r.d)}</td><td>${esc(r.name)}</td><td>${esc(r.email)}</td><td>${esc(r.title)}</td><td class="n"><b class="${cls(p)}">${r.score}/${r.total}</b> (${p}%)</td></tr>`});
+  $("#all").innerHTML=rows.length?h+`</tbody></table>`:`<p class="empty">—</p>`;
+}
+$("#filter").addEventListener("input",()=>{if(all)renderAll()});
+$("#csv").onclick=()=>{const head=["date","name","email","lesson","title","score","total","percent"];const lines=[head.join(",")].concat(all.map(r=>[r.d?r.d.toISOString():"",r.name,r.email,r.lesson,r.title,r.score,r.total,pct(r.score,r.total)].map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(",")));
+  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["﻿"+lines.join("\n")],{type:"text/csv"}));a.download="rezultate-teste.csv";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000)};
+
+const norm=d=>{const x=d.data();return {...x,d:x.ts&&x.ts.toDate?x.ts.toDate():null}};
+onAuthStateChanged(auth,async user=>{
+  if(!user)return;me=user;render();
+  try{
+    const snap=await getDocs(query(collection(db,"results"),where("uid","==",user.uid)));
+    mine=snap.docs.map(norm).sort((a,b)=>(b.d||0)-(a.d||0));renderMine();
+    const adm=await getDoc(doc(db,"admins",user.uid));
+    if(adm.exists()){
+      const s2=await getDocs(collection(db,"results"));
+      all=s2.docs.map(norm).sort((a,b)=>(b.d||0)-(a.d||0));
+      $("#admin").hidden=false;$("#help").hidden=true;renderAdmin();
+    }
+  }catch(e){console.error(e);$("#mineBody").innerHTML=`<p class="empty">${T("err")}</p>`}
+});
+document.querySelectorAll("[data-lang]").forEach(b=>b.onclick=()=>{lang=b.dataset.lang;store.set("cadru-lang",lang);render()});
+const saved=store.get("cadru-theme");if(saved==="light"||saved==="dark")document.documentElement.dataset.theme=saved;
+$("#theme").onclick=()=>{const r=document.documentElement,d=r.dataset.theme?r.dataset.theme==="dark":matchMedia("(prefers-color-scheme: dark)").matches;const nt=d?"light":"dark";r.dataset.theme=nt;store.set("cadru-theme",nt)};
+render();
+</script>
+</body>
+</html>

@@ -28,6 +28,18 @@
 }
 body{background:var(--bg);color:var(--text)}
 
+/* login gate + user menu + toast */
+html.auth-wait body{visibility:hidden}
+.user-menu{display:flex;align-items:center;gap:6px}
+.um-link{display:inline-flex;align-items:center;gap:4px;max-width:160px;padding:6px 10px;border:1px solid var(--bar-muted);border-radius:8px;color:var(--bar-text);text-decoration:none;font:600 .82rem var(--sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.um-link:hover{background:var(--bar-hover)}
+.um-name{overflow:hidden;text-overflow:ellipsis}
+@media (max-width:640px){.um-name{display:none}}
+.toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translate(-50%,140%);background:var(--bar);color:var(--bar-text);border:2px solid var(--bar-text);border-radius:10px;padding:10px 14px;display:flex;gap:12px;align-items:center;font:600 .92rem var(--sans);z-index:50;transition:transform .25s ease;max-width:calc(100% - 32px)}
+.toast.show{transform:translate(-50%,0)}
+.toast a{color:var(--bar-text);text-decoration:underline}
+@media (prefers-reduced-motion: reduce){.toast{transition:none}}
+
 /* black top bar with yellow brand */
 .topbar{background:var(--bar);border-bottom:3px solid var(--bar-text)}
 .brand{color:var(--bar-text)}

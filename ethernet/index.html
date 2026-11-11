@@ -1192,7 +1192,11 @@ function renderQuiz(){
   const r=$("#retry");if(r)r.onclick=()=>{answers.fill(null);renderQuiz()};
 }
 $("#quiz").addEventListener("click",e=>{const b=e.target.closest(".opt");if(!b||b.disabled)return;answers[+b.dataset.q]=+b.dataset.o;renderQuiz();
-  const q=$("#quiz").querySelectorAll(".q")[+b.dataset.q];const fb=q&&q.querySelector(".fb");if(fb)fb.setAttribute("role","status")});
+  const q=$("#quiz").querySelectorAll(".q")[+b.dataset.q];const fb=q&&q.querySelector(".fb");if(fb)fb.setAttribute("role","status");
+  if(answers.every(a=>a!==null)){
+    const score=answers.filter((x,i)=>x===QUIZ[i].a).length;
+    window.dispatchEvent(new CustomEvent("quiz:complete",{detail:{lesson:"ethernet",title:"Drumul unui cadru Ethernet",score,total:QUIZ.length,answers:answers.slice()}}));
+  }});
 
 function renderControls(){
   const lab=(id,v)=>{const s=T(v),i=s.indexOf(" ");const ic=id==="#b-next"?s.slice(s.lastIndexOf(" ")+1):s.slice(0,i);const tx=id==="#b-next"?s.slice(0,s.lastIndexOf(" ")):s.slice(i+1);
@@ -1241,5 +1245,6 @@ if(mqNarrow.addEventListener)mqNarrow.addEventListener("change",onLayout);else m
 buildDiagram();renderStatic();renderGloss();renderQuiz();render(false);
 })();
 </script>
+<script type="module" src="../assets/auth.js"></script>
 </body>
 </html>

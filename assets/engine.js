@@ -209,7 +209,12 @@ function renderQuiz(){
   h+=`<div class="score">${T(UI.score)}: ${ok} / ${Q.length}${done?` <button type="button" class="btn" id="retry">${T(UI.retry)}</button>`:""}</div>`;
   $("#quiz").innerHTML=h;const r=$("#retry");if(r)r.onclick=()=>{answers.fill(null);renderQuiz()};
 }
-$("#quiz").addEventListener("click",e=>{const b=e.target.closest(".opt");if(!b||b.disabled)return;answers[+b.dataset.q]=+b.dataset.o;renderQuiz()});
+$("#quiz").addEventListener("click",e=>{const b=e.target.closest(".opt");if(!b||b.disabled)return;answers[+b.dataset.q]=+b.dataset.o;renderQuiz();
+  if(answers.every(a=>a!==null)){
+    const score=answers.filter((x,i)=>x===LS.quiz[i].a).length;
+    const lesson=location.pathname.split("/").filter(Boolean).slice(-2)[0]||"lesson";
+    window.dispatchEvent(new CustomEvent("quiz:complete",{detail:{lesson,title:(LS.docTitle&&LS.docTitle.ro)||document.title,score,total:LS.quiz.length,answers:answers.slice()}}));
+  }});
 function renderGloss(){
   let h=`<h2>${T(UI.glossT)}</h2><p class="lead">${T(UI.glossLead)}</p><dl class="gl">`;
   const exLbl=lang==="ro"?"Exemplu":"Example";

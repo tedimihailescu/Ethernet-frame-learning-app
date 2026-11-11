@@ -1,0 +1,2 @@
+// Public Firebase web config (safe to publish; access is controlled by firestore.rules).
+export const firebaseConfig = {"projectId":"ethernet-frame-learning-app","appId":"1:70175661289:web:11617afdb2b3d299b4e478","storageBucket":"ethernet-frame-learning-app.firebasestorage.app","apiKey":"AIzaSyCShQTOFayFtqeOVnmYxlYNYnek1rWxAr8","authDomain":"ethernet-frame-learning-app.firebaseapp.com","messagingSenderId":"70175661289","measurementId":"G-7E7Q5J5NF7","projectNumber":"70175661289","version":"2"};
