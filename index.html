@@ -51,7 +51,7 @@
 <body>
 <header class="topbar" id="top"><div class="topbar-in">
   <a class="brand" href="index.html"><svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="var(--accent)"/><path d="M7 16h18M19 11l6 5-6 5" fill="none" stroke="var(--accent-text)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="16" r="2.6" fill="var(--accent-text)"/></svg><span data-t="brand"></span></a>
-  <nav class="nav" aria-label="Secțiuni / Sections"><a href="#lectii" data-t="navLessons"></a><a href="#productie" data-t="navProd"></a><a href="#curand" data-t="navSoon"></a></nav>
+  <nav class="nav" aria-label="Secțiuni / Sections"><a href="#lectii" data-t="navLessons"></a><a href="#k8s" data-t="navK8s"></a><a href="#productie" data-t="navProd"></a><a href="#curand" data-t="navSoon"></a></nav>
   <div class="tools"><div class="seg" role="group" aria-label="Limba / Language"><button type="button" data-lang="ro">RO</button><button type="button" data-lang="en">EN</button></div><button type="button" class="icon-btn" id="theme">◐</button></div>
 </div></header>
 
@@ -67,7 +67,10 @@
 
 <div class="wrap">
   <div class="sec-head" id="lectii"><p class="eyebrow" data-t="pathEyebrow"></p><h2 data-t="pathT"></h2><p class="lead" data-t="pathLead"></p></div>
-  <div class="path" id="path"></div>
+  <div class="path two" id="path"></div>
+
+  <div class="sec-head" id="k8s"><p class="eyebrow" data-t="k8sEyebrow"></p><h2 data-t="k8sT"></h2><p class="lead" data-t="k8sLead"></p></div>
+  <div class="path" id="pathK"></div>
 
   <div class="sec-head" id="productie"><p class="eyebrow" data-t="prodEyebrow"></p><h2 data-t="prodT"></h2><p class="lead" data-t="prodLead"></p></div>
   <div class="path" id="path2"></div>
@@ -91,11 +94,14 @@ const UI={
   prodEyebrow:{ro:"Aplicații în producție",en:"Production apps"},prodT:{ro:"Cum funcționează o aplicație reală",en:"How a real application works"},
   prodLead:{ro:"De la rețea la aplicație: ce se întâmplă cu o cerere în interiorul serverului Java și cum colaborează microserviciile.",en:"From the network to the app: what happens to a request inside the Java server, and how microservices work together."},
   navProd:{ro:"Producție",en:"Production"},
-  meta:[{ro:"6 lecții",en:"6 lessons"},{ro:"102 pași",en:"102 steps"},{ro:"72 de întrebări",en:"72 questions"},{ro:"fără cont, fără instalări",en:"no account, no install"}],
+  meta:[{ro:"8 lecții",en:"8 lessons"},{ro:"136 de pași",en:"136 steps"},{ro:"94 de întrebări",en:"94 questions"},{ro:"fără cont, fără instalări",en:"no account, no install"}],
   how:[["▶",{ro:"Simulare pas cu pas",en:"Step-by-step simulation"},{ro:"Înainte, înapoi sau redare automată, cu animația pachetului pe diagramă.",en:"Forward, back or auto-play, with the packet animated on the diagram."}],
        ["≡",{ro:"Pachetul „live”",en:"The \"live\" packet"},{ro:"Câmpurile noi, schimbate sau eliminate sunt colorate la fiecare pas.",en:"New, changed or removed fields are coloured at every step."}],
        [">_",{ro:"Comenzi reale",en:"Real commands"},{ro:"La fiecare lecție: comenzi de încercat pe Windows sau într-un cluster.",en:"In every lesson: commands to try on Windows or in a cluster."}]],
-  pathEyebrow:{ro:"Traseul recomandat",en:"Suggested path"},pathT:{ro:"Lecții",en:"Lessons"},
+  pathEyebrow:{ro:"1 · Bazele rețelelor",en:"1 · Networking basics"},pathT:{ro:"Rețele",en:"Networking"},
+  k8sEyebrow:{ro:"2 · Kubernetes",en:"2 · Kubernetes"},k8sT:{ro:"Rețeaua în Kubernetes",en:"Networking in Kubernetes"},
+  k8sLead:{ro:"Service-uri și DNS în cluster, rețeaua pod-urilor în cloud și drumul complet al unui pachet prin kernel, până în pod.",en:"Services and cluster DNS, pod networking in the cloud, and a packet's full path through the kernel into a pod."},
+  navK8s:{ro:"Kubernetes",en:"Kubernetes"},
   pathLead:{ro:"Le poți parcurge în orice ordine, dar fiecare se sprijină pe cea dinainte.",en:"You can take them in any order, but each one builds on the one before."},
   start:{ro:"Începe lecția →",en:"Start the lesson →"},
   soonEyebrow:{ro:"Planificate",en:"Planned"},soonT:{ro:"În curând",en:"Coming soon"},
@@ -138,6 +144,18 @@ const PROD=[
   topics:[{ro:"IPAM, namespace, veth, bridge",en:"IPAM, namespaces, veth, bridges"},{ro:"VPC-native, alias IP, intranode visibility",en:"VPC-native, alias IPs, intranode visibility"},{ro:"Calico: policy, overlay VXLAN/IPIP, NAT",en:"Calico: policy, VXLAN/IPIP overlays, NAT"}]}
 ];
 ILL.gke=`<svg viewBox="0 0 300 100" aria-hidden="true"><rect x="8" y="12" width="96" height="76" rx="8" fill="none" stroke="var(--border)" stroke-dasharray="4 3"/><rect x="196" y="12" width="96" height="76" rx="8" fill="none" stroke="var(--border)" stroke-dasharray="4 3"/><line class="ill-line" x1="40" y1="50" x2="260" y2="50"/><polygon class="ill-dev" points="38,36 48,42 48,58 38,64 28,58 28,42"/><circle class="ill-dev" cx="86" cy="50" r="11"/><circle class="ill-dev" cx="150" cy="50" r="16"/><path class="ill-line" d="M134 50h32M150 34c-7 8-7 24 0 32M150 34c7 8 7 24 0 32" fill="none" stroke-width="1.4"/><circle class="ill-dev" cx="214" cy="50" r="11"/><polygon class="ill-dev" points="262,36 272,42 272,58 262,64 252,58 252,42"/><rect class="ill-dns" x="104" y="16" width="44" height="15" rx="4"/><text class="ill-txt" x="126" y="27" text-anchor="middle" fill="var(--arp)">VXLAN</text></svg>`;
+const EXTRA=[
+ {href:"k8s-intrare/index.html",ill:"pkt",lvl:{ro:"Avansat",en:"Advanced"},stats:{ro:"19 pași · ≈ 30 min",en:"19 steps · ≈ 30 min"},
+  t:{ro:"Viața unui pachet care intră în Kubernetes",en:"The life of a packet entering Kubernetes"},
+  d:{ro:"De la load balancer la socket-ul podului: placa de rețea, NAPI, PREROUTING, conntrack, lanțurile KUBE-*, DNAT, FORWARD, MASQUERADE, veth.",en:"From the load balancer to the pod's socket: the NIC, NAPI, PREROUTING, conntrack, the KUBE-* chains, DNAT, FORWARD, MASQUERADE, veth."},
+  topics:[{ro:"Ring buffer, DMA, sk_buff",en:"Ring buffer, DMA, sk_buff"},{ro:"Hook-uri netfilter și tabele iptables",en:"Netfilter hooks and iptables tables"},{ro:"KUBE-SERVICES → NODEPORTS → SVC → SEP",en:"KUBE-SERVICES → NODEPORTS → SVC → SEP"}]},
+ {href:"monolit-cpp/index.html",ill:"mono",lvl:{ro:"Intermediar",en:"Intermediate"},stats:{ro:"15 pași · ≈ 25 min · nume fictive",en:"15 steps · ≈ 25 min · mock names"},
+  t:{ro:"Monolit C++ cu SOAP, nginx și Oracle",en:"C++ monolith with SOAP, nginx and Oracle"},
+  d:{ro:"O cerere SOAP prin load balancer-ul nginx, un monolit C++ pe servere Linux și baza Oracle: fire, module, pool OCI, erori, failover.",en:"A SOAP request through the nginx load balancer, a C++ monolith on Linux servers and the Oracle database: threads, modules, the OCI pool, faults, failover."},
+  topics:[{ro:"Plic SOAP, WSDL, SOAP Fault",en:"SOAP envelope, WSDL, SOAP Fault"},{ro:"nginx upstream, retry și POST",en:"nginx upstreams, retries and POST"},{ro:"OCI, bind variables, Oracle lent",en:"OCI, bind variables, a slow Oracle"}]}
+];
+ILL.pkt=`<svg viewBox="0 0 300 100" aria-hidden="true"><line class="ill-line" x1="20" y1="50" x2="280" y2="50"/><rect class="ill-dev" x="10" y="38" width="34" height="24" rx="4"/><rect class="ill-dev" x="62" y="38" width="40" height="24" rx="4"/><rect class="ill-dev" x="118" y="38" width="40" height="24" rx="4"/><rect class="ill-dev" x="174" y="38" width="40" height="24" rx="4"/><polygon class="ill-dev" points="262,36 274,43 274,57 262,64 250,57 250,43"/><text class="ill-txt" x="82" y="54" text-anchor="middle" fill="var(--text)">NIC</text><text class="ill-txt" x="138" y="54" text-anchor="middle" fill="var(--text)">PRE</text><text class="ill-txt" x="194" y="54" text-anchor="middle" fill="var(--text)">DNAT</text><rect class="ill-tok" x="104" y="14" width="34" height="15" rx="4"/><text class="ill-txt" x="121" y="25" text-anchor="middle" fill="var(--l2)">SYN</text></svg>`;
+ILL.mono=`<svg viewBox="0 0 300 100" aria-hidden="true"><rect x="96" y="14" width="140" height="72" rx="8" fill="none" stroke="var(--border)" stroke-dasharray="4 3"/><line class="ill-line" x1="30" y1="50" x2="270" y2="50"/><rect class="ill-dev" x="14" y="38" width="30" height="24" rx="3"/><rect class="ill-dev" x="56" y="36" width="26" height="28" rx="3"/><rect class="ill-dev" x="106" y="40" width="36" height="20" rx="4"/><rect class="ill-dev" x="148" y="40" width="36" height="20" rx="4"/><rect class="ill-dev" x="190" y="40" width="36" height="20" rx="4"/><path class="ill-dev" d="M252 38v24c0 4 28 4 28 0v-24"/><ellipse class="ill-dev" cx="266" cy="38" rx="14" ry="4"/><text class="ill-txt" x="166" y="30" text-anchor="middle" fill="var(--muted)">C++</text></svg>`;
 const SOON=[["VLAN",{ro:"Cum împarte un switch mai multe rețele, cu etichete 802.1Q.",en:"How one switch carries several networks with 802.1Q tags."}],
  ["NAT",{ro:"Cum ies mai multe calculatoare pe internet cu un singur IP public.",en:"How many computers share one public IP on the internet."}],
  ["HTTPS / TLS",{ro:"Negocierea TLS, certificate și de ce e sigur lacătul din browser.",en:"The TLS handshake, certificates and why the browser padlock is safe."}],
@@ -148,8 +166,9 @@ function render(){
   document.getElementById("meta").innerHTML=UI.meta.map(m=>`<li>${T(m)}</li>`).join("");
   document.getElementById("how").innerHTML=UI.how.map(([i,b,s])=>`<li><i aria-hidden="true">${i}</i><div><b>${T(b)}</b><span>${T(s)}</span></div></li>`).join("");
   const card=(l,i)=>`<a class="lesson" href="${l.href}"><div class="top"><span class="num">${lang==="ro"?"LECȚIA":"LESSON"} ${String(i+1).padStart(2,"0")}</span><span class="lvl">${T(l.lvl)}</span></div>${ILL[l.ill]}<h3>${T(l.t)}</h3><p>${T(l.d)}</p><ul>${l.topics.map(t=>`<li>${T(t)}</li>`).join("")}</ul><span class="stats">${T(l.stats)}</span><span class="go">${T(UI.start)}</span></a>`;
-  document.getElementById("path2").innerHTML=PROD.map((l,i)=>card(l,i+LESSONS.length)).join("");
-  document.getElementById("path").innerHTML=LESSONS.map((l,i)=>`<a class="lesson" href="${l.href}"><div class="top"><span class="num">${lang==="ro"?"LECȚIA":"LESSON"} ${String(i+1).padStart(2,"0")}</span><span class="lvl">${T(l.lvl)}</span></div>${ILL[l.ill]}<h3>${T(l.t)}</h3><p>${T(l.d)}</p><ul>${l.topics.map(t=>`<li>${T(t)}</li>`).join("")}</ul><span class="stats">${T(l.stats)}</span><span class="go">${T(UI.start)}</span></a>`).join("");
+  const ALL=[...LESSONS,...PROD,...EXTRA],by=h=>ALL.find(l=>l.href===h+"/index.html");
+  const SECTIONS=[["path",["ethernet","dns"]],["pathK",["kubernetes","gke-retea","k8s-intrare"]],["path2",["tomcat","microservicii","monolit-cpp"]]];
+  let n=0;SECTIONS.forEach(([id,list])=>{document.getElementById(id).innerHTML=list.map(h=>card(by(h),n++)).join("")});
   document.getElementById("soon").innerHTML=SOON.map(([b,p])=>`<div><b>${b}</b><p>${T(p)}</p></div>`).join("");
   const th=document.getElementById("theme");th.setAttribute("aria-label",T(UI.theme));th.title=T(UI.theme);
   document.querySelectorAll("[data-lang]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.lang===lang?"true":"false"));

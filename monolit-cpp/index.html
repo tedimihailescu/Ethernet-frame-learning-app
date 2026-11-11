@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Monolit C++ cu SOAP</title>
+<meta name="description" content="Lecție interactivă: cum funcționează o aplicație monolit C++ care expune servicii web SOAP, pe servere Linux, în spatele unui load balancer nginx, cu bază de date Oracle. Nume fictive. / A C++ monolith with SOAP web services behind nginx, with Oracle.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<script>
+(function(){
+const X=s=>s.replace(/</g,"&lt;").replace(/>/g,"&gt;");
+const Q1={from:{ro:"sistem partener · 203.0.113.60",en:"partner system · 203.0.113.60"},to:"atlas.example.com:443 (VIP)",req:"POST /ws/CustomerService",hdrs:'Content-Type: text/xml · SOAPAction: "getCustomer"',soapOp:"getCustomer",soapBody:X("<customerId>10442</customerId>")};
+const Q2={...Q1,from:"nginx-lb-01 · 10.20.0.5",to:"app-01:8081 (HTTP)",xff:"203.0.113.60",reqId:"a91f-3c07"};
+const Q3={...Q2,thread:{ro:"worker-07 (din 32)",en:"worker-07 (of 32)"}};
+const Q4={...Q3,call:"CustomerService::getCustomer(10442)",xsd:{ro:"valid față de WSDL/XSD",en:"valid against WSDL/XSD"}};
+const Q5={...Q4,call:"CustomerModule::load(10442) → BillingModule::balance(10442)"};
+const Q6={...Q5,dbSess:{ro:"sesiunea 5 din 20 (pool OCI)",en:"session 5 of 20 (OCI pool)"},sql:"SELECT … FROM customers WHERE id = :id",binds:":id = 10442"};
+const Q7={...Q6,dbres:{ro:"1 rând · 2 ms · soft parse",en:"1 row · 2 ms · soft parse"}};
+const RESP={from:"app-01:8081",to:"nginx-lb-01",reqId:"a91f-3c07",thread:{ro:"worker-07 (eliberat)",en:"worker-07 (released)"},status:"200 OK",ctype:"text/xml; charset=utf-8",soapOp:"getCustomerResponse",soapBody:X("<name>Ion Popescu</name><balance>124.50</balance>"),timing:"14 ms"};
+const OUT={from:"atlas.example.com (VIP)",to:{ro:"sistem partener",en:"partner system"},status:"200 OK",ctype:"text/xml; charset=utf-8",soapOp:"getCustomerResponse",soapBody:X("<name>Ion Popescu</name><balance>124.50</balance>")};
+const FAULT={from:"app-01:8081",to:"nginx-lb-01 → partener",status:"500 Internal Server Error",ctype:"text/xml; charset=utf-8",soapOp:"soap:Fault",soapBody:X("<faultcode>soap:Client</faultcode><faultstring>customerId must be a number</faultstring>")};
+const FO={...Q2,to:"app-02:8081 (HTTP)",upstream:{ro:"app-01 nu răspunde → încearcă app-02?",en:"app-01 not answering → try app-02?"}};
+
+window.LESSON={
+docTitle:{ro:"Monolit C++ cu SOAP",en:"C++ Monolith with SOAP"},
+eyebrow:{ro:"Lecție interactivă · Arhitectura noastră (nume fictive)",en:"Interactive lesson · Our architecture (mock names)"},
+title:{ro:"Un monolit C++ cu servicii SOAP, nginx și Oracle",en:"A C++ monolith with SOAP services, nginx and Oracle"},
+sub:{ro:"Cum circulă o cerere SOAP printr-o aplicație „Atlas” (nume fictiv) scrisă în C++: load balancer-ul nginx, serverele Linux, firele de execuție, stratul SOAP, modulele de business din același proces, pool-ul de sesiuni Oracle și baza de date. Plus ce se întâmplă la erori, la căderea unui server și la o bază de date lentă.",en:"How a SOAP request flows through an app called \"Atlas\" (a mock name) written in C++: the nginx load balancer, the Linux servers, threads, the SOAP layer, the business modules in the same process, the Oracle session pool and the database. Plus what happens on errors, when a server fails and when the database is slow."},
+meta:[{ro:"≈ 25 minute",en:"≈ 25 minutes"},{ro:"15 pași",en:"15 steps"},{ro:"10 întrebări",en:"10 questions"},{ro:"Nume fictive",en:"Mock names"}],
+goals:[{ro:"Ce înseamnă „monolit” și de ce apelurile interne sunt rapide",en:"What \"monolith\" means and why internal calls are fast"},{ro:"Cum arată o cerere SOAP: plicul XML, SOAPAction, WSDL",en:"What a SOAP request looks like: the XML envelope, SOAPAction, WSDL"},{ro:"Rolul lui nginx: TLS, distribuire, retry, timeout",en:"nginx's role: TLS, distribution, retries, timeouts"},{ro:"Cum vorbește C++ cu Oracle (OCI, pool, bind variables)",en:"How C++ talks to Oracle (OCI, pooling, bind variables)"}],
+foot:{ro:"Toate numele (Atlas, atlas-core, CustomerService, ATLASDB), adresele și cifrele sunt inventate. Detaliile marcate „presupus” trebuie verificate în documentația internă.",en:"All names (Atlas, atlas-core, CustomerService, ATLASDB), addresses and numbers are made up. Details marked \"assumed\" should be checked against internal documentation."},
+ui:{frameT:{ro:"Cererea (live)",en:"The request (live)"},refT:{ro:"Configurare, depanare și ce să verifici",en:"Configuration, troubleshooting and what to check"},refLead:{ro:"Configurația nginx, cum arată un plic SOAP complet, întrebări pentru echipă și semnele unor probleme frecvente.",en:"The nginx configuration, a full SOAP envelope, questions to ask the team, and the signs of common problems."}},
+tryT:{ro:"Încearcă (pe serverele de test, nu în producție)",en:"Try it (on test servers, not production)"},
+legend:[["lg-app","SOAP",{ro:"cerere",en:"request"}],["lg-tcp","SOAP",{ro:"răspuns",en:"response"}],["lg-eth","SQL",{ro:"interogare Oracle",en:"Oracle query"}],["lg-arp","FAULT",{ro:"eroare SOAP",en:"SOAP fault"}]],
+
+nodes:{
+  client:{type:"user",name:{ro:"Sistem partener",en:"Partner system"},lines:["203.0.113.60"]},
+  ngx:{type:"server",name:"nginx",lines:["LB · VIP :443"]},
+  app2:{type:"server",name:"app-02",lines:[{ro:"atlas-core (copie)",en:"atlas-core (copy)"}]},
+  lis:{type:"box",name:"Listener",lines:[{ro:"pool 32 fire",en:"pool of 32 threads"}]},
+  soap:{type:"box",name:{ro:"Strat SOAP",en:"SOAP layer"},lines:["XML ⇄ C++"]},
+  biz:{type:"box",name:{ro:"Module business",en:"Business modules"},lines:[{ro:"clienți, facturi…",en:"customers, billing…"}]},
+  dal:{type:"box",name:{ro:"Acces date",en:"Data access"},lines:[{ro:"pool OCI (20)",en:"OCI pool (20)"}]},
+  ora:{type:"db",name:"Oracle",lines:["ATLASDB :1521"]}
+},
+links:[["client","ngx"],["ngx","lis"],["ngx","app2","virt"],["lis","soap"],["soap","biz"],["biz","dal"],["dal","ora"]],
+layouts:{
+  wide:{vb:[0,0,1000,480],n:{client:[60,210],ngx:[200,210],lis:[350,210],soap:[490,210],biz:[630,210],dal:[770,210],ora:[920,210],app2:[450,415]},
+    zones:[{x:285,y:110,w:570,h:200,top:true,l:{ro:"app-01 · Linux · un singur proces: atlas-core (C++)",en:"app-01 · Linux · one process: atlas-core (C++)"}}]},
+  narrow:{vb:[0,0,360,720],n:{client:[60,50],ngx:[60,150],app2:[270,150],lis:[60,280],soap:[60,370],biz:[60,460],dal:[60,550],ora:[60,660]},
+    side:{client:"right",ngx:"right",lis:"right",soap:"right",biz:"right",dal:"right",ora:"right"},
+    zones:[{x:4,y:222,w:352,h:370,top:true,l:{ro:"app-01 · proces atlas-core",en:"app-01 · atlas-core process"}}]}
+},
+groups:[
+  {id:"route",color:"l3",fields:["from","to","upstream"],name:{ro:"Cine → cine",en:"Who → whom"},short:{ro:"Drum",en:"Route"},grow:2},
+  {id:"http",color:"l7",fields:["req","hdrs","xff","reqId","status","ctype","timing"],name:"HTTP",short:"HTTP",grow:3},
+  {id:"soap",color:"arp",fields:["soapOp","soapBody","xsd"],name:{ro:"Plicul SOAP (XML)",en:"The SOAP envelope (XML)"},short:"SOAP",grow:3},
+  {id:"proc",color:"l2",fields:["thread","call"],name:{ro:"În procesul atlas-core",en:"Inside the atlas-core process"},short:{ro:"Proces",en:"Process"},grow:3},
+  {id:"db",color:"l4",fields:["dbSess","sql","binds","dbres"],name:"Oracle (OCI)",short:"Oracle",grow:3}
+],
+fieldLabels:{from:{ro:"De la",en:"From"},to:{ro:"Către",en:"To"},upstream:"Upstream",req:{ro:"Cerere",en:"Request"},hdrs:{ro:"Antete",en:"Headers"},xff:"X-Forwarded-For",reqId:"X-Request-ID",status:{ro:"Stare",en:"Status"},ctype:"Content-Type",timing:{ro:"Durată",en:"Duration"},
+  soapOp:{ro:"Operație",en:"Operation"},soapBody:{ro:"Corpul (Body)",en:"Body"},xsd:{ro:"Validare",en:"Validation"},thread:{ro:"Fir de execuție",en:"Thread"},call:{ro:"Cod apelat",en:"Code called"},
+  dbSess:{ro:"Sesiune Oracle",en:"Oracle session"},sql:"SQL",binds:"Bind variables",dbres:{ro:"Rezultat",en:"Result"}},
+pdu:f=>f.soapOp==="soap:Fault"?{badge:"SOAP Fault",tok:["FAULT","k-arp"]}:f.status?{badge:{ro:"Răspuns SOAP",en:"SOAP response"},tok:["SOAP","k-tcp"]}:f.sql?{badge:{ro:"Cerere + SQL",en:"Request + SQL"},tok:["SQL","k-data"]}:{badge:{ro:"Cerere SOAP",en:"SOAP request"},tok:["SOAP","k-app"]},
+
+tables:{
+  arch:{title:{ro:"Componentele (cu ce am presupus)",en:"The components (and what we assumed)"},cols:[{ro:"Componentă",en:"Component"},{ro:"Ce face",en:"What it does"},{ro:"Sigur / presupus",en:"Known / assumed"}],
+    rows:()=>[["nginx (×2, VIP keepalived)",{ro:"load balancer, TLS",en:"load balancer, TLS"},{ro:"sigur: nginx · presupus: 2 + VIP",en:"known: nginx · assumed: 2 + VIP"}],["app-01, app-02",{ro:"servere Linux cu atlas-core",en:"Linux servers running atlas-core"},{ro:"sigur",en:"known"}],["atlas-core",{ro:"monolitul C++ (un binar)",en:"the C++ monolith (one binary)"},{ro:"sigur",en:"known"}],[{ro:"servicii web SOAP",en:"SOAP web services"},{ro:"API-ul XML al monolitului",en:"the monolith's XML API"},{ro:"sigur: SOAP · presupus: în același proces",en:"known: SOAP · assumed: same process"}],["Oracle ATLASDB",{ro:"datele",en:"the data"},{ro:"sigur: Oracle · presupus: acces prin OCI",en:"known: Oracle · assumed: OCI access"}]]},
+  upstream:{title:{ro:"nginx: upstream-ul atlas_ws",en:"nginx: the atlas_ws upstream"},cols:[{ro:"Directivă",en:"Directive"},{ro:"Valoare",en:"Value"}],plain:[],
+    rows:()=>[["upstream atlas_ws","least_conn"],["server","app-01:8081 max_fails=3 fail_timeout=30s"],["server","app-02:8081 max_fails=3 fail_timeout=30s"],["location /ws/","proxy_pass http://atlas_ws"],["proxy_read_timeout","30s"],["proxy_set_header","X-Forwarded-For · X-Request-ID $request_id"]]},
+  threads:{title:{ro:"Fire de execuție în atlas-core (app-01)",en:"Threads in atlas-core (app-01)"},cols:[{ro:"Indicator",en:"Metric"},{ro:"Valoare",en:"Value"}],
+    rows:()=>[[{ro:"Fire în pool",en:"Threads in pool"},"32"],[{ro:"Ocupate acum",en:"Busy now"},"9"],[{ro:"Cereri la coadă",en:"Queued requests"},"0"],[{ro:"Fir ales",en:"Thread chosen"},"worker-07"]]},
+  wsdl:{title:{ro:"Operațiile din WSDL-ul CustomerService",en:"Operations in the CustomerService WSDL"},cols:[{ro:"Operație",en:"Operation"},{ro:"Intrare",en:"Input"},{ro:"Ieșire",en:"Output"}],
+    rows:()=>[["getCustomer","customerId: long","Customer"],["updateAddress","customerId, Address","Status"],["listInvoices","customerId, from, to","Invoice[]"]]},
+  modules:{title:{ro:"Modulele din binarul atlas-core",en:"The modules in the atlas-core binary"},cols:[{ro:"Modul",en:"Module"},{ro:"Responsabilitate",en:"Responsibility"}],
+    rows:()=>[["SoapLayer",{ro:"XML ⇄ obiecte C++, validare",en:"XML ⇄ C++ objects, validation"}],["CustomerModule",{ro:"clienți, adrese",en:"customers, addresses"}],["BillingModule",{ro:"facturi, solduri",en:"invoices, balances"}],["OrderModule",{ro:"comenzi",en:"orders"}],["DataAccess",{ro:"SQL, pool OCI, tranzacții",en:"SQL, OCI pool, transactions"}]]},
+  oci:{title:{ro:"Pool-ul de sesiuni OCI",en:"The OCI session pool"},cols:[{ro:"Indicator",en:"Metric"},{ro:"Valoare",en:"Value"}],
+    rows:()=>[["min / max","5 / 20"],[{ro:"Ocupate",en:"Busy"},"6"],[{ro:"Libere",en:"Idle"},"14"],[{ro:"Așteptare maximă",en:"Max wait"},"2 s"],[{ro:"Conectare",en:"Connect string"},"ATLASDB (TNS, port 1521)"]]},
+  sqlstat:{title:{ro:"Oracle: statistica interogării (V$SQL, fragment)",en:"Oracle: query statistics (V$SQL, excerpt)"},cols:[{ro:"Indicator",en:"Metric"},{ro:"Valoare",en:"Value"}],
+    rows:()=>[["sql_id","7h2kq9w1m0abc"],["executions","1 284 907"],["parse_calls",{ro:"20 (o dată pe sesiune)",en:"20 (once per session)"}],[{ro:"Timp mediu",en:"Average time"},"1.8 ms"],["plan","INDEX UNIQUE SCAN PK_CUSTOMERS"]]},
+  logs:{title:{ro:"Unde cauți când ceva nu merge",en:"Where to look when something breaks"},cols:[{ro:"Jurnal",en:"Log"},{ro:"Ce găsești",en:"What you find"}],
+    rows:()=>[["nginx access.log",{ro:"fiecare cerere: stare, upstream, upstream_response_time",en:"every request: status, upstream, upstream_response_time"}],["nginx error.log",{ro:"„upstream timed out”, „connect() failed”",en:"\"upstream timed out\", \"connect() failed\""}],[{ro:"Log-ul atlas-core",en:"atlas-core log"},{ro:"X-Request-ID, operația SOAP, excepții",en:"X-Request-ID, the SOAP operation, exceptions"}],["journalctl -u atlas-core",{ro:"porniri, opriri, crash-uri",en:"starts, stops, crashes"}],["Oracle alert log / AWR",{ro:"erori ale bazei, interogări lente",en:"database errors, slow queries"}]]},
+  slow:{title:{ro:"Când Oracle încetinește",en:"When Oracle slows down"},cols:[{ro:"Indicator",en:"Metric"},{ro:"Normal",en:"Normal"},{ro:"Acum",en:"Now"}],
+    rows:()=>[[{ro:"Timp interogare",en:"Query time"},"2 ms","3 s"],[{ro:"Sesiuni OCI ocupate",en:"Busy OCI sessions"},"6 / 20","20 / 20"],[{ro:"Fire atlas-core ocupate",en:"Busy atlas-core threads"},"9 / 32","32 / 32"],[{ro:"Cereri la coadă",en:"Queued requests"},"0","140"],[{ro:"Răspuns nginx",en:"nginx response"},"200",{ro:"504 după 30 s",en:"504 after 30 s"}]]}
+},
+log:{title:{ro:"Jurnalul cererii",en:"Request log"},lead:{ro:"Același X-Request-ID apare în nginx și în log-ul atlas-core: așa legi o eroare raportată de partener de linia exactă din server.",en:"The same X-Request-ID appears in nginx and in the atlas-core log: that's how you tie an error a partner reports to the exact server log line."},
+  first:{ro:"Moment",en:"Moment"},minWidth:560,
+  cols:[{h:{ro:"De la",en:"From"},v:f=>f.from,cls:"ip"},{h:{ro:"Către",en:"To"},v:f=>f.to,cls:"mac"},{h:{ro:"Conținut",en:"Content"},v:f=>f.status?f.status+" · "+f.soapOp:f.sql&&!f.dbres?f.sql:f.req||f.soapOp}]},
+
+steps:[
+{at:["ngx","lis","soap","biz","dal","ora"],frame:null,kind:"none",tables:["arch"],
+ title:{ro:"Scenariul și ce am presupus",en:"The scenario and what we assumed"},
+ body:{ro:`<p>Aplicația <strong>Atlas</strong> (nume fictiv) e un <strong>monolit</strong> scris în <strong>C++</strong>: un singur program (<code>atlas-core</code>) care conține toate funcțiile: clienți, facturi, comenzi. Expune <strong>servicii web SOAP</strong> prin care alte sisteme îi cer date. Rulează pe servere <strong>Linux</strong> (<code>app-01</code>, <code>app-02</code>), în spatele unui load balancer <strong>nginx</strong>, iar datele stau într-o bază <strong>Oracle</strong>.</p>
+<p>Un sistem partener cere detaliile clientului <code>10442</code> prin operația SOAP <code>getCustomer</code>. Urmărim cererea până în Oracle și înapoi.</p>
+<p class="note">Ce e marcat „presupus” în tabel (de ex. că serviciile SOAP rulează în același proces cu restul, că accesul la Oracle e prin OCI) e varianta cea mai des întâlnită. Verifică-le cu echipa: lecția explică și alternativele.</p>`,
+ en:`<p>The <strong>Atlas</strong> app (a mock name) is a <strong>monolith</strong> written in <strong>C++</strong>: a single program (<code>atlas-core</code>) containing every feature: customers, billing, orders. It exposes <strong>SOAP web services</strong> through which other systems ask it for data. It runs on <strong>Linux</strong> servers (<code>app-01</code>, <code>app-02</code>) behind an <strong>nginx</strong> load balancer, and the data lives in an <strong>Oracle</strong> database.</p>
+<p>A partner system asks for customer <code>10442</code>'s details via the SOAP operation <code>getCustomer</code>. We follow the request into Oracle and back.</p>
+<p class="note">What's marked "assumed" in the table (e.g. that the SOAP services run in the same process as everything else, that Oracle is accessed via OCI) is the most common setup. Check them with the team: the lesson explains the alternatives too.</p>`},
+ more:{ro:`<p><strong>Monolit</strong> nu înseamnă „rău” sau „vechi”. Înseamnă că toate modulele sunt compilate împreună și rulează în același proces. Avantaje: apelurile între module sunt simple apeluri de funcții (nanosecunde), o singură tranzacție poate acoperi tot, depanarea e într-un singur loc. Dezavantaje: o lansare înseamnă tot binarul, iar un crash al unui modul oprește tot procesul. Compară cu <a href="../microservicii/index.html">lecția despre microservicii</a>.</p>`,
+  en:`<p><strong>Monolith</strong> doesn't mean "bad" or "old". It means all modules are compiled together and run in one process. Pros: calls between modules are plain function calls (nanoseconds), one transaction can cover everything, debugging happens in one place. Cons: a release means the whole binary, and a crash in one module stops the whole process. Compare with the <a href="../microservicii/index.html">microservices lesson</a>.</p>`}},
+
+{at:"client",frame:Q1,kind:"req",move:[[["client","ngx"]]],log:{ro:"partener → nginx",en:"partner → nginx"},tables:["wsdl"],hl:{wsdl:"getCustomer"},who:{ro:"Sistemul partener",en:"The partner system"},
+ title:{ro:"Cererea SOAP: un plic XML trimis prin HTTP POST",en:"The SOAP request: an XML envelope sent by HTTP POST"},
+ body:{ro:`<p>SOAP e un protocol mai vechi decât REST, dar încă foarte folosit în bănci, telecom, administrație. Fiecare cerere e un <strong>document XML</strong> („plic”, <em>Envelope</em>) trimis cu <strong>HTTP POST</strong>:</p>
+<ul><li><code>POST /ws/CustomerService</code>: adresa serviciului;</li>
+<li><code>Content-Type: text/xml</code> și antetul <code>SOAPAction: "getCustomer"</code> (în SOAP 1.1): ce operație se cere;</li>
+<li>în corpul XML: <code>&lt;getCustomer&gt;&lt;customerId&gt;10442&lt;/customerId&gt;&lt;/getCustomer&gt;</code>.</li></ul>
+<p>Partenerul știe exact ce operații există și ce format au din <strong>WSDL</strong>: un fișier XML care descrie serviciul (în dreapta). Pe baza lui își generează codul client.</p>`,
+ en:`<p>SOAP is a protocol older than REST but still widely used in banking, telecoms and government. Every request is an <strong>XML document</strong> (an "envelope") sent with <strong>HTTP POST</strong>:</p>
+<ul><li><code>POST /ws/CustomerService</code>: the service's address;</li>
+<li><code>Content-Type: text/xml</code> and the <code>SOAPAction: "getCustomer"</code> header (in SOAP 1.1): which operation is requested;</li>
+<li>in the XML body: <code>&lt;getCustomer&gt;&lt;customerId&gt;10442&lt;/customerId&gt;&lt;/getCustomer&gt;</code>.</li></ul>
+<p>The partner knows exactly which operations exist and their format from the <strong>WSDL</strong>: an XML file describing the service (on the right). It generates its client code from it.</p>`},
+ try:[{cmd:"curl -s https://atlas-test.example.com/ws/CustomerService?wsdl | head -40",d:{ro:"Descarcă WSDL-ul unui serviciu (adresa e fictivă; folosește mediul de test).",en:"Downloads a service's WSDL (the address is made up; use the test environment)."}}]},
+
+{at:"ngx",frame:Q2,kind:"req",move:[[["ngx","lis"]]],log:{ro:"nginx → app-01",en:"nginx → app-01"},tables:["upstream"],hl:{upstream:["upstream atlas_ws","location /ws/"]},who:"nginx",
+ title:{ro:"nginx: TLS, alegerea serverului, antete noi",en:"nginx: TLS, choosing a server, new headers"},
+ body:{ro:`<p>Cererea ajunge la <strong>VIP</strong>-ul <code>atlas.example.com</code>, ținut de nginx. nginx:</p>
+<ol><li><strong>Termină TLS</strong>: decriptează HTTPS-ul (certificatul stă pe nginx). Spre servere merge HTTP în rețeaua internă.</li>
+<li>Potrivește <code>location /ws/</code> și alege un server din upstream-ul <code>atlas_ws</code>. Cu <code>least_conn</code>, alege serverul cu cele mai puține conexiuni active: <code>app-01</code>.</li>
+<li>Adaugă <code>X-Forwarded-For</code> (IP-ul partenerului) și <code>X-Request-ID</code> (un ID unic, scris și în log-uri).</li>
+<li>Pornește cronometrul <code>proxy_read_timeout</code> (30 s): dacă app-01 nu răspunde în acest timp, nginx renunță.</li></ol>`,
+ en:`<p>The request reaches the <strong>VIP</strong> <code>atlas.example.com</code>, held by nginx. nginx:</p>
+<ol><li><strong>Terminates TLS</strong>: it decrypts HTTPS (the certificate lives on nginx). Plain HTTP goes on to the servers over the internal network.</li>
+<li>Matches <code>location /ws/</code> and picks a server from the <code>atlas_ws</code> upstream. With <code>least_conn</code>, it picks the server with the fewest active connections: <code>app-01</code>.</li>
+<li>Adds <code>X-Forwarded-For</code> (the partner's IP) and <code>X-Request-ID</code> (a unique ID, also written to logs).</li>
+<li>Starts the <code>proxy_read_timeout</code> clock (30 s): if app-01 doesn't answer in time, nginx gives up.</li></ol>`},
+ more:{ro:`<p>Presupunem două nginx-uri cu <strong>keepalived</strong>: ambele știu VIP-ul, dar doar unul îl ține activ (VRRP). Dacă nginx-lb-01 cade, nginx-lb-02 preia VIP-ul în câteva secunde. Verifică la voi: poate fi și un load balancer hardware (F5) sau unul din cloud în fața lui nginx.</p><p>Dacă și drumul nginx → app trebuie criptat (cerință de securitate), se folosește <code>proxy_pass https://</code> și TLS și pe servere.</p>`,
+  en:`<p>We assume two nginx instances with <strong>keepalived</strong>: both know the VIP, but only one holds it (VRRP). If nginx-lb-01 fails, nginx-lb-02 takes over the VIP within seconds. Check yours: there may also be a hardware load balancer (F5) or a cloud one in front of nginx.</p><p>If the nginx → app hop must be encrypted too (a security requirement), you use <code>proxy_pass https://</code> and TLS on the servers as well.</p>`},
+ try:[{cmd:"sudo nginx -T | grep -A12 'upstream atlas_ws'",d:{ro:"Afișează configurația completă încărcată și upstream-ul.",en:"Prints the full loaded configuration and the upstream."}}]},
+
+{at:"lis",frame:Q3,kind:"req",tables:["threads"],hl:{threads:[3]},who:{ro:"atlas-core: listener",en:"atlas-core: listener"},
+ title:{ro:"atlas-core primește conexiunea: un fir din pool",en:"atlas-core receives the connection: a thread from the pool"},
+ body:{ro:`<p>Pe app-01, procesul <code>atlas-core</code> ascultă pe portul <code>8081</code>. Un fir „listener” acceptă conexiunea TCP de la nginx (la fel ca la orice server: socket, <code>accept()</code>) și o predă unui fir din <strong>pool</strong>: <code>worker-07</code>.</p>
+<p>Exact ca la Tomcat, <strong>o cerere = un fir</strong> cât e procesată. Pool-ul are 32 de fire, deci app-01 poate lucra la cel mult 32 de cereri în același timp; restul așteaptă la coadă.</p>`,
+ en:`<p>On app-01, the <code>atlas-core</code> process listens on port <code>8081</code>. A "listener" thread accepts the TCP connection from nginx (as any server does: socket, <code>accept()</code>) and hands it to a thread from the <strong>pool</strong>: <code>worker-07</code>.</p>
+<p>Just like Tomcat, <strong>one request = one thread</strong> while it's processed. The pool has 32 threads, so app-01 can work on at most 32 requests at once; the rest wait in a queue.</p>`},
+ more:{ro:`<p>Un C++ nu are o mașină virtuală ca Java: e cod mașină care rulează direct, fără garbage collector, deci are latențe foarte stabile. În schimb, o greșeală de memorie (pointer invalid) poate opri <strong>tot procesul</strong> (segmentation fault), cu toate cererile în curs. De aceea contează un supraveghetor (systemd cu <code>Restart=always</code>) și fișierele <strong>core dump</strong> pentru analiză.</p>`,
+  en:`<p>C++ has no virtual machine like Java: it's machine code running directly, with no garbage collector, so latencies are very steady. On the other hand, a memory bug (an invalid pointer) can kill <strong>the whole process</strong> (segmentation fault), with every in-flight request. That's why a supervisor (systemd with <code>Restart=always</code>) and <strong>core dump</strong> files for analysis matter.</p>`},
+ try:[{cmd:"ss -tlnp | grep 8081",d:{ro:"Procesul care ascultă pe portul 8081.",en:"The process listening on port 8081."}},{cmd:"ps -L -p $(pgrep atlas-core) | wc -l",d:{ro:"Câte fire are procesul.",en:"How many threads the process has."}}]},
+
+{at:"soap",frame:Q4,kind:"req",move:[[["lis","soap"]]],who:{ro:"Stratul SOAP",en:"The SOAP layer"},
+ title:{ro:"Stratul SOAP: din XML în obiecte C++",en:"The SOAP layer: from XML to C++ objects"},
+ body:{ro:`<p>Firul <code>worker-07</code> dă corpul HTTP stratului <strong>SOAP</strong> (des întâlnit în C++: biblioteca <strong>gSOAP</strong>, care generează cod din WSDL):</p>
+<ol><li><strong>Parsează XML-ul</strong> și găsește operația <code>getCustomer</code> (din <code>SOAPAction</code> sau din numele elementului).</li>
+<li><strong>Validează</strong> datele față de schema XSD din WSDL: <code>customerId</code> trebuie să fie un număr.</li>
+<li>Transformă XML-ul într-un obiect C++ și apelează funcția generată: <code>CustomerService::getCustomer(10442)</code>.</li></ol>`,
+ en:`<p>Thread <code>worker-07</code> hands the HTTP body to the <strong>SOAP</strong> layer (common in C++: the <strong>gSOAP</strong> library, which generates code from the WSDL):</p>
+<ol><li>It <strong>parses the XML</strong> and finds the <code>getCustomer</code> operation (from <code>SOAPAction</code> or the element name).</li>
+<li>It <strong>validates</strong> the data against the WSDL's XSD schema: <code>customerId</code> must be a number.</li>
+<li>It turns the XML into a C++ object and calls the generated function: <code>CustomerService::getCustomer(10442)</code>.</li></ol>`},
+ more:{ro:`<p>Parsarea XML costă: un plic SOAP e de câteva ori mai mare decât același JSON, iar procesarea lui consumă CPU. La volume mari, stratul SOAP poate fi chiar partea cea mai scumpă a cererii. Dacă serviciile SOAP sunt la voi un <strong>proces separat</strong> care cheamă monolitul (de ex. printr-un socket local sau o coadă), mai apare un pas de rețea între ele; restul lecției rămâne valabil.</p>`,
+  en:`<p>XML parsing isn't free: a SOAP envelope is several times bigger than the same JSON, and processing it costs CPU. At high volume, the SOAP layer can be the most expensive part of the request. If your SOAP services are a <strong>separate process</strong> calling the monolith (e.g. over a local socket or a queue), there's one more network step between them; the rest of the lesson still holds.</p>`}},
+
+{at:"biz",frame:Q5,kind:"req",move:[[["soap","biz"]]],tables:["modules"],hl:{modules:["CustomerModule","BillingModule"]},who:{ro:"Module business",en:"Business modules"},
+ title:{ro:"Modulele de business: apeluri în același proces",en:"The business modules: calls in the same process"},
+ body:{ro:`<p><code>CustomerModule</code> încarcă clientul și, pentru sold, cheamă <code>BillingModule</code>. Fiind un <strong>monolit</strong>, nu e niciun apel prin rețea: e un simplu <strong>apel de funcție C++</strong>, în același proces și pe același fir, care durează nanosecunde.</p>
+<p class="key">Asta e marea diferență față de microservicii: acolo, același lucru ar fi un apel HTTP spre alt serviciu, cu timeout, retry și posibilitatea ca celălalt serviciu să fie căzut.</p>`,
+ en:`<p><code>CustomerModule</code> loads the customer and, for the balance, calls <code>BillingModule</code>. Since this is a <strong>monolith</strong>, there's no network call: it's a plain <strong>C++ function call</strong>, in the same process and on the same thread, taking nanoseconds.</p>
+<p class="key">That's the big difference from microservices: there, the same thing would be an HTTP call to another service, with timeouts, retries and the chance that the other service is down.</p>`}},
+
+{at:"dal",frame:Q6,kind:"req",move:[[["biz","dal"]],[["dal","ora"]]],log:{ro:"atlas-core → Oracle",en:"atlas-core → Oracle"},tables:["oci"],who:{ro:"Acces date (OCI)",en:"Data access (OCI)"},
+ title:{ro:"Spre Oracle: o sesiune din pool și bind variables",en:"To Oracle: a pooled session and bind variables"},
+ body:{ro:`<p>Stratul de acces la date folosește (presupus) <strong>OCI</strong>, biblioteca C oficială Oracle (sau varianta C++, <strong>OCCI</strong>):</p>
+<ul><li>Ia o <strong>sesiune din pool</strong> (5 din 20). Deschiderea unei sesiuni noi la Oracle durează zeci de milisecunde, deci sunt refolosite.</li>
+<li>Trimite SQL-ul cu o <strong>bind variable</strong>: <code>WHERE id = :id</code>, iar valoarea <code>10442</code> e trimisă separat.</li></ul>
+<p>De ce bind variables? Oracle vede <strong>același text SQL</strong> la fiecare cerere și refolosește planul deja calculat (<em>soft parse</em>). Cu valoarea lipită în text (<code>id = 10442</code>, <code>id = 10443</code>…), fiecare cerere ar fi un SQL nou, analizat de la zero (<em>hard parse</em>), iar codul ar fi expus la <strong>SQL injection</strong>.</p>`,
+ en:`<p>The data access layer uses (assumed) <strong>OCI</strong>, Oracle's official C library (or its C++ flavour, <strong>OCCI</strong>):</p>
+<ul><li>It takes a <strong>session from the pool</strong> (5 of 20). Opening a new Oracle session takes tens of milliseconds, so sessions are reused.</li>
+<li>It sends the SQL with a <strong>bind variable</strong>: <code>WHERE id = :id</code>, with the value <code>10442</code> sent separately.</li></ul>
+<p>Why bind variables? Oracle sees <strong>the same SQL text</strong> on every request and reuses the plan it already computed (a <em>soft parse</em>). With the value pasted into the text (<code>id = 10442</code>, <code>id = 10443</code>…), every request would be new SQL analysed from scratch (a <em>hard parse</em>), and the code would be open to <strong>SQL injection</strong>.</p>`},
+ more:{ro:`<p>Conexiunea merge pe portul <strong>1521</strong> la <strong>listener</strong>-ul Oracle, care o predă unui proces server dedicat acelei sesiuni. Numele <code>ATLASDB</code> e rezolvat din <code>tnsnames.ora</code> (sau un șir EZConnect: <code>host:1521/serviciu</code>). Cu Oracle <strong>RAC</strong> sau Data Guard, șirul de conectare poate lista mai multe adrese, pentru failover.</p>`,
+  en:`<p>The connection goes on port <strong>1521</strong> to the Oracle <strong>listener</strong>, which hands it to a server process dedicated to that session. The name <code>ATLASDB</code> is resolved from <code>tnsnames.ora</code> (or an EZConnect string: <code>host:1521/service</code>). With Oracle <strong>RAC</strong> or Data Guard, the connect string can list several addresses for failover.</p>`},
+ try:[{cmd:"tnsping ATLASDB",d:{ro:"Verifică dacă listener-ul Oracle e accesibil de pe server.",en:"Checks whether the Oracle listener is reachable from the server."}}]},
+
+{at:"ora",frame:Q7,kind:"req",move:[[["ora","dal"]]],tables:["sqlstat"],hl:{sqlstat:"parse_calls"},who:"Oracle",
+ title:{ro:"Oracle execută: plan refolosit, date din memorie",en:"Oracle executes: a reused plan, data from memory"},
+ body:{ro:`<p>În Oracle, procesul server al sesiunii:</p>
+<ol><li>Găsește SQL-ul în <strong>shared pool</strong> (cache-ul de planuri): <em>soft parse</em>, fără reanaliză.</li>
+<li>Planul e <code>INDEX UNIQUE SCAN</code> pe cheia primară: citește un singur bloc din index și un bloc din tabel.</li>
+<li>Blocurile sunt deja în <strong>buffer cache</strong> (memorie), deci nu e nevoie de disc. Răspunde în 2 ms.</li></ol>
+<p>La o operație care modifică date (de ex. <code>updateAddress</code>), la <code>COMMIT</code> Oracle scrie întâi în <strong>redo log</strong>; abia apoi confirmă. Așa nu se pierde nimic la o cădere.</p>`,
+ en:`<p>In Oracle, the session's server process:</p>
+<ol><li>Finds the SQL in the <strong>shared pool</strong> (the plan cache): a <em>soft parse</em>, no re-analysis.</li>
+<li>The plan is an <code>INDEX UNIQUE SCAN</code> on the primary key: it reads one index block and one table block.</li>
+<li>The blocks are already in the <strong>buffer cache</strong> (memory), so no disk is needed. It answers in 2 ms.</li></ol>
+<p>For an operation that changes data (e.g. <code>updateAddress</code>), on <code>COMMIT</code> Oracle first writes to the <strong>redo log</strong>, then confirms. That way nothing is lost in a crash.</p>`}},
+
+{at:"lis",frame:RESP,kind:"req",move:[[["dal","biz"]],[["biz","soap"]],[["soap","lis"]],[["lis","ngx"]]],log:{ro:"app-01 → nginx",en:"app-01 → nginx"},who:{ro:"Răspunsul",en:"The response"},
+ title:{ro:"Răspunsul: din C++ înapoi în XML",en:"The response: from C++ back to XML"},
+ body:{ro:`<p>Sesiunea Oracle se întoarce în pool. Modulele construiesc obiectul <code>Customer</code>, iar stratul SOAP îl transformă în XML: <code>&lt;getCustomerResponse&gt;…&lt;/getCustomerResponse&gt;</code>, cu <code>HTTP 200</code> și <code>Content-Type: text/xml</code>.</p>
+<p>Firul <code>worker-07</code> e eliberat după <strong>14 ms</strong>. Observă câmpurile <strong>eliminate</strong>: firul, funcțiile, SQL-ul rămân pe server; în afară pleacă doar HTTP și XML.</p>`,
+ en:`<p>The Oracle session goes back to the pool. The modules build the <code>Customer</code> object and the SOAP layer turns it into XML: <code>&lt;getCustomerResponse&gt;…&lt;/getCustomerResponse&gt;</code>, with <code>HTTP 200</code> and <code>Content-Type: text/xml</code>.</p>
+<p>Thread <code>worker-07</code> is released after <strong>14 ms</strong>. Note the <strong>removed</strong> fields: the thread, the functions and the SQL stay on the server; only HTTP and XML go out.</p>`}},
+
+{at:"ngx",frame:OUT,kind:"req",move:[[["ngx","client"]]],log:{ro:"nginx → partener",en:"nginx → partner"},tables:["logs"],hl:{logs:"nginx access.log"},who:"nginx",
+ title:{ro:"nginx livrează și scrie în jurnal",en:"nginx delivers and writes to the log"},
+ body:{ro:`<p>nginx criptează răspunsul și îl trimite partenerului. În <code>access.log</code> scrie o linie cu starea, serverul ales și durata pe server:</p>
+<p class="quote">203.0.113.60 "POST /ws/CustomerService" 200 upstream=app-01:8081 upstream_response_time=0.014 request_id=a91f-3c07</p>
+<p>Diferența dintre durata totală și <code>upstream_response_time</code> e timpul petrecut în nginx și pe rețea.</p>`,
+ en:`<p>nginx encrypts the response and sends it to the partner. In <code>access.log</code> it writes a line with the status, the chosen server and the time spent on the server:</p>
+<p class="quote">203.0.113.60 "POST /ws/CustomerService" 200 upstream=app-01:8081 upstream_response_time=0.014 request_id=a91f-3c07</p>
+<p>The difference between the total time and <code>upstream_response_time</code> is the time spent in nginx and on the network.</p>`},
+ try:[{cmd:"tail -f /var/log/nginx/access.log | grep /ws/",d:{ro:"Cererile SOAP, în timp real.",en:"SOAP requests in real time."}}]},
+
+{at:"soap",frame:FAULT,kind:"fault",move:[[["soap","lis"]],[["lis","ngx"]],[["ngx","client"]]],log:{ro:"SOAP Fault",en:"SOAP Fault"},who:{ro:"Stratul SOAP",en:"The SOAP layer"},
+ title:{ro:"Când datele sunt greșite: SOAP Fault",en:"When the data is wrong: a SOAP Fault"},
+ body:{ro:`<p>Alt partener trimite <code>&lt;customerId&gt;abc&lt;/customerId&gt;</code>. Validarea XSD eșuează, iar stratul SOAP nu ajunge să cheme nicio funcție de business.</p>
+<p>SOAP are un format standard pentru erori: <strong>SOAP Fault</strong>, trimis (în SOAP 1.1) cu <strong>HTTP 500</strong>:</p>
+<ul><li><code>faultcode = soap:Client</code>: greșeala e a celui care a trimis cererea (date invalide);</li>
+<li><code>soap:Server</code> ar fi însemnat o problemă la noi (de ex. Oracle indisponibil);</li>
+<li><code>faultstring</code>: mesajul pentru oameni.</li></ul>`,
+ en:`<p>Another partner sends <code>&lt;customerId&gt;abc&lt;/customerId&gt;</code>. XSD validation fails, and the SOAP layer never calls any business function.</p>
+<p>SOAP has a standard error format: the <strong>SOAP Fault</strong>, sent (in SOAP 1.1) with <strong>HTTP 500</strong>:</p>
+<ul><li><code>faultcode = soap:Client</code>: the sender is at fault (invalid data);</li>
+<li><code>soap:Server</code> would have meant a problem on our side (e.g. Oracle unavailable);</li>
+<li><code>faultstring</code>: the human-readable message.</li></ul>`},
+ more:{ro:`<p>Atenție la monitorizare: pentru că SOAP întoarce HTTP 500 și pentru greșelile clientului, un grafic „rata de erori 5xx” poate crește fără ca serverul să aibă vreo problemă. Merită separat <code>soap:Client</code> de <code>soap:Server</code> în log-uri și alerte.</p>`,
+  en:`<p>Mind your monitoring: because SOAP returns HTTP 500 for client mistakes too, a "5xx error rate" graph can rise without anything wrong on the server. It's worth separating <code>soap:Client</code> from <code>soap:Server</code> in logs and alerts.</p>`}},
+
+{at:"ngx",frame:FO,kind:"fo",move:[[["ngx","lis"]],[["ngx","app2"]]],rest:["app2"],marks:{lis:{k:"drop",t:{ro:"✗ căzut",en:"✗ down"}},app2:{k:"ok",t:{ro:"preia",en:"takes over"}}},tables:["upstream"],hl:{upstream:"server"},who:"nginx",
+ title:{ro:"Când un server cade: nginx trece pe celălalt (cu grijă)",en:"When a server fails: nginx switches to the other (carefully)"},
+ body:{ro:`<p>Procesul <code>atlas-core</code> de pe app-01 s-a oprit (de ex. un crash C++). nginx încearcă să se conecteze și primește „connection refused”.</p>
+<ul><li>După <code>max_fails=3</code> eșecuri în <code>fail_timeout=30s</code>, app-01 e scos din rotație pentru 30 s; cererile noi merg la <strong>app-02</strong>.</li>
+<li>Cererea care tocmai a eșuat: nginx o poate retrimite la app-02 (<code>proxy_next_upstream</code>), <strong>dar nu și pentru POST</strong>, pentru că nu știe dacă app-01 apucase să facă ceva. Toate cererile SOAP sunt POST, inclusiv cele care doar citesc.</li></ul>
+<p class="key">Pentru operații care modifică date (de ex. o plată), un retry automat ar putea executa operația de două ori. De aceea nginx, implicit, nu reîncearcă POST-uri, iar partenerul primește o eroare și decide singur.</p>`,
+ en:`<p>The <code>atlas-core</code> process on app-01 has stopped (e.g. a C++ crash). nginx tries to connect and gets "connection refused".</p>
+<ul><li>After <code>max_fails=3</code> failures within <code>fail_timeout=30s</code>, app-01 is taken out of rotation for 30 s; new requests go to <strong>app-02</strong>.</li>
+<li>The request that just failed: nginx can resend it to app-02 (<code>proxy_next_upstream</code>), <strong>but not for POST</strong>, because it can't know whether app-01 had already done something. Every SOAP request is a POST, even read-only ones.</li></ul>
+<p class="key">For operations that change data (e.g. a payment), an automatic retry could run the operation twice. That's why nginx doesn't retry POSTs by default, and the partner gets an error and decides for itself.</p>`},
+ more:{ro:`<p>Pentru operațiile SOAP care doar citesc, poți permite explicit retry-ul (<code>proxy_next_upstream error timeout non_idempotent;</code>), dar doar dacă ești sigur că operația nu modifică nimic. nginx open-source detectează căderile doar din trafic real (<em>pasiv</em>); verificările active ale serverelor sunt în nginx Plus sau în module externe.</p>`,
+  en:`<p>For read-only SOAP operations you can allow retries explicitly (<code>proxy_next_upstream error timeout non_idempotent;</code>), but only if you're sure the operation changes nothing. Open-source nginx only detects failures from real traffic (<em>passively</em>); active server health checks are in nginx Plus or external modules.</p>`},
+ try:[{cmd:"journalctl -u atlas-core --since '10 min ago'",d:{ro:"De ce s-a oprit procesul (de ex. „Main process exited, code=dumped, status=11/SEGV”).",en:"Why the process stopped (e.g. \"Main process exited, code=dumped, status=11/SEGV\")."}},{cmd:"coredumpctl gdb atlas-core",d:{ro:"Deschide ultimul core dump în debugger, ca să vezi unde a crăpat.",en:"Opens the latest core dump in the debugger to see where it crashed."}}]},
+
+{at:["ora","dal","lis"],frame:null,kind:"none",tables:["slow"],marks:{ora:{k:"drop",t:{ro:"lent",en:"slow"}},dal:{k:"drop",t:"20/20"},lis:{k:"drop",t:"32/32"}},who:{ro:"Sub presiune",en:"Under pressure"},
+ title:{ro:"Când Oracle încetinește: totul se blochează",en:"When Oracle slows down: everything locks up"},
+ body:{ro:`<p>O interogare de raportare grea rulează în Oracle, iar <code>getCustomer</code> ajunge de la 2 ms la 3 s. Reacția în lanț e aceeași ca în <a href="../tomcat/index.html">lecția Tomcat</a>:</p>
+<ol><li>Fiecare cerere ține o <strong>sesiune OCI</strong> 3 s; cele 20 se ocupă.</li>
+<li>Firele atlas-core așteaptă o sesiune; toate cele <strong>32</strong> se ocupă, iar cererile noi stau la coadă.</li>
+<li>nginx nu primește răspuns în 30 s și întoarce <strong>504</strong> partenerilor. Același lucru se întâmplă și pe app-02, pentru că folosește aceeași bază.</li></ol>
+<p class="key">A adăuga servere de aplicație nu ajută: blocajul e la Oracle. Soluțiile sunt la baza de date (index, plan, separarea raportărilor) și în aplicație (timeout la interogări, limite de sesiuni).</p>`,
+ en:`<p>A heavy reporting query is running in Oracle, and <code>getCustomer</code> goes from 2 ms to 3 s. The chain reaction is the same as in the <a href="../tomcat/index.html">Tomcat lesson</a>:</p>
+<ol><li>Each request holds an <strong>OCI session</strong> for 3 s; all 20 fill up.</li>
+<li>atlas-core threads wait for a session; all <strong>32</strong> get busy and new requests queue.</li>
+<li>nginx gets no answer within 30 s and returns <strong>504</strong> to partners. The same happens on app-02, because it uses the same database.</li></ol>
+<p class="key">Adding app servers doesn't help: the bottleneck is Oracle. The fixes are in the database (an index, the plan, separating reports) and in the app (query timeouts, session limits).</p>`},
+ more:{ro:`<p>În Oracle, raportul <strong>AWR</strong> (sau ASH) arată ce interogări au consumat timpul și la ce au așteptat (<em>wait events</em>). În atlas-core, un <code>pstack</code>/<code>gdb</code> pe proces arată la ce așteaptă fiecare fir: dacă toate sunt într-o funcție OCI, problema e la bază.</p>`,
+  en:`<p>In Oracle, the <strong>AWR</strong> (or ASH) report shows which queries consumed the time and what they waited on (<em>wait events</em>). In atlas-core, a <code>pstack</code>/<code>gdb</code> on the process shows what each thread is waiting on: if they're all inside an OCI function, the problem is the database.</p>`},
+ try:[{cmd:"sudo gdb -p $(pgrep atlas-core) -batch -ex 'thread apply all bt 3'",d:{ro:"Fotografia tuturor firelor: unde așteaptă fiecare (pe un server de test!).",en:"A snapshot of every thread: where each one is waiting (on a test server!)."}}]},
+
+{at:["ngx","lis","ora"],frame:null,kind:"none",tables:["logs"],who:{ro:"Operare",en:"Operations"},
+ title:{ro:"Lansări, monitorizare și depanare",en:"Releases, monitoring and debugging"},
+ body:{ro:`<p>Cum se lucrează zi de zi cu o asemenea aplicație:</p>
+<ul><li><strong>Lansare fără întrerupere</strong>: scoți app-01 din nginx (<code>server … down</code> sau drenare), aștepți să se termine cererile în curs, instalezi noul binar, pornești, verifici, apoi repeți pe app-02.</li>
+<li><strong>Monitorizare</strong>: rata de cereri și erori pe operație SOAP (separat soap:Client / soap:Server), durata (p95, p99), fire ocupate, sesiuni OCI ocupate, timpul interogărilor în Oracle.</li>
+<li><strong>Depanare</strong>: pornești de la <code>X-Request-ID</code> din access.log-ul nginx și îl cauți în log-ul atlas-core; pentru crash-uri, core dump + gdb; pentru lentoare, AWR în Oracle.</li></ul>`,
+ en:`<p>How day-to-day work with an app like this goes:</p>
+<ul><li><strong>Zero-downtime releases</strong>: take app-01 out of nginx (<code>server … down</code> or draining), wait for in-flight requests to finish, install the new binary, start it, check it, then repeat on app-02.</li>
+<li><strong>Monitoring</strong>: request and error rates per SOAP operation (soap:Client and soap:Server separately), duration (p95, p99), busy threads, busy OCI sessions, query time in Oracle.</li>
+<li><strong>Debugging</strong>: start from the <code>X-Request-ID</code> in nginx's access.log and search for it in the atlas-core log; for crashes, a core dump + gdb; for slowness, AWR in Oracle.</li></ul>`},
+ try:[{cmd:"grep a91f-3c07 /var/log/atlas/atlas-core.log",d:{ro:"Găsește toate liniile unei cereri după ID (calea log-ului e fictivă).",en:"Finds every line of one request by ID (the log path is made up)."}},{cmd:"sudo systemctl status atlas-core",d:{ro:"Starea serviciului pe server.",en:"The service's state on the server."}}]},
+
+{at:["client","ngx","lis","soap","biz","dal","ora"],frame:null,kind:"none",summary:true,
+ title:{ro:"Recapitulare",en:"Recap"},
+ body:{ro:`<div class="flow"><span>partener</span><i>→</i><span>nginx (TLS, least_conn)</span><i>→</i><span>atlas-core: fir</span><i>→</i><span>SOAP → C++</span><i>→</i><span>module (în proces)</span><i>→</i><span>pool OCI</span><i>→</i><span>Oracle</span></div>
+<ul><li>O cerere <strong>SOAP</strong> e un plic XML trimis prin HTTP POST; operațiile sunt descrise în <strong>WSDL</strong>.</li>
+<li><strong>nginx</strong> termină TLS, alege serverul, adaugă X-Forwarded-For și X-Request-ID, aplică timeout-uri și scoate serverele căzute.</li>
+<li>În <strong>monolit</strong>, o cerere ocupă un fir, iar modulele se cheamă direct, prin apeluri de funcții.</li>
+<li>Spre <strong>Oracle</strong>: sesiuni dintr-un pool și <strong>bind variables</strong> (soft parse, fără SQL injection).</li>
+<li>Erorile clientului vin ca <strong>SOAP Fault</strong> cu HTTP 500; POST-urile nu se reîncearcă automat.</li>
+<li>Cea mai lentă resursă comună (de obicei baza de date) decide cât de repede răspunde tot sistemul.</li></ul>
+<p><button type="button" class="btn primary" data-goto="quiz">Mergi la test ↓</button></p>`,
+ en:`<div class="flow"><span>partner</span><i>→</i><span>nginx (TLS, least_conn)</span><i>→</i><span>atlas-core: thread</span><i>→</i><span>SOAP → C++</span><i>→</i><span>modules (in-process)</span><i>→</i><span>OCI pool</span><i>→</i><span>Oracle</span></div>
+<ul><li>A <strong>SOAP</strong> request is an XML envelope sent by HTTP POST; operations are described in the <strong>WSDL</strong>.</li>
+<li><strong>nginx</strong> terminates TLS, picks the server, adds X-Forwarded-For and X-Request-ID, applies timeouts and drops failed servers.</li>
+<li>In the <strong>monolith</strong>, a request holds one thread and modules call each other directly, as function calls.</li>
+<li>To <strong>Oracle</strong>: pooled sessions and <strong>bind variables</strong> (soft parse, no SQL injection).</li>
+<li>Client mistakes come back as a <strong>SOAP Fault</strong> with HTTP 500; POSTs aren't retried automatically.</li>
+<li>The slowest shared resource (usually the database) decides how fast the whole system answers.</li></ul>
+<p><button type="button" class="btn primary" data-goto="quiz">Go to the quiz ↓</button></p>`}}
+],
+
+reference:(T,lang)=>{
+  const ro=lang==="ro";
+  let h=`<div class="ref-grid"><section class="card refcard"><h2>${ro?"nginx: configurația (exemplu)":"nginx: the configuration (example)"}</h2>
+<pre class="yaml">upstream atlas_ws {
+    least_conn;
+    server app-01:8081 max_fails=3 fail_timeout=30s;
+    server app-02:8081 max_fails=3 fail_timeout=30s;
+    keepalive 32;               <span class="c"># ${ro?"refolosește conexiunile spre servere":"reuse connections to servers"}</span>
+}
+server {
+    listen 443 ssl;
+    server_name atlas.example.com;
+    location /ws/ {
+        proxy_pass http://atlas_ws;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Request-ID $request_id;
+        proxy_connect_timeout 2s;
+        proxy_read_timeout 30s;
+        <span class="c"># ${ro?"implicit: POST nu se reîncearcă pe alt server":"default: POST isn't retried on another server"}</span>
+        proxy_next_upstream error timeout;
+        client_max_body_size 10m;   <span class="c"># ${ro?"plicuri SOAP mari":"large SOAP envelopes"}</span>
+    }
+}</pre></section>
+<section class="card refcard"><h2>${ro?"Un plic SOAP complet":"A complete SOAP envelope"}</h2>
+<pre class="yaml">POST /ws/CustomerService HTTP/1.1
+Host: atlas.example.com
+Content-Type: text/xml; charset=utf-8
+SOAPAction: "getCustomer"
+
+&lt;soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
+               xmlns:c="http://example.com/atlas/customer"&gt;
+  &lt;soap:Header/&gt;
+  &lt;soap:Body&gt;
+    &lt;c:getCustomer&gt;
+      &lt;c:customerId&gt;10442&lt;/c:customerId&gt;
+    &lt;/c:getCustomer&gt;
+  &lt;/soap:Body&gt;
+&lt;/soap:Envelope&gt;</pre>
+<p class="note">${ro?"În SOAP 1.2, tipul devine application/soap+xml, iar operația vine în parametrul action al Content-Type.":"In SOAP 1.2 the type becomes application/soap+xml and the operation goes in Content-Type's action parameter."}</p></section></div>`;
+  const qs=[
+    [{ro:"Serviciile SOAP rulează în procesul atlas-core sau separat?",en:"Do the SOAP services run inside atlas-core or separately?"},{ro:"Dacă sunt separate, între ele mai e un pas de rețea, cu timeout-ul lui.",en:"If separate, there's another network hop between them, with its own timeout."}],
+    [{ro:"Ce bibliotecă SOAP folosim (gSOAP, alta)? SOAP 1.1 sau 1.2?",en:"Which SOAP library do we use (gSOAP, other)? SOAP 1.1 or 1.2?"},{ro:"Contează pentru antete, erori și performanță.",en:"It affects headers, faults and performance."}],
+    [{ro:"Cum vorbim cu Oracle: OCI, OCCI, ODBC? Cât de mare e pool-ul?",en:"How do we talk to Oracle: OCI, OCCI, ODBC? How big is the pool?"},{ro:"Pool prea mic = coadă; prea mare = Oracle copleșit.",en:"Too small a pool = queueing; too big = an overwhelmed Oracle."}],
+    [{ro:"Câte fire are procesul și ce timeout au interogările?",en:"How many threads does the process have, and what timeout do queries have?"},{ro:"Fără timeout la interogări, o bază lentă blochează toate firele.",en:"Without query timeouts, a slow database blocks every thread."}],
+    [{ro:"nginx are un singur nod sau două cu VIP (keepalived)? E ceva în fața lui?",en:"Is nginx a single node or two with a VIP (keepalived)? Is anything in front of it?"},{ro:"Un singur nginx e un punct unic de cădere.",en:"A single nginx is a single point of failure."}],
+    [{ro:"Avem Oracle RAC sau Data Guard? Ce face aplicația la failover?",en:"Do we have Oracle RAC or Data Guard? What does the app do on failover?"},{ro:"Sesiunile existente se rup; aplicația trebuie să se reconecteze.",en:"Existing sessions break; the app must reconnect."}]
+  ];
+  h+=`<div class="ref-grid" style="margin-top:12px"><section class="card refcard"><h2>${ro?"Întrebări de pus echipei":"Questions to ask the team"}</h2><div class="scroll"><table class="cmp" style="min-width:440px"><thead><tr><th>${ro?"Întrebare":"Question"}</th><th>${ro?"De ce contează":"Why it matters"}</th></tr></thead><tbody>`;
+  qs.forEach(r=>{h+=`<tr><td>${T(r[0])}</td><td>${T(r[1])}</td></tr>`});
+  h+=`</tbody></table></div></section>`;
+  const sym=[
+    ["502 Bad Gateway",{ro:"atlas-core oprit sau nu ascultă pe 8081 (crash, repornire).",en:"atlas-core stopped or not listening on 8081 (crash, restart)."}],
+    ["504 Gateway Timeout",{ro:"atlas-core nu răspunde în 30 s: fire blocate, de obicei la Oracle.",en:"atlas-core doesn't answer within 30 s: stuck threads, usually at Oracle."}],
+    [{ro:"HTTP 500 + soap:Client",en:"HTTP 500 + soap:Client"},{ro:"date invalide de la partener; nu e o problemă de server.",en:"invalid data from the partner; not a server problem."}],
+    [{ro:"HTTP 500 + soap:Server",en:"HTTP 500 + soap:Server"},{ro:"excepție în aplicație: caută X-Request-ID în log.",en:"an exception in the app: look up the X-Request-ID in the log."}],
+    ["ORA-12541 / ORA-12170",{ro:"listener Oracle indisponibil sau firewall între server și bază.",en:"Oracle listener unavailable, or a firewall between server and database."}],
+    ["ORA-00018 / ORA-12516",{ro:"prea multe sesiuni: pool-urile tuturor serverelor depășesc limita bazei.",en:"too many sessions: every server's pools together exceed the database's limit."}],
+    ["status=11/SEGV",{ro:"crash C++ (memorie): core dump + gdb.",en:"a C++ crash (memory): core dump + gdb."}]
+  ];
+  h+=`<section class="card refcard"><h2>${ro?"Simptom → cauză probabilă":"Symptom → likely cause"}</h2><div class="scroll"><table class="cmp" style="min-width:420px"><tbody>`;
+  sym.forEach(r=>{h+=`<tr><td><span class="pill">${T(r[0])}</span></td><td>${T(r[1])}</td></tr>`});
+  h+=`</tbody></table></div></section></div>`;
+  return h;
+},
+
+gloss:[
+ [{ro:"Monolit",en:"Monolith"},null,{ro:"Aplicație în care toate modulele sunt compilate și rulate împreună, într-un singur proces.",en:"An app whose modules are all compiled and run together in one process."}],
+ ["SOAP","Simple Object Access Protocol",{ro:"Protocol de servicii web bazat pe documente XML trimise prin HTTP POST.",en:"A web-service protocol based on XML documents sent by HTTP POST."}],
+ ["WSDL","Web Services Description Language",{ro:"Fișier XML care descrie operațiile unui serviciu SOAP și formatul datelor.",en:"An XML file describing a SOAP service's operations and data format."}],
+ ["XSD","XML Schema Definition",{ro:"Schema care spune ce elemente și ce tipuri are voie să conțină un XML.",en:"The schema saying which elements and types an XML may contain."}],
+ ["SOAPAction",null,{ro:"Antet HTTP (SOAP 1.1) care spune ce operație se cere.",en:"An HTTP header (SOAP 1.1) saying which operation is requested."}],
+ ["SOAP Fault",null,{ro:"Formatul standard de eroare în SOAP: faultcode, faultstring, detail.",en:"SOAP's standard error format: faultcode, faultstring, detail."}],
+ ["gSOAP",null,{ro:"Bibliotecă C/C++ care generează cod client și server din WSDL.",en:"A C/C++ library that generates client and server code from a WSDL."}],
+ ["Load balancer",null,{ro:"Componenta care împarte cererile între mai multe servere.",en:"The component that spreads requests across several servers."}],
+ ["Upstream",null,{ro:"În nginx: grupul de servere spre care se trimit cererile.",en:"In nginx: the group of servers requests are sent to."}],
+ ["least_conn",null,{ro:"Metodă nginx: alege serverul cu cele mai puține conexiuni active.",en:"An nginx method: picks the server with the fewest active connections."}],
+ ["VIP / keepalived",null,{ro:"IP virtual mutat automat între două servere (VRRP) când unul cade.",en:"A virtual IP moved automatically between two servers (VRRP) when one fails."}],
+ ["X-Request-ID",null,{ro:"ID unic pe cerere, scris în toate log-urile, ca s-o poți urmări.",en:"A unique per-request ID written to every log so you can trace it."}],
+ [{ro:"Fir de execuție",en:"Thread"},null,{ro:"O „linie” de execuție dintr-un proces; aici, fiecare cerere are firul ei.",en:"A line of execution in a process; here, each request gets its own."}],
+ ["Thread pool",null,{ro:"Grup fix de fire refolosite pentru cereri.",en:"A fixed group of threads reused for requests."}],
+ ["OCI / OCCI","Oracle Call Interface",{ro:"Bibliotecile oficiale Oracle pentru C (OCI) și C++ (OCCI).",en:"Oracle's official libraries for C (OCI) and C++ (OCCI)."}],
+ [{ro:"Pool de sesiuni",en:"Session pool"},null,{ro:"Sesiuni Oracle deschise o dată și refolosite de cereri.",en:"Oracle sessions opened once and reused by requests."}],
+ ["Bind variable",null,{ro:"Parametru (:id) trimis separat de textul SQL.",en:"A parameter (:id) sent separately from the SQL text."}],
+ ["Soft / hard parse",null,{ro:"Soft: Oracle refolosește planul din cache. Hard: îl calculează de la zero (scump).",en:"Soft: Oracle reuses the cached plan. Hard: it computes it from scratch (expensive)."}],
+ ["Listener Oracle",null,{ro:"Procesul Oracle care primește conexiuni noi (de obicei pe 1521).",en:"The Oracle process that accepts new connections (usually on 1521)."}],
+ ["Redo log",null,{ro:"Jurnalul în care Oracle scrie modificările înainte de a confirma COMMIT-ul.",en:"The log Oracle writes changes to before confirming a COMMIT."}],
+ ["AWR","Automatic Workload Repository",{ro:"Raport Oracle cu ce interogări au consumat timpul și la ce s-a așteptat.",en:"An Oracle report on which queries used the time and what was waited on."}],
+ ["Core dump",null,{ro:"Fișier cu memoria procesului în momentul crash-ului, analizat cu gdb.",en:"A file with the process's memory at the moment of the crash, analysed with gdb."}],
+ ["systemd",null,{ro:"Managerul de servicii din Linux: pornește, oprește și repornește procesele.",en:"Linux's service manager: starts, stops and restarts processes."}]
+],
+glossEx:{
+ "Monolith":{ro:"atlas-core: un binar de ~80 MB cu modulele de clienți, facturi și comenzi.",en:"atlas-core: a ~80 MB binary with the customer, billing and order modules."},
+ "SOAP":{ro:"POST /ws/CustomerService cu un &lt;soap:Envelope&gt; care conține &lt;getCustomer&gt;.",en:"POST /ws/CustomerService with a &lt;soap:Envelope&gt; containing &lt;getCustomer&gt;."},
+ "WSDL":{ro:"…/CustomerService?wsdl descrie getCustomer, updateAddress și listInvoices.",en:"…/CustomerService?wsdl describes getCustomer, updateAddress and listInvoices."},
+ "XSD":{ro:"&lt;xs:element name=\"customerId\" type=\"xs:long\"/&gt;: „abc” e respins.",en:"&lt;xs:element name=\"customerId\" type=\"xs:long\"/&gt;: \"abc\" is rejected."},
+ "SOAPAction":{ro:"SOAPAction: \"getCustomer\" sau SOAPAction: \"urn:atlas#updateAddress\".",en:"SOAPAction: \"getCustomer\" or SOAPAction: \"urn:atlas#updateAddress\"."},
+ "SOAP Fault":{ro:"&lt;faultcode&gt;soap:Client&lt;/faultcode&gt;&lt;faultstring&gt;customerId must be a number&lt;/faultstring&gt;",en:"&lt;faultcode&gt;soap:Client&lt;/faultcode&gt;&lt;faultstring&gt;customerId must be a number&lt;/faultstring&gt;"},
+ "gSOAP":{ro:"wsdl2h + soapcpp2 generează clasele C++ CustomerService din WSDL.",en:"wsdl2h + soapcpp2 generate the C++ CustomerService classes from the WSDL."},
+ "Load balancer":{ro:"nginx trimite cererile alternativ la app-01 și app-02.",en:"nginx alternates requests between app-01 and app-02."},
+ "Upstream":{ro:"upstream atlas_ws { server app-01:8081; server app-02:8081; }",en:"upstream atlas_ws { server app-01:8081; server app-02:8081; }"},
+ "least_conn":{ro:"dacă app-01 are 12 conexiuni și app-02 are 4, următoarea merge la app-02.",en:"if app-01 has 12 connections and app-02 has 4, the next one goes to app-02."},
+ "VIP / keepalived":{ro:"10.20.0.10 stă pe nginx-lb-01; dacă acesta cade, apare în 2–3 s pe nginx-lb-02.",en:"10.20.0.10 lives on nginx-lb-01; if it fails, it appears on nginx-lb-02 within 2–3 s."},
+ "X-Request-ID":{ro:"a91f-3c07 apare în access.log-ul nginx și în fiecare linie a log-ului atlas-core pentru acea cerere.",en:"a91f-3c07 appears in nginx's access.log and on every atlas-core log line for that request."},
+ "Thread":{ro:"worker-07 procesează getCustomer de la început până la răspuns.",en:"worker-07 handles getCustomer from start to reply."},
+ "Thread pool":{ro:"32 de fire: cererea 33 așteaptă până se eliberează unul.",en:"32 threads: request 33 waits until one is free."},
+ "OCI / OCCI":{ro:"OCIStmtExecute(...) în C sau stmt->executeQuery() în OCCI.",en:"OCIStmtExecute(...) in C or stmt->executeQuery() in OCCI."},
+ "Session pool":{ro:"min 5, max 20 sesiuni pe fiecare server; cu 2 servere, Oracle vede până la 40.",en:"min 5, max 20 sessions per server; with 2 servers Oracle sees up to 40."},
+ "Bind variable":{ro:"SELECT … WHERE id = :id cu :id = 10442, în loc de WHERE id = 10442.",en:"SELECT … WHERE id = :id with :id = 10442, instead of WHERE id = 10442."},
+ "Soft / hard parse":{ro:"în V$SQL, executions = 1.284.907 dar parse_calls = 20: aproape numai soft parse.",en:"in V$SQL, executions = 1,284,907 but parse_calls = 20: almost all soft parses."},
+ "Listener Oracle":{ro:"lsnrctl status pe serverul bazei arată serviciul ATLASDB pe portul 1521.",en:"lsnrctl status on the database server shows the ATLASDB service on port 1521."},
+ "Redo log":{ro:"la updateAddress, COMMIT așteaptă ca LGWR să scrie redo-ul pe disc.",en:"on updateAddress, COMMIT waits for LGWR to write the redo to disk."},
+ "AWR":{ro:"„Top SQL by Elapsed Time” arată raportul greu care a încetinit totul.",en:"\"Top SQL by Elapsed Time\" shows the heavy report that slowed everything down."},
+ "Core dump":{ro:"coredumpctl list arată crash-ul; bt în gdb arată funcția în care a crăpat.",en:"coredumpctl list shows the crash; bt in gdb shows the function it crashed in."},
+ "systemd":{ro:"Restart=always în atlas-core.service repornește procesul după un crash.",en:"Restart=always in atlas-core.service restarts the process after a crash."}
+},
+
+quiz:[
+ {q:{ro:"Ce înseamnă că aplicația e un monolit?",en:"What does it mean that the app is a monolith?"},
+  o:[{ro:"Rulează pe un singur server",en:"It runs on a single server"},{ro:"Toate modulele sunt într-un singur program, care rulează ca un proces",en:"All modules are in one program that runs as one process"},{ro:"Nu are bază de date",en:"It has no database"},{ro:"E scrisă într-un singur fișier",en:"It's written in a single file"}],a:1,
+  e:{ro:"Un monolit poate rula pe mai multe servere (app-01, app-02), dar fiecare copie conține toată aplicația.",en:"A monolith can run on several servers (app-01, app-02), but each copy contains the whole app."}},
+ {q:{ro:"Cum se cheamă între ele modulele CustomerModule și BillingModule?",en:"How do CustomerModule and BillingModule call each other?"},
+  o:[{ro:"Prin HTTP",en:"Over HTTP"},{ro:"Prin SOAP",en:"Over SOAP"},{ro:"Printr-un apel de funcție C++, în același proces",en:"With a C++ function call, in the same process"},{ro:"Prin Oracle",en:"Through Oracle"}],a:2,
+  e:{ro:"Fără rețea, fără timeout: nanosecunde. E principalul avantaj al monolitului.",en:"No network, no timeout: nanoseconds. It's the monolith's main advantage."}},
+ {q:{ro:"Cum află un partener ce operații are serviciul SOAP?",en:"How does a partner learn which operations the SOAP service has?"},
+  o:[{ro:"Din WSDL",en:"From the WSDL"},{ro:"Din log-urile nginx",en:"From the nginx logs"},{ro:"Din Oracle",en:"From Oracle"},{ro:"Ghicește",en:"It guesses"}],a:0,
+  e:{ro:"WSDL-ul descrie operațiile, mesajele și tipurile; din el se generează codul client.",en:"The WSDL describes the operations, messages and types; client code is generated from it."}},
+ {q:{ro:"Ce face nginx cu TLS-ul în această arhitectură?",en:"What does nginx do with TLS in this architecture?"},
+  o:[{ro:"Nimic, TLS-ul ajunge la atlas-core",en:"Nothing, TLS reaches atlas-core"},{ro:"Îl termină: decriptează cererea și trimite HTTP spre servere",en:"It terminates it: decrypts the request and sends HTTP to the servers"},{ro:"Îl criptează de două ori",en:"It encrypts it twice"},{ro:"Îl trimite la Oracle",en:"It sends it to Oracle"}],a:1,
+  e:{ro:"Certificatul stă pe nginx; spre app-01/app-02 merge HTTP în rețeaua internă (sau HTTPS, dacă se cere).",en:"The certificate lives on nginx; HTTP goes to app-01/app-02 on the internal network (or HTTPS if required)."}},
+ {q:{ro:"De ce folosește aplicația bind variables în SQL?",en:"Why does the app use bind variables in SQL?"},
+  o:[{ro:"Ca Oracle să refolosească planul (soft parse) și ca să nu existe SQL injection",en:"So Oracle reuses the plan (soft parse) and there's no SQL injection"},{ro:"Ca interogarea să fie mai lungă",en:"To make the query longer"},{ro:"Pentru criptare",en:"For encryption"},{ro:"Pentru că Oracle nu acceptă altfel",en:"Because Oracle accepts nothing else"}],a:0,
+  e:{ro:"Același text SQL = același plan din cache. Valorile lipite în text forțează hard parse și sunt periculoase.",en:"The same SQL text = the same cached plan. Values pasted into the text force hard parses and are dangerous."}},
+ {q:{ro:"Cu ce cod HTTP vine de obicei un SOAP Fault (SOAP 1.1)?",en:"Which HTTP code does a SOAP Fault usually come with (SOAP 1.1)?"},
+  o:[{ro:"200",en:"200"},{ro:"404",en:"404"},{ro:"500",en:"500"},{ro:"302",en:"302"}],a:2,
+  e:{ro:"Chiar și pentru greșeli ale clientului (soap:Client). De aceea alertele pe 5xx trebuie filtrate.",en:"Even for client mistakes (soap:Client). That's why 5xx alerts need filtering."}},
+ {q:{ro:"app-01 cade în timpul unei cereri SOAP. De ce nu o reîncearcă nginx automat pe app-02?",en:"app-01 fails during a SOAP request. Why doesn't nginx retry it automatically on app-02?"},
+  o:[{ro:"Pentru că e POST: nginx nu știe dacă operația a fost deja executată",en:"Because it's a POST: nginx can't know whether the operation already ran"},{ro:"Pentru că app-02 e oprit",en:"Because app-02 is off"},{ro:"Pentru că SOAP nu permite",en:"Because SOAP forbids it"},{ro:"Pentru că e TLS",en:"Because it's TLS"}],a:0,
+  e:{ro:"Un retry ar putea executa de două ori o operație care modifică date. Se activează explicit doar pentru operații sigure.",en:"A retry could run a data-changing operation twice. It's only enabled explicitly for safe operations."}},
+ {q:{ro:"Oracle devine lent și apar erori 504. Ajută să adaugi app-03?",en:"Oracle gets slow and 504s appear. Does adding app-03 help?"},
+  o:[{ro:"Da, mereu",en:"Yes, always"},{ro:"Nu: blocajul e la baza de date, iar un server în plus doar trimite mai multe cereri spre ea",en:"No: the bottleneck is the database, and another server just sends it more requests"},{ro:"Da, dacă are mai multe fire",en:"Yes, if it has more threads"},{ro:"Nu contează",en:"It doesn't matter"}],a:1,
+  e:{ro:"Fixul e la Oracle (index, plan, separarea raportărilor) și în timeout-urile aplicației.",en:"The fix is in Oracle (an index, the plan, separating reports) and in the app's timeouts."}},
+ {q:{ro:"Cum găsești în log-ul atlas-core cererea despre care se plânge un partener?",en:"How do you find, in the atlas-core log, the request a partner complains about?"},
+  o:[{ro:"După ora aproximativă",en:"By the approximate time"},{ro:"După X-Request-ID, din access.log-ul nginx",en:"By the X-Request-ID, from nginx's access.log"},{ro:"După IP-ul serverului",en:"By the server's IP"},{ro:"Nu se poate",en:"You can't"}],a:1,
+  e:{ro:"nginx generează ID-ul, îl trimite în antet și îl scrie în log; aplicația îl scrie și ea.",en:"nginx generates the ID, sends it in a header and logs it; the app logs it too."}},
+ {q:{ro:"atlas-core se oprește cu status=11/SEGV. Ce înseamnă și ce folosești?",en:"atlas-core stops with status=11/SEGV. What does it mean and what do you use?"},
+  o:[{ro:"Oracle e oprit; repornești Oracle",en:"Oracle is down; restart Oracle"},{ro:"Un crash C++ (acces invalid la memorie); analizezi core dump-ul cu gdb",en:"A C++ crash (invalid memory access); analyse the core dump with gdb"},{ro:"nginx e greșit configurat",en:"nginx is misconfigured"},{ro:"E normal la fiecare cerere",en:"It's normal for every request"}],a:1,
+  e:{ro:"SIGSEGV = segmentation fault. coredumpctl gdb atlas-core și bt arată funcția vinovată.",en:"SIGSEGV = segmentation fault. coredumpctl gdb atlas-core and bt show the culprit function."}}
+]
+};
+})();
+</script>
+<script src="../assets/engine.js"></script>
+</body>
+</html>

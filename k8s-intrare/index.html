@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Viața unui pachet în cluster</title>
+<meta name="description" content="Lecție interactivă: drumul complet al unui pachet care intră într-un cluster Kubernetes: load balancer, placa de rețea, ring buffer, NAPI, netfilter PREROUTING, conntrack, lanțurile iptables ale kube-proxy, DNAT, rutare, FORWARD, POSTROUTING, MASQUERADE, veth și socket. / The life of an inbound packet in a Kubernetes cluster.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<script>
+(function(){
+const A={cl:"203.0.113.25",vip:"198.51.100.20",n1:"10.0.1.11",n2:"10.0.1.12",ing:"10.244.2.15",app:"10.244.1.8",svc:"10.96.45.10"};
+const MAC={lb:"0a:00:00:00:01:01",n1:"0a:58:0a:00:01:0b",n2:"0a:58:0a:00:01:0c"};
+const SYN={srcIp:A.cl,dstIp:A.vip+" (VIP)",proto:"TCP",srcPort:"51000",dstPort:"443",flags:"SYN"};
+const F2={...SYN,dstIp:A.n1+" (node-1)",dstPort:"30443 (NodePort)"};
+const F3={dstMac:MAC.n1+" (node-1)",srcMac:MAC.lb+" (LB)",...F2,skb:{ro:"sk_buff, coada RX 3 → CPU 3",en:"sk_buff, RX queue 3 → CPU 3"}};
+const F4={...F2,skb:{ro:"sk_buff, coada RX 3 → CPU 3",en:"sk_buff, RX queue 3 → CPU 3"},hook:"NF_INET_PRE_ROUTING"};
+const F5={...F4,ct:{ro:"NEW · intrare nouă în conntrack",en:"NEW · new conntrack entry"}};
+const F6={...F5,chain:"nat PREROUTING → KUBE-SERVICES → KUBE-NODEPORTS"};
+const F7={...F6,chain:"KUBE-NODEPORTS → KUBE-EXT-7ZQ4 → KUBE-SVC-7ZQ4",mark:{ro:"0x4000 (de mascat la ieșire)",en:"0x4000 (to masquerade on exit)"}};
+const F8={...F7,dstIp:A.ing+" (pod ingress-nginx)",dstPort:"8443",chain:"KUBE-SVC-7ZQ4 → KUBE-SEP-K2LD → DNAT",ct:{ro:"NEW · răspuns așteptat de la 10.244.2.15:8443",en:"NEW · reply expected from 10.244.2.15:8443"}};
+const F9={...F8,rt:{ro:"10.244.2.0/24 via 10.0.1.12 dev eth0 → FORWARD",en:"10.244.2.0/24 via 10.0.1.12 dev eth0 → FORWARD"}};
+const F10={...F9,chain:"filter FORWARD → KUBE-FORWARD → ACCEPT"};
+const F11={...F10,srcIp:A.n1+" (node-1, MASQUERADE)",chain:"nat POSTROUTING → KUBE-POSTROUTING → MASQUERADE",ct:{ro:"răspuns așteptat: 10.244.2.15:8443 → 10.0.1.11",en:"reply expected: 10.244.2.15:8443 → 10.0.1.11"}};
+const F12={dstMac:MAC.n2+" (node-2)",srcMac:MAC.n1+" (node-1)",srcIp:A.n1+" (node-1, MASQUERADE)",dstIp:A.ing+" (pod ingress-nginx)",proto:"TCP",srcPort:"51000",dstPort:"8443",flags:"SYN",skb:{ro:"qdisc → coada TX 1 → placa de rețea",en:"qdisc → TX queue 1 → network card"}};
+const F13={srcIp:A.n1,dstIp:A.ing,proto:"TCP",srcPort:"51000",dstPort:"8443",flags:"SYN",ct:{ro:"NEW (conntrack-ul lui node-2)",en:"NEW (node-2's conntrack)"},chain:{ro:"nat PREROUTING: nicio potrivire (destinația e deja un pod)",en:"nat PREROUTING: no match (destination is already a pod)"},rt:"10.244.2.15 dev cali7f2c"};
+const F14={srcIp:A.n1,dstIp:A.ing,proto:"TCP",srcPort:"51000",dstPort:"8443",flags:"SYN",iface:{ro:"cali7f2c (nod) → eth0 (în pod) · alt network namespace",en:"cali7f2c (node) → eth0 (in pod) · another network namespace"}};
+const F15={...F14,sock:{ro:"LISTEN *:8443 (nginx) → coada SYN → SYN-ACK",en:"LISTEN *:8443 (nginx) → SYN queue → SYN-ACK"}};
+const R1={srcIp:A.vip+" (VIP)",dstIp:A.cl,proto:"TCP",srcPort:"443",dstPort:"51000",flags:"SYN, ACK",ct:{ro:"ESTABLISHED după ACK · un-DNAT + un-SNAT pe node-1",en:"ESTABLISHED after ACK · un-DNAT + un-SNAT on node-1"}};
+const H2={srcIp:A.ing+" (ingress-nginx)",dstIp:A.app+" (pod app)",proto:"TCP",srcPort:"40122",dstPort:"8080",flags:"SYN",chain:"KUBE-SERVICES → KUBE-SVC-APP → KUBE-SEP-… → DNAT",payload:{ro:"(după handshake) GET /orders/42 · Host: app.example.com",en:"(after the handshake) GET /orders/42 · Host: app.example.com"}};
+
+window.LESSON={
+docTitle:{ro:"Viața unui pachet în cluster",en:"Life of a Packet in a Cluster"},
+eyebrow:{ro:"Lecție interactivă · Kubernetes, nivel kernel",en:"Interactive lesson · Kubernetes, kernel level"},
+title:{ro:"Viața unui pachet care intră în Kubernetes",en:"The life of a packet entering Kubernetes"},
+sub:{ro:"Urmărește primul pachet (SYN) al unei conexiuni HTTPS, de la load balancer până în socket-ul unui pod: placa de rețea, ring buffer și NAPI, hook-urile netfilter, conntrack, lanțurile iptables scrise de kube-proxy, DNAT, decizia de rutare, FORWARD, POSTROUTING și MASQUERADE, al doilea nod, veth și network namespace. Apoi drumul înapoi.",en:"Follow the first packet (SYN) of an HTTPS connection from the load balancer into a pod's socket: the network card, ring buffer and NAPI, the netfilter hooks, conntrack, the iptables chains kube-proxy writes, DNAT, the routing decision, FORWARD, POSTROUTING and MASQUERADE, the second node, veth and network namespaces. Then the way back."},
+meta:[{ro:"≈ 30 minute",en:"≈ 30 minutes"},{ro:"19 pași",en:"19 steps"},{ro:"12 întrebări",en:"12 questions"},{ro:"Avansat",en:"Advanced"}],
+goals:[{ro:"Ce face placa de rețea și kernel-ul înainte de orice regulă iptables",en:"What the NIC and kernel do before any iptables rule"},{ro:"Ordinea hook-urilor netfilter și a tabelelor raw, mangle, nat, filter",en:"The order of netfilter hooks and the raw, mangle, nat, filter tables"},{ro:"Cum transformă kube-proxy un NodePort într-un IP de pod (KUBE-* chains)",en:"How kube-proxy turns a NodePort into a pod IP (the KUBE-* chains)"},{ro:"De ce apare MASQUERADE și cum aduce conntrack răspunsul înapoi",en:"Why MASQUERADE appears and how conntrack brings the reply back"}],
+foot:{ro:"Exemplu tipic: kube-proxy în modul iptables, CNI Calico, Service de tip LoadBalancer cu externalTrafficPolicy: Cluster, ingress-nginx. Numele lanțurilor și adresele sunt exemple.",en:"A typical setup: kube-proxy in iptables mode, Calico CNI, a LoadBalancer Service with externalTrafficPolicy: Cluster, ingress-nginx. Chain names and addresses are examples."},
+ui:{frameT:{ro:"Pachetul (live)",en:"The packet (live)"},refT:{ro:"Harta netfilter și comenzi de urmărire",en:"The netfilter map and tracing commands"},refLead:{ro:"Toate hook-urile și tabelele în ordine, lanțurile kube-proxy complete și comenzile cu care urmărești un pachet pe un nod real.",en:"Every hook and table in order, the full kube-proxy chains, and the commands to trace a packet on a real node."}},
+tryT:{ro:"Încearcă pe un nod (ca root)",en:"Try it on a node (as root)"},
+legend:[["lg-ip","SYN",{ro:"primul pachet al conexiunii",en:"the connection's first packet"}],["lg-tcp","SYN-ACK",{ro:"răspunsul",en:"the reply"}]],
+
+nodes:{
+  cl:{type:"user",name:"Client",lines:[A.cl]},
+  lb:{type:"svc",name:"Load balancer",lines:[A.vip+":443"]},
+  nic:{type:"box",name:{ro:"Placa de rețea",en:"Network card"},lines:["eth0 · node-1"]},
+  pre:{type:"box",name:"PREROUTING",lines:["raw · ct · nat"]},
+  kube:{type:"box",name:"KUBE-* chains",lines:["NODEPORTS→SVC→SEP"]},
+  rt:{type:"router",name:{ro:"Decizie rutare",en:"Routing decision"},lines:["local / forward"]},
+  post:{type:"box",name:"FORWARD + POST",lines:["MASQUERADE"]},
+  n2:{type:"box",name:{ro:"node-2 · kernel",en:"node-2 · kernel"},lines:["eth0 → rute → cali…"]},
+  veth:{type:"switch",name:"veth",lines:["cali7f2c ⇄ eth0"]},
+  pod:{type:"pod",name:"ingress-nginx",lines:[A.ing+":8443"]},
+  app:{type:"pod",name:{ro:"pod aplicație",en:"app pod"},lines:[A.app+":8080"]}
+},
+links:[["cl","lb"],["lb","nic"],["nic","pre"],["pre","kube"],["kube","rt"],["rt","post"],["post","n2"],["n2","veth"],["veth","pod"],["pod","app","virt"]],
+layouts:{
+  wide:{vb:[0,0,1000,500],n:{cl:[55,120],lb:[185,120],nic:[320,120],pre:[455,120],kube:[590,120],rt:[725,120],post:[870,120],n2:[870,360],veth:[690,360],pod:[510,360],app:[300,360]},hideLinks:["post-n2"],
+    texts:[{x:960,y:250,a:"end",t:{ro:"pe fir ↓",en:"on the wire ↓"}}],
+    zones:[{x:255,y:30,w:735,h:190,top:true,l:{ro:"node-1 · 10.0.1.11 · kernel Linux",en:"node-1 · 10.0.1.11 · Linux kernel"}},
+      {x:220,y:270,w:770,h:215,top:true,l:{ro:"node-2 · 10.0.1.12 · pod-uri 10.244.2.0/24",en:"node-2 · 10.0.1.12 · pods 10.244.2.0/24"}}]},
+  narrow:{vb:[0,0,360,1000],n:{cl:[60,50],lb:[60,135],nic:[60,240],pre:[60,325],kube:[60,410],rt:[60,495],post:[60,580],n2:[60,700],veth:[60,785],pod:[60,870],app:[250,870]},
+    side:{cl:"right",lb:"right",nic:"right",pre:"right",kube:"right",rt:"right",post:"right",n2:"right",veth:"right",pod:"right"},
+    zones:[{x:4,y:185,w:352,h:445,top:true,l:"node-1"},{x:4,y:648,w:352,h:345,top:true,l:"node-2"}]}
+},
+groups:[
+  {id:"eth",color:"l2",fields:["dstMac","srcMac"],name:{ro:"Antet Ethernet (L2)",en:"Ethernet header (L2)"},short:"Ethernet",grow:2},
+  {id:"ip",color:"l3",fields:["srcIp","dstIp"],name:{ro:"Antet IP (L3)",en:"IP header (L3)"},short:"IP",grow:3},
+  {id:"l4",color:"l4",fields:["proto","srcPort","dstPort","flags"],name:{ro:"Antet TCP (L4)",en:"TCP header (L4)"},short:"TCP",grow:3},
+  {id:"kern",color:"arp",fields:["skb","hook","ct","chain","mark","rt","iface","sock"],name:{ro:"În kernel (metadate, nu în pachet)",en:"In the kernel (metadata, not in the packet)"},short:"Kernel",grow:4},
+  {id:"app",color:"l7",fields:["payload"],name:{ro:"Date",en:"Data"},short:{ro:"Date",en:"Data"},grow:2}
+],
+fieldLabels:{dstMac:{ro:"MAC destinație",en:"Destination MAC"},srcMac:{ro:"MAC sursă",en:"Source MAC"},srcIp:{ro:"IP sursă",en:"Source IP"},dstIp:{ro:"IP destinație",en:"Destination IP"},proto:"Protocol",srcPort:{ro:"Port sursă",en:"Source port"},dstPort:{ro:"Port destinație",en:"Destination port"},flags:"Flags",
+  skb:"sk_buff",hook:"Hook netfilter",ct:"conntrack",chain:{ro:"Lanț / regulă",en:"Chain / rule"},mark:{ro:"Marcaj (fwmark)",en:"Mark (fwmark)"},rt:{ro:"Rută",en:"Route"},iface:{ro:"Interfață",en:"Interface"},sock:"Socket",payload:{ro:"Conținut",en:"Payload"}},
+pdu:f=>/ACK/.test(f.flags||"")&&/SYN/.test(f.flags||"")?{badge:"TCP SYN-ACK",tok:["SYN-ACK","k-tcp"]}:f.payload?{badge:{ro:"Conexiune nouă (al doilea hop)",en:"New connection (second hop)"},tok:["SYN","k-app"]}:{badge:"TCP SYN",tok:["SYN","k-ip"]},
+
+init:{ct:[]},
+tables:{
+  hooks:{title:{ro:"Hook-urile netfilter (pentru un pachet care intră)",en:"The netfilter hooks (for an incoming packet)"},cols:["Hook",{ro:"Tabele, în ordine",en:"Tables, in order"},{ro:"Pentru ce",en:"What for"}],
+    rows:()=>[["PREROUTING","raw → conntrack → mangle → nat (DNAT)",{ro:"orice pachet care intră, înainte de rutare",en:"every incoming packet, before routing"}],["INPUT","mangle → filter → nat",{ro:"pachete pentru nodul însuși",en:"packets for the node itself"}],["FORWARD","mangle → filter",{ro:"pachete care trec prin nod spre altundeva",en:"packets passing through to elsewhere"}],["OUTPUT","raw → conntrack → mangle → nat → filter",{ro:"pachete create local",en:"locally created packets"}],["POSTROUTING","mangle → nat (SNAT)",{ro:"orice pachet care iese",en:"every outgoing packet"}]]},
+  lbT:{title:{ro:"Ținte ale load balancer-ului",en:"Load balancer targets"},cols:[{ro:"Nod",en:"Node"},{ro:"Port",en:"Port"},{ro:"Verificare",en:"Health"}],
+    rows:()=>[["node-1 · 10.0.1.11","30443",{ro:"sănătos",en:"healthy"}],["node-2 · 10.0.1.12","30443",{ro:"sănătos",en:"healthy"}],["node-3 · 10.0.1.13","30443",{ro:"picat (scos)",en:"failed (removed)"}]]},
+  nicT:{title:{ro:"Statistici placă de rețea (ethtool -S eth0)",en:"Network card stats (ethtool -S eth0)"},cols:[{ro:"Contor",en:"Counter"},{ro:"Valoare",en:"Value"}],
+    rows:()=>[["rx_packets","8 412 930 117"],["rx_queue_3_packets","2 101 447 802"],["rx_dropped","0"],["rx_crc_errors","0"],[{ro:"Cozi RX/TX",en:"RX/TX queues"},"8 / 8 (RSS)"],[{ro:"Mărime ring RX",en:"RX ring size"},"1024"]]},
+  ct:{title:{ro:"conntrack -L pe node-1",en:"conntrack -L on node-1"},cols:[{ro:"Ce a venit",en:"What came in"},{ro:"Răspunsul așteptat",en:"Expected reply"},{ro:"Stare",en:"State"}]},
+  nat:{title:{ro:"iptables -t nat -S (lanțurile kube-proxy, fragment)",en:"iptables -t nat -S (kube-proxy chains, excerpt)"},cols:[{ro:"Lanț",en:"Chain"},{ro:"Regulă",en:"Rule"}],idx:true,plain:[],
+    rows:()=>[["PREROUTING","-j KUBE-SERVICES"],["KUBE-SERVICES","-d 10.96.45.10/32 -p tcp --dport 80 -j KUBE-SVC-APP"],["KUBE-SERVICES","-m addrtype --dst-type LOCAL -j KUBE-NODEPORTS"],["KUBE-NODEPORTS","-p tcp --dport 30443 -j KUBE-EXT-7ZQ4"],["KUBE-EXT-7ZQ4","-j KUBE-MARK-MASQ ; -j KUBE-SVC-7ZQ4"],["KUBE-SVC-7ZQ4","-m statistic --mode random --probability 0.5 -j KUBE-SEP-K2LD"],["KUBE-SVC-7ZQ4","-j KUBE-SEP-9QWP"],["KUBE-SEP-K2LD","-p tcp -j DNAT --to-destination 10.244.2.15:8443"],["KUBE-POSTROUTING","-m mark --mark 0x4000 -j MASQUERADE"]]},
+  rt1:{title:{ro:"ip route pe node-1",en:"ip route on node-1"},cols:[{ro:"Destinație",en:"Destination"},{ro:"Pe unde",en:"Via"}],
+    rows:()=>[["default","via 10.0.1.1 dev eth0"],["10.0.1.0/24","dev eth0 (direct)"],["10.244.1.0/24",{ro:"pod-uri locale (cali…)",en:"local pods (cali…)"}],["10.244.2.0/24","via 10.0.1.12 dev eth0"]]},
+  rt2:{title:{ro:"ip route pe node-2",en:"ip route on node-2"},cols:[{ro:"Destinație",en:"Destination"},{ro:"Pe unde",en:"Via"}],
+    rows:()=>[["10.244.2.15","dev cali7f2c scope link"],["10.244.2.16","dev cali1b9e scope link"],["10.244.1.0/24","via 10.0.1.11 dev eth0"]]},
+  sock:{title:{ro:"ss -tlnp în podul ingress-nginx",en:"ss -tlnp in the ingress-nginx pod"},cols:[{ro:"Stare",en:"State"},{ro:"Adresă",en:"Address"},{ro:"Proces",en:"Process"}],
+    rows:()=>[["LISTEN","0.0.0.0:8443","nginx (worker 1…4, SO_REUSEPORT)"],["LISTEN","0.0.0.0:8080","nginx"],["LISTEN","0.0.0.0:10254",{ro:"controller (metrici, health)",en:"controller (metrics, health)"}]]}
+},
+log:{title:{ro:"Jurnalul pachetului",en:"Packet log"},lead:{ro:"Galben = destinația (rescrisă de DNAT). Albastru = sursa (rescrisă de MASQUERADE). Fiecare rescriere e ținută minte de conntrack.",en:"Yellow = destination (rewritten by DNAT). Blue = source (rewritten by MASQUERADE). conntrack remembers every rewrite."},
+  first:{ro:"Unde",en:"Where"},minWidth:620,
+  cols:[{h:{ro:"Sursă",en:"Source"},v:f=>f.srcIp+":"+f.srcPort,cls:"ip"},{h:{ro:"Destinație",en:"Destination"},v:f=>f.dstIp+":"+f.dstPort,cls:"mac"},{h:"Flags",v:f=>f.flags}]},
+
+steps:[
+{at:["lb","nic","pre","kube","rt","post","pod"],frame:null,kind:"none",tables:["hooks"],
+ title:{ro:"Scenariul și harta drumului",en:"The scenario and the road map"},
+ body:{ro:`<p>Un client deschide <code>https://app.example.com</code>. Numele duce la IP-ul <strong>load balancer-ului</strong> (<code>198.51.100.20</code>), creat de un Service Kubernetes de tip <strong>LoadBalancer</strong> pentru <strong>ingress-nginx</strong>.</p>
+<p>Urmărim <strong>primul pachet</strong> al conexiunii, <strong>SYN</strong>-ul. De ce tocmai el? Pentru că deciziile importante (unde merge conexiunea, ce adrese se rescriu) se iau <strong>o singură dată, pe primul pachet</strong>, și sunt ținute minte de <strong>conntrack</strong>. Toate pachetele următoare urmează același drum, mai repede.</p>
+<p>În kernel-ul Linux, pachetul trece prin <strong>hook-uri netfilter</strong> (tabelul din dreapta). Pe ele stau regulile iptables, inclusiv cele scrise de <strong>kube-proxy</strong>.</p>`,
+ en:`<p>A client opens <code>https://app.example.com</code>. The name leads to the <strong>load balancer</strong>'s IP (<code>198.51.100.20</code>), created by a Kubernetes Service of type <strong>LoadBalancer</strong> for <strong>ingress-nginx</strong>.</p>
+<p>We follow the connection's <strong>first packet</strong>, the <strong>SYN</strong>. Why that one? Because the important decisions (where the connection goes, which addresses get rewritten) are made <strong>once, on the first packet</strong>, and remembered by <strong>conntrack</strong>. Every later packet follows the same path, faster.</p>
+<p>In the Linux kernel, the packet goes through <strong>netfilter hooks</strong> (the table on the right). That's where iptables rules live, including the ones <strong>kube-proxy</strong> writes.</p>`},
+ more:{ro:`<p>Lecția presupune kube-proxy în modul <strong>iptables</strong>, încă cel mai des întâlnit. În modul <strong>IPVS</strong> sau <strong>nftables</strong>, ori cu Cilium (eBPF, fără kube-proxy), hook-urile sunt aceleași (sau înlocuite de programe eBPF atașate direct pe interfață), dar regulile arată altfel. Ideea, DNAT + conntrack, rămâne.</p>`,
+  en:`<p>The lesson assumes kube-proxy in <strong>iptables</strong> mode, still the most common. In <strong>IPVS</strong> or <strong>nftables</strong> mode, or with Cilium (eBPF, no kube-proxy), the hooks are the same (or replaced by eBPF programs attached right on the interface), but the rules look different. The idea, DNAT + conntrack, stays.</p>`}},
+
+{at:"cl",frame:SYN,kind:"in",move:[[["cl","lb"]]],log:{ro:"client → LB",en:"client → LB"},who:"Client",
+ title:{ro:"Clientul trimite SYN spre IP-ul load balancer-ului",en:"The client sends a SYN to the load balancer's IP"},
+ body:{ro:`<p>Sistemul de operare al clientului alege un port sursă (<code>51000</code>) și trimite un segment TCP cu indicatorul <strong>SYN</strong> spre <code>198.51.100.20:443</code>: „vreau să deschid o conexiune”.</p>
+<p>Pachetul traversează internetul ca în <a href="../ethernet/index.html">lecția Ethernet</a>: la fiecare router, cadru nou, TTL − 1, aceleași IP-uri.</p>`,
+ en:`<p>The client's operating system picks a source port (<code>51000</code>) and sends a TCP segment with the <strong>SYN</strong> flag to <code>198.51.100.20:443</code>: "I want to open a connection".</p>
+<p>The packet crosses the internet as in the <a href="../ethernet/index.html">Ethernet lesson</a>: at every router, a new frame, TTL − 1, the same IPs.</p>`}},
+
+{at:"lb",frame:F2,kind:"in",move:[[["lb","nic"]]],log:{ro:"LB → node-1:30443",en:"LB → node-1:30443"},tables:["lbT"],hl:{lbT:"node-1 · 10.0.1.11"},who:"Load balancer",
+ title:{ro:"Load balancer-ul alege un nod",en:"The load balancer picks a node"},
+ body:{ro:`<p>Un load balancer de <strong>nivel 4</strong> (TCP) nu se uită în HTTP. El știe doar: „traficul pentru <code>198.51.100.20:443</code> merge la nodurile cluster-ului, pe portul <strong>NodePort</strong> <code>30443</code>”.</p>
+<ul><li>Verifică periodic nodurile (<strong>health check</strong>); node-3 a picat, deci e scos.</li>
+<li>Alege node-1 (de obicei cu un hash pe IP-uri și porturi, ca toate pachetele aceleiași conexiuni să meargă la același nod).</li>
+<li>Rescrie <strong>destinația</strong> în <code>10.0.1.11:30443</code>. <strong>IP-ul clientului se păstrează</strong> ca sursă.</li></ul>`,
+ en:`<p>A <strong>layer-4</strong> (TCP) load balancer doesn't look into HTTP. It only knows: "traffic for <code>198.51.100.20:443</code> goes to the cluster nodes, on <strong>NodePort</strong> <code>30443</code>".</p>
+<ul><li>It checks the nodes regularly (<strong>health check</strong>); node-3 has failed, so it's removed.</li>
+<li>It picks node-1 (usually by hashing IPs and ports, so every packet of the same connection goes to the same node).</li>
+<li>It rewrites the <strong>destination</strong> to <code>10.0.1.11:30443</code>. <strong>The client's IP is kept</strong> as the source.</li></ul>`},
+ more:{ro:`<p>Depinde de furnizor: unele load balancer-e păstrează IP-ul VIP ca destinație, iar kube-proxy are o regulă și pentru el în <code>KUBE-SERVICES</code>; altele fac proxy complet și schimbă și sursa (atunci afli clientul din PROXY protocol sau X-Forwarded-For). Pe bare-metal, MetalLB anunță VIP-ul direct de pe un nod, prin ARP sau BGP.</p>`,
+  en:`<p>It depends on the provider: some load balancers keep the VIP as the destination, and kube-proxy has a rule for it too in <code>KUBE-SERVICES</code>; others fully proxy and change the source as well (then you learn the client from PROXY protocol or X-Forwarded-For). On bare metal, MetalLB announces the VIP straight from a node, via ARP or BGP.</p>`}},
+
+{at:"nic",frame:F3,kind:"in",log:{ro:"intră pe eth0 (node-1)",en:"enters eth0 (node-1)"},tables:["nicT"],hl:{nicT:"rx_queue_3_packets"},who:{ro:"Placa de rețea + driver",en:"Network card + driver"},
+ title:{ro:"Placa de rețea: din fir în memorie",en:"The network card: from the wire into memory"},
+ body:{ro:`<p>Înainte de orice regulă iptables, <strong>hardware-ul și driverul</strong> fac multă treabă:</p>
+<ol><li>Placa vede MAC-ul destinație al nodului și verifică <strong>FCS</strong>-ul cadrului.</li>
+<li>Calculează un hash pe IP-uri și porturi (<strong>RSS</strong>) și alege una din cele 8 <strong>cozi RX</strong>: aici coada 3, legată de CPU 3.</li>
+<li>Copiază cadrul direct în memoria RAM, într-un <strong>ring buffer</strong>, fără ajutorul procesorului (<strong>DMA</strong>).</li>
+<li>Anunță procesorul printr-o <strong>întrerupere</strong>. Kernel-ul trece în modul <strong>NAPI</strong>: citește mai multe pachete deodată, fără câte o întrerupere pentru fiecare.</li>
+<li>Driverul împachetează cadrul într-un <strong><code>sk_buff</code></strong>: structura cu care kernel-ul reprezintă un pachet până la final.</li></ol>`,
+ en:`<p>Before any iptables rule, <strong>the hardware and driver</strong> do a lot of work:</p>
+<ol><li>The card sees the node's destination MAC and checks the frame's <strong>FCS</strong>.</li>
+<li>It hashes the IPs and ports (<strong>RSS</strong>) and picks one of 8 <strong>RX queues</strong>: here queue 3, tied to CPU 3.</li>
+<li>It copies the frame straight into RAM, into a <strong>ring buffer</strong>, without the CPU's help (<strong>DMA</strong>).</li>
+<li>It tells the CPU with an <strong>interrupt</strong>. The kernel switches to <strong>NAPI</strong> mode: it reads several packets at once rather than taking an interrupt for each.</li>
+<li>The driver wraps the frame in an <strong><code>sk_buff</code></strong>: the structure the kernel uses to represent a packet all the way through.</li></ol>`},
+ more:{ro:`<p>Aici apar primele locuri unde se pot pierde pachete, <em>înainte</em> de iptables: ring buffer plin (<code>rx_dropped</code>, <code>rx_missed_errors</code>), CPU prea ocupat cu întreruperi (<code>/proc/net/softnet_stat</code>). <strong>GRO</strong> lipește pachete TCP consecutive într-unul mare, ca restul kernel-ului să lucreze mai puțin.</p><p>Programele <strong>XDP</strong>/eBPF (de ex. Cilium) pot acționa chiar aici, în driver, înainte de crearea <code>sk_buff</code>-ului: cel mai rapid loc pentru a arunca sau redirecționa un pachet.</p>`,
+  en:`<p>This is the first place packets can be lost, <em>before</em> iptables: a full ring buffer (<code>rx_dropped</code>, <code>rx_missed_errors</code>), a CPU too busy with interrupts (<code>/proc/net/softnet_stat</code>). <strong>GRO</strong> merges consecutive TCP packets into one big one so the rest of the kernel does less work.</p><p><strong>XDP</strong>/eBPF programs (e.g. Cilium) can act right here, in the driver, before the <code>sk_buff</code> is created: the fastest place to drop or redirect a packet.</p>`},
+ try:[{cmd:"ethtool -S eth0 | grep -E 'rx_queue|drop|miss'",d:{ro:"Pachete pe fiecare coadă și pierderi la nivelul plăcii.",en:"Packets per queue and drops at the card level."}},{cmd:"ethtool -g eth0",d:{ro:"Mărimea ring buffer-elor RX/TX.",en:"The RX/TX ring buffer sizes."}}]},
+
+{at:"pre",frame:F4,kind:"in",move:[[["nic","pre"]]],tables:["hooks"],hl:{hooks:"PREROUTING"},who:{ro:"Kernel: stratul IP",en:"Kernel: the IP layer"},
+ title:{ro:"Intrarea în stratul IP și hook-ul PREROUTING",en:"Entering the IP layer and the PREROUTING hook"},
+ body:{ro:`<p>Kernel-ul vede EtherType <code>0x0800</code> și dă <code>sk_buff</code>-ul funcției <code>ip_rcv()</code>: verifică antetul IP (versiune, lungime, checksum). Antetul Ethernet și-a făcut treaba: de aici kernel-ul lucrează cu IP.</p>
+<p>Imediat după, pachetul ajunge la primul <strong>hook netfilter</strong>: <code>PREROUTING</code>. Aici trec <strong>toate</strong> pachetele care intră, indiferent unde vor ajunge, iar tabelele sunt consultate într-o ordine fixă: <strong>raw → conntrack → mangle → nat</strong>.</p>
+<p class="key">Important: PREROUTING e <strong>înaintea</strong> deciziei de rutare. Așa poate DNAT-ul să schimbe destinația și să influențeze unde merge pachetul.</p>`,
+ en:`<p>The kernel sees EtherType <code>0x0800</code> and hands the <code>sk_buff</code> to <code>ip_rcv()</code>: it checks the IP header (version, length, checksum). The Ethernet header has done its job: from here the kernel works with IP.</p>
+<p>Right after, the packet reaches the first <strong>netfilter hook</strong>: <code>PREROUTING</code>. <strong>Every</strong> incoming packet passes here, wherever it's going, and the tables are consulted in a fixed order: <strong>raw → conntrack → mangle → nat</strong>.</p>
+<p class="key">Important: PREROUTING is <strong>before</strong> the routing decision. That's how DNAT can change the destination and influence where the packet goes.</p>`}},
+
+{at:"pre",frame:F5,kind:"in",fx:[["ct","TCP "+A.cl+":51000 → "+A.n1+":30443",{ro:"(încă nedecis)",en:"(not decided yet)"},"NEW"]],tables:["ct"],who:"raw + conntrack",
+ title:{ro:"raw și conntrack: o conexiune nouă",en:"raw and conntrack: a new connection"},
+ body:{ro:`<p>Tabela <strong>raw</strong> e prima. E folosită rar, mai ales pentru <code>NOTRACK</code> (pachete pe care nu vrei să le urmărească conntrack). Aici nu are reguli.</p>
+<p>Apoi <strong>conntrack</strong> (connection tracking) caută pachetul în tabela lui de conexiuni, după cele 5 valori: protocol, IP sursă, port sursă, IP destinație, port destinație. Nu îl găsește, deci e o conexiune <strong>NEW</strong>: creează o intrare.</p>
+<p>Fiecare intrare ține <strong>două direcții</strong>: ce a venit și ce răspuns se așteaptă. Deocamdată răspunsul așteptat e „invers”; se va schimba după DNAT și SNAT.</p>`,
+ en:`<p>The <strong>raw</strong> table comes first. It's rarely used, mostly for <code>NOTRACK</code> (packets you don't want conntrack to follow). It has no rules here.</p>
+<p>Then <strong>conntrack</strong> (connection tracking) looks the packet up in its connection table by its 5 values: protocol, source IP, source port, destination IP, destination port. It doesn't find it, so it's a <strong>NEW</strong> connection: it creates an entry.</p>
+<p>Each entry holds <strong>two directions</strong>: what came in and what reply is expected. For now the expected reply is "the reverse"; it will change after DNAT and SNAT.</p>`},
+ more:{ro:`<p>Tabela conntrack are o limită (<code>nf_conntrack_max</code>). Pe noduri foarte aglomerate, când se umple, kernel-ul aruncă pachete noi și scrie în log „nf_conntrack: table full, dropping packet”. Se mărește limita sau se scurtează timeout-urile.</p>`,
+  en:`<p>The conntrack table has a limit (<code>nf_conntrack_max</code>). On very busy nodes, when it fills up, the kernel drops new packets and logs "nf_conntrack: table full, dropping packet". You raise the limit or shorten the timeouts.</p>`},
+ try:[{cmd:"conntrack -L -p tcp --dport 30443",d:{ro:"Conexiunile urmărite spre NodePort-ul 30443.",en:"The tracked connections to NodePort 30443."}},{cmd:"sysctl net.netfilter.nf_conntrack_count net.netfilter.nf_conntrack_max",d:{ro:"Câte intrări sunt acum și care e limita.",en:"How many entries there are now and the limit."}}]},
+
+{at:"kube",frame:F6,kind:"in",move:[[["pre","kube"]]],tables:["nat"],hl:{nat:[0,1,2]},who:"nat PREROUTING",
+ title:{ro:"nat PREROUTING → KUBE-SERVICES",en:"nat PREROUTING → KUBE-SERVICES"},
+ body:{ro:`<p>Mangle nu are reguli aici. În tabela <strong>nat</strong>, lanțul <code>PREROUTING</code> are o regulă pusă de kube-proxy: <code>-j KUBE-SERVICES</code>. Toate pachetele noi sar în lanțul lui.</p>
+<p><code>KUBE-SERVICES</code> are câte o regulă pentru fiecare <strong>ClusterIP</strong> (de ex. <code>10.96.45.10:80</code>). Destinația noastră, <code>10.0.1.11:30443</code>, nu e niciun ClusterIP, deci nu se potrivește.</p>
+<p>Ultima regulă spune: „dacă destinația e <strong>o adresă a acestui nod</strong> (<code>--dst-type LOCAL</code>), sari la <code>KUBE-NODEPORTS</code>”. Se potrivește.</p>`,
+ en:`<p>Mangle has no rules here. In the <strong>nat</strong> table, the <code>PREROUTING</code> chain has a rule placed by kube-proxy: <code>-j KUBE-SERVICES</code>. Every new packet jumps into its chain.</p>
+<p><code>KUBE-SERVICES</code> has one rule per <strong>ClusterIP</strong> (e.g. <code>10.96.45.10:80</code>). Our destination, <code>10.0.1.11:30443</code>, isn't a ClusterIP, so nothing matches.</p>
+<p>The last rule says: "if the destination is <strong>one of this node's addresses</strong> (<code>--dst-type LOCAL</code>), jump to <code>KUBE-NODEPORTS</code>". That matches.</p>`},
+ more:{ro:`<p>Tabela nat e consultată <strong>doar pentru primul pachet</strong> al unei conexiuni. Pentru restul, conntrack aplică direct rezultatul ținut minte. De aceea mii de reguli nat contează mai puțin decât ai crede pentru traficul pe conexiuni deja deschise, dar contează pentru conexiuni noi și la fiecare actualizare a regulilor.</p>`,
+  en:`<p>The nat table is consulted <strong>only for a connection's first packet</strong>. For the rest, conntrack applies the remembered result directly. That's why thousands of nat rules matter less than you'd think for traffic on already-open connections, but they do matter for new connections and on every rule update.</p>`},
+ try:[{cmd:"iptables -t nat -L KUBE-SERVICES -n --line-numbers | tail -5",d:{ro:"Ultimele reguli din KUBE-SERVICES, inclusiv saltul la KUBE-NODEPORTS.",en:"The last rules in KUBE-SERVICES, including the jump to KUBE-NODEPORTS."}}]},
+
+{at:"kube",frame:F7,kind:"in",tables:["nat"],hl:{nat:[3,4]},who:"KUBE-NODEPORTS",
+ title:{ro:"KUBE-NODEPORTS: portul 30443 și marcajul",en:"KUBE-NODEPORTS: port 30443 and the mark"},
+ body:{ro:`<p>În <code>KUBE-NODEPORTS</code>, regula pentru <code>--dport 30443</code> trimite pachetul la <code>KUBE-EXT-7ZQ4</code> (lanțul „extern” al Service-ului ingress-nginx).</p>
+<p>Acolo, primul lucru e <code>KUBE-MARK-MASQ</code>: pune pe <code>sk_buff</code> un <strong>marcaj</strong> (<code>0x4000</code>). Marcajul nu e scris în pachet; e o etichetă în memorie care spune: „la ieșire, schimbă-i sursa”. Vei vedea de ce la POSTROUTING.</p>
+<p>Apoi sare în <code>KUBE-SVC-7ZQ4</code>, lanțul Service-ului.</p>`,
+ en:`<p>In <code>KUBE-NODEPORTS</code>, the rule for <code>--dport 30443</code> sends the packet to <code>KUBE-EXT-7ZQ4</code> (the ingress-nginx Service's "external" chain).</p>
+<p>There, the first thing is <code>KUBE-MARK-MASQ</code>: it puts a <strong>mark</strong> (<code>0x4000</code>) on the <code>sk_buff</code>. The mark isn't written into the packet; it's an in-memory label saying: "on the way out, change its source". You'll see why at POSTROUTING.</p>
+<p>Then it jumps to <code>KUBE-SVC-7ZQ4</code>, the Service's chain.</p>`},
+ more:{ro:`<p>Cu <code>externalTrafficPolicy: Local</code>, lanțul extern nu mai marchează pachetul și trimite doar la pod-urile de pe <em>acest</em> nod. Avantaj: IP-ul clientului ajunge neschimbat la pod. Dezavantaj: nodurile fără pod-uri ale Service-ului răspund „nesănătos” la health check-ul LB-ului, iar traficul se poate împărți inegal.</p>`,
+  en:`<p>With <code>externalTrafficPolicy: Local</code>, the external chain no longer marks the packet and only sends to pods on <em>this</em> node. Upside: the client IP reaches the pod unchanged. Downside: nodes without the Service's pods report "unhealthy" to the LB's health check, and traffic can be shared unevenly.</p>`}},
+
+{at:"kube",frame:F8,kind:"in",fx:[["ct","TCP "+A.cl+":51000 → "+A.n1+":30443",A.ing+":8443 → "+A.cl+":51000","NEW"]],tables:["nat","ct"],hl:{nat:[5,7]},log:{ro:"după DNAT (node-1)",en:"after DNAT (node-1)"},who:"KUBE-SVC → KUBE-SEP",
+ title:{ro:"KUBE-SVC alege un pod, KUBE-SEP face DNAT",en:"KUBE-SVC picks a pod, KUBE-SEP does the DNAT"},
+ body:{ro:`<p>Service-ul ingress-nginx are 2 pod-uri. <code>KUBE-SVC-7ZQ4</code> are câte o regulă pentru fiecare:</p>
+<ul><li>prima, cu <code>-m statistic --mode random --probability 0.5</code>: în 50% din cazuri sari la <code>KUBE-SEP-K2LD</code>;</li><li>a doua, fără condiție, la <code>KUBE-SEP-9QWP</code> (restul de 50%).</li></ul>
+<p>„Zarul” a ales <code>KUBE-SEP-K2LD</code> (SEP = <em>service endpoint</em>). Regula lui: <code>-j DNAT --to-destination 10.244.2.15:8443</code>. <strong>Destinația e rescrisă</strong>: acum pachetul merge la podul ingress-nginx de pe node-2.</p>
+<p>Conntrack actualizează intrarea: răspunsul va veni de la <code>10.244.2.15:8443</code>, iar la întoarcere va trebui transformat înapoi.</p>`,
+ en:`<p>The ingress-nginx Service has 2 pods. <code>KUBE-SVC-7ZQ4</code> has one rule for each:</p>
+<ul><li>the first, with <code>-m statistic --mode random --probability 0.5</code>: 50% of the time, jump to <code>KUBE-SEP-K2LD</code>;</li><li>the second, unconditionally, to <code>KUBE-SEP-9QWP</code> (the other 50%).</li></ul>
+<p>The "dice" chose <code>KUBE-SEP-K2LD</code> (SEP = <em>service endpoint</em>). Its rule: <code>-j DNAT --to-destination 10.244.2.15:8443</code>. <strong>The destination is rewritten</strong>: the packet now heads to the ingress-nginx pod on node-2.</p>
+<p>conntrack updates the entry: the reply will come from <code>10.244.2.15:8443</code>, and on the way back it will have to be translated back.</p>`},
+ more:{ro:`<p>Cu 3 pod-uri, probabilitățile sunt 1/3, apoi 1/2 din rest, apoi restul: fiecare pod primește tot o treime. Cu N pod-uri, lanțul are N reguli, verificate pe rând; de aceea, la mii de Service-uri și endpoint-uri, modul IPVS sau nftables e mai eficient.</p>`,
+  en:`<p>With 3 pods, the probabilities are 1/3, then 1/2 of the rest, then the remainder: each pod still gets a third. With N pods the chain has N rules, checked in turn; that's why, with thousands of Services and endpoints, IPVS or nftables mode is more efficient.</p>`},
+ try:[{cmd:"iptables -t nat -L KUBE-SVC-7ZQ4 -n",d:{ro:"Regulile cu probabilități pentru fiecare pod (numele lanțului diferă la tine).",en:"The per-pod probability rules (the chain name differs on your cluster)."}},{cmd:"iptables-save -t nat | grep 10.244.2.15",d:{ro:"Unde apare IP-ul podului în regulile NAT.",en:"Where the pod IP appears in the NAT rules."}}]},
+
+{at:"rt",frame:F9,kind:"in",move:[[["kube","rt"]]],tables:["rt1"],hl:{rt1:"10.244.2.0/24"},who:{ro:"Decizia de rutare",en:"The routing decision"},
+ title:{ro:"Decizia de rutare: local sau mai departe?",en:"The routing decision: local or onward?"},
+ body:{ro:`<p>Abia acum, <strong>după</strong> DNAT, kernel-ul se uită în tabela de rutare (<code>ip_route_input</code>). Destinația nu mai e <code>10.0.1.11</code> (nodul), ci <code>10.244.2.15</code>.</p>
+<ul><li>Dacă ar fi o adresă a nodului → pachetul ar merge la <strong>INPUT</strong> (pentru un proces de pe nod).</li>
+<li>Nu e, iar ruta spune <code>10.244.2.0/24 via 10.0.1.12 dev eth0</code> → pachetul trebuie <strong>trimis mai departe</strong>, prin <strong>FORWARD</strong>.</li></ul>
+<p>Nodul se comportă acum ca un <strong>router</strong>. Funcționează doar pentru că <code>net.ipv4.ip_forward = 1</code>; Kubernetes cere această setare.</p>`,
+ en:`<p>Only now, <strong>after</strong> DNAT, does the kernel consult the routing table (<code>ip_route_input</code>). The destination is no longer <code>10.0.1.11</code> (the node) but <code>10.244.2.15</code>.</p>
+<ul><li>If it were a node address → the packet would go to <strong>INPUT</strong> (for a process on the node).</li>
+<li>It isn't, and the route says <code>10.244.2.0/24 via 10.0.1.12 dev eth0</code> → the packet must be <strong>forwarded</strong>, through <strong>FORWARD</strong>.</li></ul>
+<p>The node now acts as a <strong>router</strong>. It only works because <code>net.ipv4.ip_forward = 1</code>; Kubernetes requires this setting.</p>`},
+ more:{ro:`<p>Ruta spre <code>10.244.2.0/24</code> a fost scrisă de CNI (aici Calico, prin BGP). Cu un overlay (VXLAN), ruta ar trece printr-o interfață <code>vxlan.calico</code> și pachetul ar fi încapsulat (vezi <a href="../gke-retea/index.html">lecția GKE</a>).</p>`,
+  en:`<p>The route to <code>10.244.2.0/24</code> was written by the CNI (here Calico, via BGP). With an overlay (VXLAN), the route would go through a <code>vxlan.calico</code> interface and the packet would be encapsulated (see the <a href="../gke-retea/index.html">GKE lesson</a>).</p>`},
+ try:[{cmd:"ip route get 10.244.2.15",d:{ro:"Exact ce rută ar folosi kernel-ul pentru această adresă.",en:"Exactly which route the kernel would use for this address."}}]},
+
+{at:"post",frame:F10,kind:"in",move:[[["rt","post"]]],who:"filter FORWARD",
+ title:{ro:"FORWARD: e voie să treacă?",en:"FORWARD: is it allowed through?"},
+ body:{ro:`<p>Hook-ul <strong>FORWARD</strong>, tabela <strong>filter</strong>: aici se decide dacă un pachet care doar <em>trece</em> prin nod are voie să treacă.</p>
+<ul><li>Lanțul <code>KUBE-FORWARD</code> al kube-proxy acceptă pachetele marcate cu <code>0x4000</code> și pe cele din conexiuni deja stabilite (<code>ctstate RELATED,ESTABLISHED</code>).</li>
+<li>Tot aici, CNI-ul aplică <strong>Network Policy</strong> (la Calico, lanțurile <code>cali-FORWARD</code>, <code>cali-to-wl-dispatch</code>…), deși pentru un pod de pe alt nod verificarea finală se face pe nodul destinație.</li></ul>
+<p>Pachetul e acceptat (<code>ACCEPT</code>).</p>`,
+ en:`<p>The <strong>FORWARD</strong> hook, <strong>filter</strong> table: this is where it's decided whether a packet merely <em>passing through</em> the node may pass.</p>
+<ul><li>kube-proxy's <code>KUBE-FORWARD</code> chain accepts packets marked <code>0x4000</code> and those from established connections (<code>ctstate RELATED,ESTABLISHED</code>).</li>
+<li>Here too the CNI applies <strong>Network Policy</strong> (in Calico, the <code>cali-FORWARD</code>, <code>cali-to-wl-dispatch</code>… chains), although for a pod on another node the final check happens on the destination node.</li></ul>
+<p>The packet is accepted (<code>ACCEPT</code>).</p>`},
+ more:{ro:`<p>Dacă politica implicită a lanțului FORWARD e <code>DROP</code> (des întâlnit când e instalat Docker) și lipsește o regulă de accept, traficul între noduri „dispare” fără nicio eroare. <code>iptables -L FORWARD -v -n</code> arată contoarele de pachete pe fiecare regulă: cea care crește îți spune ce s-a întâmplat.</p>`,
+  en:`<p>If the FORWARD chain's default policy is <code>DROP</code> (common when Docker is installed) and an accept rule is missing, cross-node traffic "vanishes" with no error. <code>iptables -L FORWARD -v -n</code> shows packet counters per rule: the one that's growing tells you what happened.</p>`}},
+
+{at:"post",frame:F11,kind:"in",fx:[["ct","TCP "+A.cl+":51000 → "+A.n1+":30443",A.ing+":8443 → "+A.n1+":51000","NEW"]],tables:["nat","ct"],hl:{nat:[8]},log:{ro:"după MASQUERADE (node-1)",en:"after MASQUERADE (node-1)"},who:"nat POSTROUTING",
+ title:{ro:"POSTROUTING: MASQUERADE schimbă sursa",en:"POSTROUTING: MASQUERADE changes the source"},
+ body:{ro:`<p>Ultimul hook înainte de ieșire: <strong>POSTROUTING</strong>, tabela <strong>nat</strong>. <code>KUBE-POSTROUTING</code> vede marcajul <code>0x4000</code> și aplică <strong>MASQUERADE</strong>: înlocuiește IP-ul sursă (clientul, <code>203.0.113.25</code>) cu IP-ul nodului care trimite (<code>10.0.1.11</code>).</p>
+<p><strong>De ce?</strong> Podul de pe node-2 ar răspunde altfel direct clientului, ocolind node-1. Dar doar node-1 știe (în conntrack) că trebuie să transforme <code>10.244.2.15:8443</code> înapoi în adresa la care a scris clientul. Un răspuns care ocolește node-1 ar ajunge la client de la o adresă necunoscută și ar fi ignorat.</p>
+<p>Cu sursa schimbată, podul răspunde la <code>10.0.1.11</code>, deci răspunsul se întoarce obligatoriu prin node-1.</p>
+<p class="key">Prețul: podul <strong>nu mai vede IP-ul real al clientului</strong>, doar IP-ul lui node-1. De aceea există <code>externalTrafficPolicy: Local</code>.</p>`,
+ en:`<p>The last hook before leaving: <strong>POSTROUTING</strong>, <strong>nat</strong> table. <code>KUBE-POSTROUTING</code> sees the <code>0x4000</code> mark and applies <strong>MASQUERADE</strong>: it replaces the source IP (the client, <code>203.0.113.25</code>) with the sending node's IP (<code>10.0.1.11</code>).</p>
+<p><strong>Why?</strong> Otherwise the pod on node-2 would reply straight to the client, bypassing node-1. But only node-1 knows (in conntrack) that <code>10.244.2.15:8443</code> must be turned back into the address the client wrote to. A reply that skipped node-1 would reach the client from an unknown address and be ignored.</p>
+<p>With the source changed, the pod replies to <code>10.0.1.11</code>, so the reply must come back through node-1.</p>
+<p class="key">The price: the pod <strong>no longer sees the client's real IP</strong>, only node-1's. That's why <code>externalTrafficPolicy: Local</code> exists.</p>`}},
+
+{at:"post",frame:F12,kind:"in",move:[[["post","n2"]]],log:{ro:"pe fir, node-1 → node-2",en:"on the wire, node-1 → node-2"},who:{ro:"Ieșirea de pe node-1",en:"Leaving node-1"},
+ title:{ro:"Ieșirea: cadru nou, coadă, placa de rețea",en:"Leaving: a new frame, a queue, the network card"},
+ body:{ro:`<p>Pachetul are acum adresele finale pentru acest hop. Mai trebuie:</p>
+<ol><li><strong>Vecinul</strong> (ARP, ca în lecția Ethernet): MAC-ul lui <code>10.0.1.12</code> e în cache → antet Ethernet nou, de la node-1 la node-2.</li>
+<li><strong>qdisc</strong>: coada de ieșire a interfeței (poate limita sau prioritiza traficul).</li>
+<li>Driverul pune pachetul într-un <strong>ring buffer TX</strong>, iar placa îl trimite pe fir (tot prin DMA). Dacă placa știe, calculează ea checksum-urile (<em>offload</em>).</li></ol>
+<p>Observă că pachetul nu mai are nimic din „metadatele” de pe node-1 (marcajul, lanțurile): ele au rămas în kernel-ul lui node-1.</p>`,
+ en:`<p>The packet now has its final addresses for this hop. It still needs:</p>
+<ol><li>The <strong>neighbour</strong> (ARP, as in the Ethernet lesson): the MAC of <code>10.0.1.12</code> is cached → a new Ethernet header, from node-1 to node-2.</li>
+<li>The <strong>qdisc</strong>: the interface's egress queue (it can rate-limit or prioritise traffic).</li>
+<li>The driver puts the packet in a <strong>TX ring buffer</strong> and the card sends it on the wire (again via DMA). If the card can, it computes the checksums itself (<em>offload</em>).</li></ol>
+<p>Note the packet carries none of node-1's "metadata" (the mark, the chains): those stayed in node-1's kernel.</p>`},
+ try:[{cmd:"tcpdump -ni eth0 'tcp port 8443 and tcp[tcpflags] & tcp-syn != 0'",d:{ro:"Vezi SYN-urile care pleacă spre pod-uri, deja cu DNAT și MASQUERADE aplicate.",en:"See the SYNs leaving for pods, with DNAT and MASQUERADE already applied."}}]},
+
+{at:"n2",frame:F13,kind:"in",move:[[["n2","veth"]]],tables:["rt2"],hl:{rt2:"10.244.2.15"},who:"node-2 · kernel",
+ title:{ro:"Pe node-2: același drum, alt rezultat",en:"On node-2: the same path, a different outcome"},
+ body:{ro:`<p>Node-2 primește cadrul și repetă tot: placă → ring buffer → NAPI → <code>sk_buff</code> → <code>ip_rcv</code> → <strong>PREROUTING</strong>.</p>
+<ul><li>Conntrack-ul lui node-2 vede și el o conexiune <strong>NEW</strong> (fiecare nod are tabela lui).</li>
+<li>În nat PREROUTING, <code>KUBE-SERVICES</code> nu se potrivește: destinația e deja un IP de pod, nu un Service și nici o adresă a nodului. <strong>Fără DNAT.</strong></li>
+<li>Rutarea: Calico a pus pentru fiecare pod o rută <code>/32</code>: <code>10.244.2.15 dev cali7f2c</code> → pachetul e trimis prin FORWARD spre interfața podului.</li>
+<li>În FORWARD, regulile Calico verifică <strong>Network Policy</strong>-ul podului de destinație (ingress-ul e permis pe 8443).</li></ul>`,
+ en:`<p>node-2 receives the frame and repeats it all: card → ring buffer → NAPI → <code>sk_buff</code> → <code>ip_rcv</code> → <strong>PREROUTING</strong>.</p>
+<ul><li>node-2's conntrack also sees a <strong>NEW</strong> connection (each node has its own table).</li>
+<li>In nat PREROUTING, <code>KUBE-SERVICES</code> doesn't match: the destination is already a pod IP, not a Service or a node address. <strong>No DNAT.</strong></li>
+<li>Routing: Calico added a <code>/32</code> route per pod: <code>10.244.2.15 dev cali7f2c</code> → the packet is forwarded towards the pod's interface.</li>
+<li>In FORWARD, Calico's rules check the destination pod's <strong>Network Policy</strong> (ingress on 8443 is allowed).</li></ul>`}},
+
+{at:"veth",frame:F14,kind:"in",move:[[["veth","pod"]]],who:"veth · network namespace",
+ title:{ro:"Prin perechea veth, în namespace-ul podului",en:"Through the veth pair, into the pod's namespace"},
+ body:{ro:`<p><code>cali7f2c</code> e capătul de pe nod al unei <strong>perechi veth</strong>. Ce intră pe el iese pe celălalt capăt, <code>eth0</code>, care stă <strong>în alt network namespace</strong>: cel al podului.</p>
+<p>Pentru pachet, e ca și cum ar intra într-o altă mașină: podul are propriile interfețe, rute, tabelă conntrack și reguli netfilter (de obicei goale). Pachetul trece din nou, foarte repede, prin PREROUTING și decizia de rutare a podului; destinația e adresa podului, deci merge la <strong>INPUT</strong> și apoi la stratul TCP.</p>`,
+ en:`<p><code>cali7f2c</code> is the node-side end of a <strong>veth pair</strong>. What goes in comes out the other end, <code>eth0</code>, which lives <strong>in another network namespace</strong>: the pod's.</p>
+<p>For the packet it's like entering another machine: the pod has its own interfaces, routes, conntrack table and netfilter rules (usually empty). The packet goes very quickly through the pod's PREROUTING and routing decision again; the destination is the pod's own address, so it goes to <strong>INPUT</strong> and then to the TCP layer.</p>`},
+ try:[{cmd:"nsenter -t $(pgrep -f nginx-ingress-controller | head -1) -n ip addr",d:{ro:"Intră în namespace-ul de rețea al podului și vezi eth0-ul lui.",en:"Enter the pod's network namespace and see its eth0."}}]},
+
+{at:"pod",frame:F15,kind:"in",tables:["sock"],hl:{sock:"LISTEN"},who:"TCP · socket",
+ title:{ro:"TCP și socket-ul: nginx primește conexiunea",en:"TCP and the socket: nginx receives the connection"},
+ body:{ro:`<p>Stratul TCP din podul ingress-nginx caută un <strong>socket</strong> care ascultă pe <code>*:8443</code>: îl găsește (procesul nginx). Pentru că e un SYN:</p>
+<ol><li>Pune conexiunea în <strong>coada SYN</strong> și trimite înapoi un <strong>SYN-ACK</strong>.</li>
+<li>Când vine ACK-ul clientului, conexiunea trece în <strong>coada accept</strong>.</li>
+<li>Un worker nginx apelează <code>accept()</code> și primește conexiunea. Apoi citește TLS ClientHello, iar de aici e treaba aplicației.</li></ol>
+<p class="key">Din momentul în care pachetul a intrat pe placa lui node-1 au trecut doar câteva zeci de microsecunde, iar codul aplicației nu a rulat încă deloc.</p>`,
+ en:`<p>The TCP layer in the ingress-nginx pod looks for a <strong>socket</strong> listening on <code>*:8443</code>: it finds one (the nginx process). Because this is a SYN:</p>
+<ol><li>It puts the connection in the <strong>SYN queue</strong> and sends back a <strong>SYN-ACK</strong>.</li>
+<li>When the client's ACK arrives, the connection moves to the <strong>accept queue</strong>.</li>
+<li>An nginx worker calls <code>accept()</code> and gets the connection. It then reads the TLS ClientHello, and from here it's the app's job.</li></ol>
+<p class="key">Only a few tens of microseconds have passed since the packet entered node-1's card, and no application code has run yet.</p>`},
+ more:{ro:`<p>Dacă aplicația nu apelează <code>accept()</code> destul de repede, coada accept se umple (<code>somaxconn</code>, backlog-ul din <code>listen()</code>) și kernel-ul aruncă conexiunile noi: în <code>netstat -s</code> apare „times the listen queue of a socket overflowed”.</p>`,
+  en:`<p>If the app doesn't call <code>accept()</code> fast enough, the accept queue fills (<code>somaxconn</code>, the <code>listen()</code> backlog) and the kernel drops new connections: <code>netstat -s</code> shows "times the listen queue of a socket overflowed".</p>`}},
+
+{at:"post",frame:R1,kind:"rep",move:[[["pod","veth"]],[["veth","n2"]],[["n2","post"]],[["post","lb"]],[["lb","cl"]]],fx:[["ct","TCP "+A.cl+":51000 → "+A.n1+":30443",A.ing+":8443 → "+A.n1+":51000","SYN_RECV → ESTABLISHED"]],tables:["ct"],log:{ro:"SYN-ACK înapoi la client",en:"SYN-ACK back to the client"},who:{ro:"Drumul înapoi",en:"The way back"},
+ title:{ro:"Drumul înapoi: conntrack desface totul",en:"The way back: conntrack undoes it all"},
+ body:{ro:`<p>SYN-ACK-ul pleacă din pod cu <code>10.244.2.15:8443 → 10.0.1.11:51000</code>. Node-2 îl rutează spre node-1 (sursa conexiunii, după MASQUERADE).</p>
+<p>Pe node-1, conntrack recunoaște pachetul ca <strong>răspunsul</strong> intrării lui și aplică <strong>automat</strong> inversul, fără nicio regulă iptables:</p>
+<ul><li><strong>un-SNAT</strong>: destinația <code>10.0.1.11:51000</code> → înapoi la clientul <code>203.0.113.25:51000</code>;</li>
+<li><strong>un-DNAT</strong>: sursa <code>10.244.2.15:8443</code> → înapoi la <code>10.0.1.11:30443</code>.</li></ul>
+<p>Load balancer-ul face și el inversul și pune VIP-ul ca sursă. Clientul primește SYN-ACK-ul de la <code>198.51.100.20:443</code>, exact adresa la care a scris. Trimite ACK-ul, iar conexiunea e <strong>ESTABLISHED</strong>.</p>`,
+ en:`<p>The SYN-ACK leaves the pod as <code>10.244.2.15:8443 → 10.0.1.11:51000</code>. node-2 routes it to node-1 (the connection's source, after MASQUERADE).</p>
+<p>On node-1, conntrack recognises the packet as its entry's <strong>reply</strong> and applies the inverse <strong>automatically</strong>, with no iptables rule:</p>
+<ul><li><strong>un-SNAT</strong>: destination <code>10.0.1.11:51000</code> → back to the client <code>203.0.113.25:51000</code>;</li>
+<li><strong>un-DNAT</strong>: source <code>10.244.2.15:8443</code> → back to <code>10.0.1.11:30443</code>.</li></ul>
+<p>The load balancer also reverses its part and puts the VIP as the source. The client receives the SYN-ACK from <code>198.51.100.20:443</code>, exactly the address it wrote to. It sends its ACK and the connection is <strong>ESTABLISHED</strong>.</p>`},
+ more:{ro:`<p>Toate pachetele următoare ale conexiunii (ACK, ClientHello, cererea HTTP, răspunsul) nu mai trec prin lanțurile KUBE-*: conntrack le recunoaște și aplică direct aceleași rescrieri, în ambele sensuri.</p>`,
+  en:`<p>Every later packet of the connection (ACK, ClientHello, the HTTP request, the response) no longer goes through the KUBE-* chains: conntrack recognises them and applies the same rewrites directly, in both directions.</p>`}},
+
+{at:["pod","app"],frame:H2,kind:"hop2",move:[[["pod","app"]]],log:{ro:"al doilea hop: ingress → app",en:"second hop: ingress → app"},who:"ingress-nginx → app",
+ title:{ro:"Al doilea hop: de la ingress la aplicație",en:"The second hop: from ingress to the app"},
+ body:{ro:`<p>ingress-nginx decriptează TLS-ul, citește <code>Host: app.example.com</code> și calea, și alege, după regulile Ingress, Service-ul <code>app</code>. Deschide o <strong>conexiune nouă</strong> spre el.</p>
+<p>Noul SYN pleacă din namespace-ul podului, prin veth, pe node-2 și trece prin <strong>PREROUTING</strong>. De data asta destinația e ClusterIP-ul <code>10.96.45.10:80</code>, deci se potrivește în <code>KUBE-SERVICES</code> → <code>KUBE-SVC-APP</code> → <code>KUBE-SEP-…</code> → <strong>DNAT</strong> la un pod al aplicației (<code>10.244.1.8:8080</code>, pe node-1). Fără MASQUERADE de data asta: sursa e deja un pod, care primește răspunsul direct.</p>
+<p>Restul e exact ce ai văzut în <a href="../kubernetes/index.html">lecția Kubernetes</a>.</p>`,
+ en:`<p>ingress-nginx decrypts TLS, reads <code>Host: app.example.com</code> and the path, and picks the <code>app</code> Service by the Ingress rules. It opens a <strong>new connection</strong> to it.</p>
+<p>The new SYN leaves the pod's namespace, crosses the veth to node-2, and goes through <strong>PREROUTING</strong>. This time the destination is the ClusterIP <code>10.96.45.10:80</code>, so it matches in <code>KUBE-SERVICES</code> → <code>KUBE-SVC-APP</code> → <code>KUBE-SEP-…</code> → <strong>DNAT</strong> to an app pod (<code>10.244.1.8:8080</code>, on node-1). No MASQUERADE this time: the source is already a pod, which gets the reply directly.</p>
+<p>The rest is exactly what you saw in the <a href="../kubernetes/index.html">Kubernetes lesson</a>.</p>`}},
+
+{at:["nic","pre","kube","rt","post","n2","veth","pod"],frame:null,kind:"none",summary:true,tables:["hooks"],
+ title:{ro:"Recapitulare: drumul complet",en:"Recap: the full path"},
+ body:{ro:`<div class="flow"><span>LB</span><i>→</i><span>NIC · DMA · NAPI</span><i>→</i><span>PREROUTING (raw · conntrack · nat DNAT)</span><i>→</i><span>rutare</span><i>→</i><span>FORWARD</span><i>→</i><span>POSTROUTING (MASQUERADE)</span><i>→</i><span>node-2</span><i>→</i><span>veth</span><i>→</i><span>socket</span></div>
+<ul><li>Placa de rețea și driverul pun pachetul în memorie (<strong>ring buffer, DMA, NAPI, sk_buff</strong>) înainte de orice regulă.</li>
+<li><strong>PREROUTING</strong> vine înaintea rutării: acolo face kube-proxy <strong>DNAT</strong> (KUBE-SERVICES → NODEPORTS → SVC → SEP).</li>
+<li><strong>conntrack</strong> ține minte fiecare rescriere și le aplică automat pachetelor următoare și răspunsului.</li>
+<li>După DNAT, <strong>rutarea</strong> decide: INPUT (local) sau <strong>FORWARD</strong> (alt nod/pod).</li>
+<li><strong>MASQUERADE</strong> în POSTROUTING forțează răspunsul să revină prin același nod; prețul e pierderea IP-ului clientului.</li>
+<li>Pe nodul destinație nu mai e DNAT; ruta /32 a CNI-ului și <strong>veth</strong>-ul duc pachetul în namespace-ul podului, la <strong>socket</strong>.</li></ul>
+<p><button type="button" class="btn primary" data-goto="quiz">Mergi la test ↓</button></p>`,
+ en:`<div class="flow"><span>LB</span><i>→</i><span>NIC · DMA · NAPI</span><i>→</i><span>PREROUTING (raw · conntrack · nat DNAT)</span><i>→</i><span>routing</span><i>→</i><span>FORWARD</span><i>→</i><span>POSTROUTING (MASQUERADE)</span><i>→</i><span>node-2</span><i>→</i><span>veth</span><i>→</i><span>socket</span></div>
+<ul><li>The network card and driver put the packet into memory (<strong>ring buffer, DMA, NAPI, sk_buff</strong>) before any rule.</li>
+<li><strong>PREROUTING</strong> comes before routing: that's where kube-proxy does <strong>DNAT</strong> (KUBE-SERVICES → NODEPORTS → SVC → SEP).</li>
+<li><strong>conntrack</strong> remembers every rewrite and applies it automatically to later packets and the reply.</li>
+<li>After DNAT, <strong>routing</strong> decides: INPUT (local) or <strong>FORWARD</strong> (another node/pod).</li>
+<li><strong>MASQUERADE</strong> in POSTROUTING forces the reply back through the same node; the price is losing the client IP.</li>
+<li>On the destination node there's no DNAT; the CNI's /32 route and the <strong>veth</strong> carry the packet into the pod's namespace, to the <strong>socket</strong>.</li></ul>
+<p><button type="button" class="btn primary" data-goto="quiz">Go to the quiz ↓</button></p>`}}
+],
+
+reference:(T,lang)=>{
+  const ro=lang==="ro";
+  const order=[
+    ["1","NIC + driver",{ro:"DMA în ring buffer, întrerupere, NAPI, GRO, (XDP)",en:"DMA into the ring buffer, interrupt, NAPI, GRO, (XDP)"}],
+    ["2","tc ingress",{ro:"programe eBPF/tc opționale (Cilium le folosește)",en:"optional eBPF/tc programs (Cilium uses them)"}],
+    ["3","ip_rcv",{ro:"verificarea antetului IP",en:"IP header checks"}],
+    ["4","PREROUTING · raw",{ro:"NOTRACK, rar folosit",en:"NOTRACK, rarely used"}],
+    ["5","conntrack",{ro:"caută sau creează intrarea conexiunii",en:"looks up or creates the connection entry"}],
+    ["6","PREROUTING · mangle",{ro:"marcaje, TOS",en:"marks, TOS"}],
+    ["7","PREROUTING · nat",{ro:"DNAT (KUBE-SERVICES), doar pentru primul pachet",en:"DNAT (KUBE-SERVICES), first packet only"}],
+    ["8",{ro:"Decizia de rutare",en:"Routing decision"},{ro:"INPUT (local) sau FORWARD",en:"INPUT (local) or FORWARD"}],
+    ["9","FORWARD · mangle, filter",{ro:"KUBE-FORWARD, Network Policy",en:"KUBE-FORWARD, Network Policy"}],
+    ["10","POSTROUTING · mangle, nat",{ro:"SNAT / MASQUERADE (KUBE-POSTROUTING)",en:"SNAT / MASQUERADE (KUBE-POSTROUTING)"}],
+    ["11",{ro:"Vecin, qdisc, driver TX",en:"Neighbour, qdisc, driver TX"},{ro:"ARP, coadă de ieșire, DMA spre placă",en:"ARP, egress queue, DMA to the card"}]
+  ];
+  let h=`<div class="ref-grid"><section class="card refcard"><h2>${ro?"Ordinea completă pe un nod":"The full order on a node"}</h2><div class="scroll"><table class="cmp" style="min-width:460px"><thead><tr><th>#</th><th>${ro?"Etapă":"Stage"}</th><th>${ro?"Ce se întâmplă":"What happens"}</th></tr></thead><tbody>`;
+  order.forEach(r=>{h+=`<tr><td class="m">${r[0]}</td><td><b>${T(r[1])}</b></td><td>${T(r[2])}</td></tr>`});
+  h+=`</tbody></table></div><p class="note">${ro?"Un pachet pentru un proces de pe nod (de ex. kubelet) merge la pasul 8 în INPUT, nu în FORWARD.":"A packet for a process on the node (e.g. the kubelet) goes to INPUT at step 8, not FORWARD."}</p></section>`;
+  h+=`<section class="card refcard"><h2>${ro?"Lanțurile kube-proxy, pe scurt":"The kube-proxy chains, briefly"}</h2><div class="scroll"><table class="cmp" style="min-width:420px"><tbody>
+<tr><td><span class="pill">KUBE-SERVICES</span></td><td>${ro?"punctul de intrare: o regulă pe ClusterIP/port, apoi saltul la NODEPORTS":"the entry point: one rule per ClusterIP/port, then the jump to NODEPORTS"}</td></tr>
+<tr><td><span class="pill">KUBE-NODEPORTS</span></td><td>${ro?"o regulă pe NodePort":"one rule per NodePort"}</td></tr>
+<tr><td><span class="pill">KUBE-EXT-*</span></td><td>${ro?"trafic extern al unui Service: marcaj MASQ (Cluster) sau doar pod-uri locale (Local)":"a Service's external traffic: MASQ mark (Cluster) or local pods only (Local)"}</td></tr>
+<tr><td><span class="pill">KUBE-SVC-*</span></td><td>${ro?"un Service: alegere aleatorie între endpoint-uri":"one Service: random choice among endpoints"}</td></tr>
+<tr><td><span class="pill">KUBE-SEP-*</span></td><td>${ro?"un endpoint (pod): DNAT la IP:port":"one endpoint (pod): DNAT to IP:port"}</td></tr>
+<tr><td><span class="pill">KUBE-MARK-MASQ</span></td><td>${ro?"pune marcajul 0x4000":"sets the 0x4000 mark"}</td></tr>
+<tr><td><span class="pill">KUBE-POSTROUTING</span></td><td>${ro?"MASQUERADE pentru pachetele marcate":"MASQUERADE for marked packets"}</td></tr>
+<tr><td><span class="pill">KUBE-FORWARD</span></td><td>${ro?"(filter) acceptă traficul marcat și conexiunile stabilite":"(filter) accepts marked traffic and established connections"}</td></tr>
+</tbody></table></div></section></div>`;
+  const cmds=[
+    ["iptables -t nat -L -n -v --line-numbers",{ro:"Toate regulile NAT, cu contoare de pachete.",en:"All NAT rules, with packet counters."}],
+    ["iptables -t raw -I PREROUTING -p tcp --dport 30443 -j TRACE",{ro:"Activează urmărirea: fiecare tabelă/regulă atinsă apare în log (nft monitor trace sau dmesg). Șterge regula după!",en:"Turns on tracing: every table/rule hit shows in the log (nft monitor trace or dmesg). Remove the rule afterwards!"}],
+    ["conntrack -E -p tcp --dport 30443",{ro:"Evenimente conntrack în timp real (NEW, UPDATE, DESTROY).",en:"Real-time conntrack events (NEW, UPDATE, DESTROY)."}],
+    ["tcpdump -ni any port 30443 or port 8443",{ro:"Pachetele pe toate interfețele, înainte și după NAT.",en:"Packets on every interface, before and after NAT."}],
+    ["cat /proc/net/softnet_stat",{ro:"Pierderi la nivel de CPU/NAPI (coloana 2 = aruncate).",en:"CPU/NAPI-level drops (column 2 = dropped)."}],
+    ["nstat -az | grep -i -E 'ListenOverflows|ListenDrops'",{ro:"Conexiuni pierdute pentru că o coadă accept era plină.",en:"Connections lost because an accept queue was full."}],
+    ["pwru --output-tuple 'port 30443'",{ro:"(eBPF) arată fiecare funcție din kernel prin care trece pachetul.",en:"(eBPF) shows every kernel function the packet goes through."}]
+  ];
+  h+=`<div class="ref-stack" style="margin-top:12px"><section class="card refcard"><h2>${ro?"Comenzi pentru urmărirea unui pachet":"Commands for tracing a packet"}</h2><div class="try">${cmds.map(c=>`<div class="cmdrow"><div class="cmd"><code>${c[0]}</code><button type="button" class="copy" data-cmd="${c[0].replace(/"/g,"&quot;")}">${ro?"Copiază":"Copy"}</button></div><p>${T(c[1])}</p></div>`).join("")}</div></section></div>`;
+  return h;
+},
+
+gloss:[
+ ["NIC","Network Interface Card",{ro:"Placa de rețea: primește și trimite cadrele pe fir.",en:"The network card: receives and sends frames on the wire."}],
+ ["DMA","Direct Memory Access",{ro:"Placa scrie direct în RAM, fără să ocupe procesorul.",en:"The card writes straight into RAM without tying up the CPU."}],
+ ["Ring buffer",null,{ro:"Coadă circulară în memorie unde placa pune pachetele primite (RX) sau de unde le ia pe cele de trimis (TX).",en:"A circular in-memory queue where the card puts received packets (RX) or takes ones to send (TX)."}],
+ ["RSS","Receive Side Scaling",{ro:"Împarte pachetele pe mai multe cozi și procesoare, după un hash.",en:"Spreads packets across several queues and CPUs by hash."}],
+ ["NAPI",null,{ro:"Mod în care kernel-ul citește pachetele în rafale, în loc de o întrerupere pentru fiecare.",en:"A mode where the kernel reads packets in batches instead of one interrupt each."}],
+ ["sk_buff",null,{ro:"Structura din kernel care reprezintă un pachet, plus metadatele lui (marcaj, conntrack…).",en:"The kernel structure representing a packet, plus its metadata (mark, conntrack…)."}],
+ ["netfilter",null,{ro:"Cadrul din kernel cu hook-uri prin care trec pachetele; iptables și nftables pun reguli pe ele.",en:"The kernel framework of hooks packets pass through; iptables and nftables attach rules to them."}],
+ ["Hook",null,{ro:"Un punct fix din drumul pachetului: PREROUTING, INPUT, FORWARD, OUTPUT, POSTROUTING.",en:"A fixed point on the packet's path: PREROUTING, INPUT, FORWARD, OUTPUT, POSTROUTING."}],
+ [{ro:"Tabele iptables",en:"iptables tables"},null,{ro:"raw, mangle, nat, filter: grupuri de reguli consultate într-o ordine fixă la fiecare hook.",en:"raw, mangle, nat, filter: rule groups consulted in a fixed order at each hook."}],
+ ["conntrack",null,{ro:"Tabela de conexiuni a kernel-ului: ține minte fiecare conexiune și rescrierile NAT.",en:"The kernel's connection table: remembers every connection and its NAT rewrites."}],
+ ["DNAT / SNAT",null,{ro:"Rescrierea adresei destinație / sursă.",en:"Rewriting the destination / source address."}],
+ ["MASQUERADE",null,{ro:"SNAT cu IP-ul interfeței pe care iese pachetul.",en:"SNAT using the IP of the interface the packet leaves on."}],
+ ["fwmark",null,{ro:"Etichetă numerică pusă pe sk_buff de o regulă, citită de altele mai târziu.",en:"A numeric label placed on the sk_buff by one rule and read by others later."}],
+ ["NodePort",null,{ro:"Port (30000–32767) deschis pe fiecare nod pentru un Service.",en:"A port (30000–32767) opened on every node for a Service."}],
+ ["externalTrafficPolicy",null,{ro:"Cluster: orice nod trimite la orice pod (cu SNAT). Local: doar la pod-uri locale, cu IP-ul clientului păstrat.",en:"Cluster: any node sends to any pod (with SNAT). Local: only to local pods, keeping the client IP."}],
+ ["ip_forward",null,{ro:"Setare care permite nodului să trimită mai departe pachete care nu sunt pentru el.",en:"A setting that lets the node forward packets not meant for it."}],
+ ["veth",null,{ro:"Pereche de interfețe virtuale legate ca un cablu, între nod și pod.",en:"A pair of virtual interfaces linked like a cable, between node and pod."}],
+ ["Network namespace",null,{ro:"Mediu de rețea separat: interfețe, rute, conntrack și reguli proprii.",en:"A separate network environment: its own interfaces, routes, conntrack and rules."}],
+ [{ro:"Coada accept",en:"Accept queue"},null,{ro:"Conexiunile TCP gata, care așteaptă ca aplicația să apeleze accept().",en:"Completed TCP connections waiting for the app to call accept()."}],
+ ["qdisc","queueing discipline",{ro:"Coada de ieșire a unei interfețe și regulile ei de ordonare.",en:"An interface's egress queue and its ordering rules."}],
+ ["XDP","eXpress Data Path",{ro:"Programe eBPF rulate direct în driver, înaintea restului kernel-ului.",en:"eBPF programs run right in the driver, before the rest of the kernel."}]
+],
+glossEx:{
+ "NIC":{ro:"ethtool -i eth0 arată driverul plăcii, de ex. ena (AWS) sau mlx5_core (Mellanox).",en:"ethtool -i eth0 shows the card's driver, e.g. ena (AWS) or mlx5_core (Mellanox)."},
+ "DMA":{ro:"la 10 Gbps vin ~800.000 de pachete/s; fără DMA, procesorul ar copia fiecare octet.",en:"at 10 Gbps ~800,000 packets/s arrive; without DMA the CPU would copy every byte."},
+ "Ring buffer":{ro:"ethtool -G eth0 rx 4096 mărește ring-ul RX, ca să absoarbă vârfuri scurte de trafic.",en:"ethtool -G eth0 rx 4096 enlarges the RX ring to absorb short traffic bursts."},
+ "RSS":{ro:"cu 8 cozi, conexiunile se împart pe 8 nuclee; toate pachetele unei conexiuni merg pe aceeași coadă.",en:"with 8 queues, connections spread over 8 cores; every packet of a connection uses the same queue."},
+ "NAPI":{ro:"sub încărcare mare, kernel-ul citește până la 64 de pachete pe „tură” dintr-o coadă.",en:"under heavy load, the kernel reads up to 64 packets per \"turn\" from a queue."},
+ "sk_buff":{ro:"marcajul 0x4000 pus de KUBE-MARK-MASQ stă în skb->mark, nu în pachet.",en:"the 0x4000 mark set by KUBE-MARK-MASQ lives in skb->mark, not in the packet."},
+ "netfilter":{ro:"și iptables, și nftables, și kube-proxy (în ambele moduri) folosesc aceleași hook-uri netfilter.",en:"iptables, nftables and kube-proxy (in either mode) all use the same netfilter hooks."},
+ "Hook":{ro:"un pachet de la client spre un pod trece prin PREROUTING → FORWARD → POSTROUTING, niciodată prin INPUT.",en:"a packet from a client to a pod goes PREROUTING → FORWARD → POSTROUTING, never INPUT."},
+ "iptables tables":{ro:"iptables -t nat -L și iptables -t filter -L arată tabele diferite pentru aceleași hook-uri.",en:"iptables -t nat -L and iptables -t filter -L show different tables for the same hooks."},
+ "conntrack":{ro:"„tcp ESTABLISHED src=203.0.113.25 dst=10.0.1.11 dport=30443 src=10.244.2.15 dst=10.0.1.11 sport=8443”",en:"\"tcp ESTABLISHED src=203.0.113.25 dst=10.0.1.11 dport=30443 src=10.244.2.15 dst=10.0.1.11 sport=8443\""},
+ "DNAT / SNAT":{ro:"DNAT: 10.0.1.11:30443 → 10.244.2.15:8443. SNAT: sursa 203.0.113.25 → 10.0.1.11.",en:"DNAT: 10.0.1.11:30443 → 10.244.2.15:8443. SNAT: source 203.0.113.25 → 10.0.1.11."},
+ "MASQUERADE":{ro:"dacă pachetul iese pe eth0 cu IP-ul 10.0.1.11, sursa devine 10.0.1.11.",en:"if the packet leaves via eth0 with IP 10.0.1.11, the source becomes 10.0.1.11."},
+ "fwmark":{ro:"iptables -t nat -L KUBE-MARK-MASQ arată „MARK or 0x4000”.",en:"iptables -t nat -L KUBE-MARK-MASQ shows \"MARK or 0x4000\"."},
+ "NodePort":{ro:"curl http://10.0.1.12:30443 merge chiar dacă podul ingress e pe node-1.",en:"curl http://10.0.1.12:30443 works even if the ingress pod is on node-1."},
+ "externalTrafficPolicy":{ro:"cu Local, în logurile nginx apare 203.0.113.25; cu Cluster, apare 10.0.1.11.",en:"with Local, nginx logs show 203.0.113.25; with Cluster, they show 10.0.1.11."},
+ "ip_forward":{ro:"sysctl net.ipv4.ip_forward trebuie să întoarcă 1 pe fiecare nod.",en:"sysctl net.ipv4.ip_forward must return 1 on every node."},
+ "veth":{ro:"ip link arată „cali7f2c@if3”: perechea interfeței eth0 (indexul 3) din pod.",en:"ip link shows \"cali7f2c@if3\": the peer of interface eth0 (index 3) in the pod."},
+ "Network namespace":{ro:"lsns -t net pe nod listează câte un namespace pentru fiecare pod.",en:"lsns -t net on the node lists one namespace per pod."},
+ "Accept queue":{ro:"ss -lnt arată la coloana Recv-Q câte conexiuni așteaptă accept() pe fiecare port.",en:"ss -lnt shows in Recv-Q how many connections await accept() on each port."},
+ "qdisc":{ro:"tc qdisc show dev eth0 afișează de obicei „mq” cu câte un „fq_codel” per coadă.",en:"tc qdisc show dev eth0 usually prints \"mq\" with an \"fq_codel\" per queue."},
+ "XDP":{ro:"Cilium poate face load balancing pentru NodePort direct în XDP, fără iptables.",en:"Cilium can load-balance NodePorts right in XDP, without iptables."}
+},
+
+quiz:[
+ {q:{ro:"Ce se întâmplă cu pachetul înainte de prima regulă iptables?",en:"What happens to the packet before the first iptables rule?"},
+  o:[{ro:"Nimic",en:"Nothing"},{ro:"Placa îl copiază prin DMA în ring buffer, kernel-ul îl citește cu NAPI și creează un sk_buff",en:"The card DMAs it into the ring buffer, the kernel reads it via NAPI and builds an sk_buff"},{ro:"E trimis direct la pod",en:"It goes straight to the pod"},{ro:"E decriptat TLS-ul",en:"TLS is decrypted"}],a:1,
+  e:{ro:"Hardware-ul și driverul fac primii pași; abia apoi intră pachetul în stratul IP și în netfilter.",en:"The hardware and driver take the first steps; only then does the packet enter the IP layer and netfilter."}},
+ {q:{ro:"De ce face kube-proxy DNAT în PREROUTING și nu mai târziu?",en:"Why does kube-proxy do DNAT in PREROUTING and not later?"},
+  o:[{ro:"Pentru că PREROUTING e înaintea deciziei de rutare, deci noua destinație decide unde merge pachetul",en:"Because PREROUTING comes before the routing decision, so the new destination decides where the packet goes"},{ro:"Pentru că e mai sigur",en:"Because it's safer"},{ro:"Pentru că PREROUTING e după FORWARD",en:"Because PREROUTING is after FORWARD"},{ro:"Nu face DNAT",en:"It doesn't do DNAT"}],a:0,
+  e:{ro:"După DNAT, kernel-ul rutează spre IP-ul podului, nu spre nod.",en:"After DNAT, the kernel routes to the pod IP, not to the node."}},
+ {q:{ro:"Care e ordinea tabelelor în hook-ul PREROUTING?",en:"What's the order of tables in the PREROUTING hook?"},
+  o:[{ro:"filter → nat → raw",en:"filter → nat → raw"},{ro:"raw → conntrack → mangle → nat",en:"raw → conntrack → mangle → nat"},{ro:"nat → mangle → raw",en:"nat → mangle → raw"},{ro:"mangle → filter → nat",en:"mangle → filter → nat"}],a:1,
+  e:{ro:"filter nu există în PREROUTING; apare în INPUT, FORWARD și OUTPUT.",en:"filter doesn't exist in PREROUTING; it appears in INPUT, FORWARD and OUTPUT."}},
+ {q:{ro:"De ce sare KUBE-SERVICES la KUBE-NODEPORTS pentru pachetul nostru?",en:"Why does KUBE-SERVICES jump to KUBE-NODEPORTS for our packet?"},
+  o:[{ro:"Pentru că destinația e o adresă locală a nodului (--dst-type LOCAL)",en:"Because the destination is a local node address (--dst-type LOCAL)"},{ro:"Pentru că e un ClusterIP",en:"Because it's a ClusterIP"},{ro:"Pentru că vine din internet",en:"Because it comes from the internet"},{ro:"Întâmplător",en:"At random"}],a:0,
+  e:{ro:"Niciun ClusterIP nu s-a potrivit, iar 10.0.1.11 e IP-ul nodului, deci se verifică NodePort-urile.",en:"No ClusterIP matched, and 10.0.1.11 is the node's IP, so the NodePorts are checked."}},
+ {q:{ro:"Cum alege KUBE-SVC-* între 2 pod-uri în modul iptables?",en:"How does KUBE-SVC-* choose between 2 pods in iptables mode?"},
+  o:[{ro:"Round-robin strict",en:"Strict round-robin"},{ro:"Aleator, cu -m statistic --probability 0.5 pe prima regulă",en:"At random, with -m statistic --probability 0.5 on the first rule"},{ro:"După încărcarea CPU a podului",en:"By the pod's CPU load"},{ro:"Mereu primul pod",en:"Always the first pod"}],a:1,
+  e:{ro:"Prima regulă prinde 50%, restul merg la a doua. Cu N pod-uri, probabilitățile se ajustează ca fiecare să primească 1/N.",en:"The first rule catches 50%, the rest go to the second. With N pods the probabilities adjust so each gets 1/N."}},
+ {q:{ro:"Ce înseamnă marcajul 0x4000 pus de KUBE-MARK-MASQ?",en:"What does the 0x4000 mark set by KUBE-MARK-MASQ mean?"},
+  o:[{ro:"Că pachetul e criptat",en:"That the packet is encrypted"},{ro:"Că la POSTROUTING sursa trebuie înlocuită (MASQUERADE)",en:"That at POSTROUTING the source must be replaced (MASQUERADE)"},{ro:"Că pachetul trebuie aruncat",en:"That the packet must be dropped"},{ro:"E scris în antetul TCP",en:"It's written into the TCP header"}],a:1,
+  e:{ro:"Marcajul trăiește doar în sk_buff, pe acest nod; nu pleacă pe fir.",en:"The mark only lives in the sk_buff on this node; it doesn't go on the wire."}},
+ {q:{ro:"De ce e nevoie de MASQUERADE când podul e pe alt nod (externalTrafficPolicy: Cluster)?",en:"Why is MASQUERADE needed when the pod is on another node (externalTrafficPolicy: Cluster)?"},
+  o:[{ro:"Ca răspunsul să se întoarcă prin nodul care a făcut DNAT, unde conntrack îl poate transforma înapoi",en:"So the reply returns through the node that did the DNAT, where conntrack can translate it back"},{ro:"Pentru criptare",en:"For encryption"},{ro:"Ca să fie pachetul mai mic",en:"To make the packet smaller"},{ro:"Pentru că podul nu are IP",en:"Because the pod has no IP"}],a:0,
+  e:{ro:"Fără el, podul ar răspunde direct clientului, cu o adresă sursă pe care clientul nu o recunoaște.",en:"Without it, the pod would reply straight to the client from a source address the client doesn't recognise."}},
+ {q:{ro:"Cu externalTrafficPolicy: Cluster, ce IP sursă vede podul ingress-nginx?",en:"With externalTrafficPolicy: Cluster, which source IP does the ingress-nginx pod see?"},
+  o:[{ro:"IP-ul clientului",en:"The client's IP"},{ro:"IP-ul nodului care a primit traficul (după MASQUERADE)",en:"The IP of the node that received the traffic (after MASQUERADE)"},{ro:"VIP-ul load balancer-ului",en:"The load balancer's VIP"},{ro:"127.0.0.1",en:"127.0.0.1"}],a:1,
+  e:{ro:"De aceea, ca să păstrezi IP-ul clientului, folosești externalTrafficPolicy: Local sau PROXY protocol.",en:"That's why, to keep the client IP, you use externalTrafficPolicy: Local or PROXY protocol."}},
+ {q:{ro:"Prin ce hook trece pachetul pe node-1, după DNAT spre un pod de pe node-2?",en:"Which hook does the packet go through on node-1 after DNAT to a pod on node-2?"},
+  o:[{ro:"INPUT",en:"INPUT"},{ro:"FORWARD",en:"FORWARD"},{ro:"OUTPUT",en:"OUTPUT"},{ro:"Niciunul",en:"None"}],a:1,
+  e:{ro:"Destinația nu mai e locală, deci nodul îl trimite mai departe, ca un router.",en:"The destination is no longer local, so the node forwards it, like a router."}},
+ {q:{ro:"Pe node-2, de ce nu se mai face DNAT?",en:"On node-2, why is there no DNAT?"},
+  o:[{ro:"Pentru că node-2 nu are kube-proxy",en:"Because node-2 has no kube-proxy"},{ro:"Pentru că destinația e deja IP-ul unui pod, nu un Service sau un NodePort",en:"Because the destination is already a pod IP, not a Service or a NodePort"},{ro:"Pentru că pachetul e criptat",en:"Because the packet is encrypted"},{ro:"Se face, de două ori",en:"It is, twice"}],a:1,
+  e:{ro:"KUBE-SERVICES nu are nicio regulă care să se potrivească cu 10.244.2.15:8443.",en:"KUBE-SERVICES has no rule matching 10.244.2.15:8443."}},
+ {q:{ro:"Cine transformă înapoi adresele în SYN-ACK-ul de răspuns?",en:"Who translates the addresses back in the SYN-ACK reply?"},
+  o:[{ro:"O regulă iptables separată pentru răspunsuri",en:"A separate iptables rule for replies"},{ro:"conntrack, automat, pe baza intrării create de primul pachet",en:"conntrack, automatically, from the entry created by the first packet"},{ro:"Podul",en:"The pod"},{ro:"Clientul",en:"The client"}],a:1,
+  e:{ro:"conntrack face un-DNAT și un-SNAT pentru toate pachetele conexiunii, fără reguli suplimentare.",en:"conntrack does un-DNAT and un-SNAT for every packet of the connection, with no extra rules."}},
+ {q:{ro:"Aplicația e lentă la accept() și conexiunile noi se pierd. Unde se vede?",en:"The app is slow to accept() and new connections are lost. Where does it show?"},
+  o:[{ro:"În tabela de rutare",en:"In the routing table"},{ro:"În ListenOverflows / ListenDrops (nstat, netstat -s)",en:"In ListenOverflows / ListenDrops (nstat, netstat -s)"},{ro:"În conntrack ca DNAT",en:"In conntrack as DNAT"},{ro:"În ARP",en:"In ARP"}],a:1,
+  e:{ro:"Coada accept a socket-ului s-a umplut; kernel-ul aruncă SYN-urile sau ACK-urile noi.",en:"The socket's accept queue filled up; the kernel drops new SYNs or ACKs."}}
+]
+};
+})();
+</script>
+<script src="../assets/engine.js"></script>
+</body>
+</html>
