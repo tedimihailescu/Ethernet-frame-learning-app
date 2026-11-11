@@ -107,6 +107,7 @@ const UI={
 const T=k=>UI[k][lang==="en"?1:0];
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
+const lhref=l=>{l=String(l);return l.endsWith("-lab")?"../"+esc(l.slice(0,-4))+"/index.html#lab":"../"+esc(l)+"/index.html"};
 const pct=(s,t)=>t?Math.round(100*s/t):0;
 const cls=p=>p>=80?"good":p>=50?"mid":"low";
 const fmt=d=>d?d.toLocaleString(lang==="en"?"en-GB":"ro-RO",{dateStyle:"medium",timeStyle:"short"}):"—";
@@ -128,7 +129,7 @@ function renderMine(){
   const by={};mine.forEach(r=>{(by[r.lesson]=by[r.lesson]||[]).push(r)});
   let h=`<div class="scroll"><table><thead><tr><th>${T("lesson")}</th><th>${T("best")}</th><th>${T("attempts")}</th><th>${T("last")}</th></tr></thead><tbody>`;
   Object.values(by).sort((a,b)=>b[0].d-a[0].d).forEach(list=>{const best=list.reduce((m,r)=>Math.max(m,pct(r.score,r.total)),0);const lastR=list[0];
-    h+=`<tr><td><a href="../${esc(lastR.lesson)}/index.html">${esc(lastR.title)}</a></td><td>${bar(best)}</td><td class="n">${list.length}</td><td class="n">${lastR.score}/${lastR.total} · ${fmt(lastR.d)}</td></tr>`});
+    h+=`<tr><td><a href="${lhref(lastR.lesson)}">${esc(lastR.title)}</a></td><td>${bar(best)}</td><td class="n">${list.length}</td><td class="n">${lastR.score}/${lastR.total} · ${fmt(lastR.d)}</td></tr>`});
   $("#mineBody").innerHTML=h+`</tbody></table></div>`;
 }
 function renderAdmin(){
@@ -141,7 +142,7 @@ function renderAdmin(){
   Object.values(people).sort((a,b)=>b.last-a.last).forEach(p=>{h+=`<tr><td>${esc(p.name)}</td><td>${esc(p.email)}</td><td class="n">${p.n}</td><td class="n">${p.lessons.size}</td><td>${bar(Math.round(p.sum/p.n))}</td><td class="n">${fmt(p.last)}</td></tr>`});
   $("#people").innerHTML=h+`</tbody></table>`;
   h=`<table style="min-width:520px"><thead><tr><th>${T("lesson")}</th><th>${T("participants")}</th><th>${T("attempts")}</th><th>${T("avg")}</th></tr></thead><tbody>`;
-  Object.entries(lessons).sort((a,b)=>b[1].n-a[1].n).forEach(([id,l])=>{h+=`<tr><td><a href="../${esc(id)}/index.html">${esc(l.title)}</a></td><td class="n">${l.people.size}</td><td class="n">${l.n}</td><td>${bar(Math.round(l.sum/l.n))}</td></tr>`});
+  Object.entries(lessons).sort((a,b)=>b[1].n-a[1].n).forEach(([id,l])=>{h+=`<tr><td><a href="${lhref(id)}">${esc(l.title)}</a></td><td class="n">${l.people.size}</td><td class="n">${l.n}</td><td>${bar(Math.round(l.sum/l.n))}</td></tr>`});
   $("#lessons").innerHTML=h+`</tbody></table>`;
   renderAll();
 }

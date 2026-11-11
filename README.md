@@ -66,3 +66,5 @@ A new lesson is one HTML file that defines `window.LESSON` and loads `assets/eng
 No build step and no dependencies (fonts load from Google Fonts, with system-font fallbacks). Addresses and names in the lessons are examples.
 
 **Mini-joc:** [Livrează pachetul](joc/index.html): rutare, porturi, MAC-uri, DNS, straturi OSI și IPv6 contra cronometru; scorul intră în rezultate.
+
+**Laboratoare:** fiecare lecție are la final un mic laborator: un terminal simulat, un calcul și pașii în ordine, cu indicii și soluții; rezultatul se salvează.
