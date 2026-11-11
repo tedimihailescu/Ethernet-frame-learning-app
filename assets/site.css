@@ -179,7 +179,7 @@ footer{color:var(--muted);font-size:.8rem;text-align:center;padding:18px 0 8px}
   #b-reset,#b-back,#b-play{min-width:44px;font-size:1rem}
   .progress{min-width:0;flex-direction:row;align-items:center;gap:8px;width:100%}
   .stepno{white-space:nowrap;font-size:.78rem}
-  .dots{gap:3px;flex-wrap:nowrap}
+  .dots{gap:3px;flex-wrap:wrap;flex:1;min-width:0}
   .dots button{width:10px;height:10px}
   .f{grid-template-columns:minmax(0,1fr)}
   .f{gap:0}

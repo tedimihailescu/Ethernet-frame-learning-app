@@ -178,6 +178,10 @@ tr.added td{background:var(--newbg)}
 .glink{color:var(--accent);font-size:.82rem}
 .gl dd.ex{margin-top:6px;padding-top:6px;border-top:1px dashed var(--border);font-size:.85rem;color:var(--muted)}
 .gl dd.ex b{color:var(--text);font-weight:600}
+.flow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font:500 .85rem var(--mono);margin:8px 0}
+.flow span{padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface2)}
+.flow i{font-style:normal;color:var(--muted)}
+#exp table{margin:6px 0 10px}
 footer{color:var(--muted);font-size:.8rem;text-align:center;padding:18px 0 8px}
 
 @media (max-width:860px){.main{grid-template-columns:minmax(0,1fr)}}
@@ -191,7 +195,7 @@ footer{color:var(--muted);font-size:.8rem;text-align:center;padding:18px 0 8px}
   #b-reset,#b-back,#b-play{min-width:44px;font-size:1rem}
   .progress{min-width:0;flex-direction:row;align-items:center;gap:8px;width:100%}
   .stepno{white-space:nowrap;font-size:.78rem}
-  .dots{gap:3px;flex-wrap:nowrap}
+  .dots{gap:3px;flex-wrap:wrap;flex:1;min-width:0}
   .dots button{width:10px;height:10px}
   .f{grid-template-columns:minmax(0,1fr)}
   .f{gap:0}
@@ -389,9 +393,9 @@ const T=v=>(v&&typeof v==="object")?v[lang]:v;
 
 const CRC_TABLE=(()=>{const t=[];for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();
 function crc32(str){let c=0xFFFFFFFF;for(let i=0;i<str.length;i++)c=CRC_TABLE[(c^str.charCodeAt(i))&0xFF]^(c>>>8);return ((c^0xFFFFFFFF)>>>0).toString(16).toUpperCase().padStart(8,"0")}
-function ipChecksum(ttl){
+function ipChecksum(ttl,len){
   // real IPv4 header checksum for: 45 00 | len 0x0036 | id 0x1c46 | DF | ttl,proto=6 | 192.168.1.10 -> 192.168.2.20
-  const w=[0x4500,0x0036,0x1c46,0x4000,(ttl<<8)|6,0,0xc0a8,0x010a,0xc0a8,0x0214];
+  const w=[0x4500,len||0x0036,0x1c46,0x4000,(ttl<<8)|6,0,0xc0a8,0x010a,0xc0a8,0x0214];
   let s=w.reduce((a,b)=>a+b,0);while(s>>16)s=(s&0xffff)+(s>>16);
   return "0x"+((~s)&0xffff).toString(16).toUpperCase().padStart(4,"0");
 }
@@ -403,7 +407,7 @@ const IP={A:"192.168.1.10",R1a:"192.168.1.1",R1b:"10.0.0.1",R2b:"10.0.0.2",R2a:"
 /* ---------- frames ---------- */
 const ET_IP="0x0800 (IPv4)",ET_ARP="0x0806 (ARP)";
 const APP={payload:"GET / HTTP/1.1"};
-const TCP={srcPort:"49152",dstPort:"80 (HTTP)"};
+const TCP={srcPort:"49152",dstPort:"80 (HTTP)",seq:"1001",ack:"5001",flags:"PSH, ACK",window:"64240"};
 const ipHdr=ttl=>({srcIp:IP.A,dstIp:IP.B,ttl:String(ttl),proto:"6 (TCP)",ipChk:ipChecksum(ttl)});
 function eth(dst,src,type,inner){const f=Object.assign({dstMac:dst,srcMac:src,etherType:type},inner);delete f.fcs;f.fcs="0x"+crc32(JSON.stringify(f));return f}
 const F={
@@ -421,7 +425,7 @@ const GROUPS=[
   {id:"eth",fields:["dstMac","srcMac","etherType"],name:{ro:"Antet Ethernet (L2)",en:"Ethernet header (L2)"},short:{ro:"Antet Ethernet",en:"Ethernet hdr"}},
   {id:"arp",fields:["arpOp","sMac","sIp","tMac","tIp"],name:{ro:"Mesaj ARP",en:"ARP message"},short:{ro:"ARP",en:"ARP"}},
   {id:"ip",fields:["srcIp","dstIp","ttl","proto","ipChk"],name:{ro:"Antet IP (L3)",en:"IP header (L3)"},short:{ro:"Antet IP",en:"IP hdr"}},
-  {id:"tcp",fields:["srcPort","dstPort"],name:{ro:"Antet TCP (L4)",en:"TCP header (L4)"},short:{ro:"TCP",en:"TCP"}},
+  {id:"tcp",fields:["srcPort","dstPort","seq","ack","flags","window"],name:{ro:"Antet TCP (L4)",en:"TCP header (L4)"},short:{ro:"TCP",en:"TCP"}},
   {id:"app",fields:["payload"],name:{ro:"Date aplicație (L7)",en:"Application data (L7)"},short:{ro:"Date",en:"Data"}},
   {id:"fcs",fields:["fcs"],name:{ro:"Trailer Ethernet (L2)",en:"Ethernet trailer (L2)"},short:{ro:"FCS",en:"FCS"}}
 ];
@@ -430,6 +434,7 @@ const FL={
   arpOp:{ro:"Operație ARP",en:"ARP operation"},sMac:{ro:"MAC expeditor",en:"Sender MAC"},sIp:{ro:"IP expeditor",en:"Sender IP"},tMac:{ro:"MAC țintă",en:"Target MAC"},tIp:{ro:"IP țintă",en:"Target IP"},
   srcIp:{ro:"IP sursă",en:"Source IP"},dstIp:{ro:"IP destinație",en:"Destination IP"},ttl:"TTL",proto:"Protocol",ipChk:{ro:"Checksum IP",en:"IP checksum"},
   srcPort:{ro:"Port sursă",en:"Source port"},dstPort:{ro:"Port destinație",en:"Destination port"},
+  seq:{ro:"Nr. de secvență",en:"Sequence no."},ack:{ro:"Nr. de confirmare",en:"Ack no."},flags:{ro:"Indicatori (flags)",en:"Flags"},window:{ro:"Fereastră",en:"Window"},
   payload:{ro:"Date (payload)",en:"Payload (data)"},fcs:"FCS (CRC-32)"
 };
 
@@ -476,12 +481,44 @@ const S=[
 
 {at:"A",frame:F.seg,kind:"data",stack:{dev:"A",max:7,on:[4],dir:"down"},
  title:{ro:"Pe A: stratul Transport (TCP)",en:"On A: the Transport layer (TCP)"},
- body:{ro:`<p>TCP adaugă un antet cu <strong>porturi</strong>. Portul destinație <code>80</code> înseamnă „serviciul web” de pe B. Portul sursă <code>49152</code> e ales la întâmplare de A, ca răspunsul să ajungă înapoi la fila potrivită din browser.</p>
-<p>Date + antet TCP = <strong>segment</strong>.</p>
-<p class="note">În realitate, TCP face întâi o „strângere de mână” în 3 pași (SYN, SYN-ACK, ACK). O sărim aici, ca să ne concentrăm pe drum.</p>`,
- en:`<p>TCP adds a header with <strong>ports</strong>. Destination port <code>80</code> means "the web service" on B. Source port <code>49152</code> is picked at random by A, so the reply finds its way back to the right browser tab.</p>
-<p>Data + TCP header = <strong>segment</strong>.</p>
-<p class="note">In reality TCP first does a 3-way handshake (SYN, SYN-ACK, ACK). We skip it here to focus on the journey.</p>`}},
+ body:{ro:`<p><strong>Cine îl adaugă?</strong> Nu browserul. Browserul doar îi cere sistemului de operare: „deschide o conexiune la <code>192.168.2.20</code>, portul <code>80</code>, și trimite textul ăsta”. Partea din <strong>Windows</strong> (driverul <code>tcpip.sys</code>, „stiva TCP/IP”) face restul.</p>
+<p><strong>Unde îl adaugă?</strong> <strong>În fața datelor</strong>, în memorie. TCP lasă 20 de octeți liberi înaintea textului <code>GET / HTTP/1.1</code> și scrie acolo antetul. Antet + date = un <strong>segment</strong>:</p>
+<div class="flow"><span><b>Antet TCP</b> 20 B</span><span>GET / HTTP/1.1 · 14 B</span></div>
+<p>Apoi fiecare strat de dedesubt pune <em>tot ce a primit</em> în interiorul propriului „plic”, tot în față:</p>
+<div class="flow"><span>Ethernet 14 B</span><span>IP 20 B</span><span><b>TCP 20 B</b></span><span>date 14 B</span><span>FCS 4 B</span></div>
+<p><strong>Ce conține antetul TCP</strong>, octet cu octet:</p>
+<div class="scroll"><table style="min-width:420px"><thead><tr><th>Octeți</th><th>Câmp</th><th>La noi</th></tr></thead><tbody>
+<tr><td class="m">0–1</td><td><strong>Port sursă</strong></td><td class="m">49152 → C0 00</td></tr>
+<tr><td class="m">2–3</td><td><strong>Port destinație</strong></td><td class="m">80 → 00 50</td></tr>
+<tr><td class="m">4–7</td><td>Număr de secvență (al câtelea octet trimit)</td><td class="m">1001</td></tr>
+<tr><td class="m">8–11</td><td>Număr de confirmare (ce octet aștept de la B)</td><td class="m">5001</td></tr>
+<tr><td class="m">12</td><td>Lungimea antetului</td><td class="m">5 × 4 = 20 B</td></tr>
+<tr><td class="m">13</td><td>Indicatori: SYN, ACK, PSH, FIN, RST…</td><td class="m">PSH, ACK</td></tr>
+<tr><td class="m">14–15</td><td>Fereastră (câți octeți pot primi acum)</td><td class="m">64240</td></tr>
+<tr><td class="m">16–17</td><td>Checksum (antet + date + cele două IP-uri)</td><td class="m">—</td></tr>
+<tr><td class="m">18–19</td><td>Urgent pointer (aproape nefolosit)</td><td class="m">0</td></tr>
+</tbody></table></div>
+<p><strong>De ce două porturi?</strong> <code>80</code> spune pe B: „dă-i asta serverului web”. <code>49152</code> e ales de Windows pentru această conexiune, dintr-un interval de porturi temporare; răspunsul lui B va veni pe el, ca Windows să știe că e pentru <em>această</em> filă de browser, nu pentru altă aplicație.</p>
+<p class="note">Valorile 1001 și 5001 și indicatorii PSH, ACK vin din „strângerea de mână” TCP. O explicăm în pasul următor și o vei vedea apoi circulând prin rețea.</p>`,
+ en:`<p><strong>Who adds it?</strong> Not the browser. The browser just asks the operating system: "open a connection to <code>192.168.2.20</code>, port <code>80</code>, and send this text". The part of <strong>Windows</strong> that does the rest is the <code>tcpip.sys</code> driver, the "TCP/IP stack".</p>
+<p><strong>Where does it add it?</strong> <strong>In front of the data</strong>, in memory. TCP leaves 20 bytes free before the text <code>GET / HTTP/1.1</code> and writes the header there. Header + data = a <strong>segment</strong>:</p>
+<div class="flow"><span><b>TCP header</b> 20 B</span><span>GET / HTTP/1.1 · 14 B</span></div>
+<p>Then each layer below puts <em>everything it received</em> inside its own "envelope", again at the front:</p>
+<div class="flow"><span>Ethernet 14 B</span><span>IP 20 B</span><span><b>TCP 20 B</b></span><span>data 14 B</span><span>FCS 4 B</span></div>
+<p><strong>What the TCP header holds</strong>, byte by byte:</p>
+<div class="scroll"><table style="min-width:420px"><thead><tr><th>Bytes</th><th>Field</th><th>Ours</th></tr></thead><tbody>
+<tr><td class="m">0–1</td><td><strong>Source port</strong></td><td class="m">49152 → C0 00</td></tr>
+<tr><td class="m">2–3</td><td><strong>Destination port</strong></td><td class="m">80 → 00 50</td></tr>
+<tr><td class="m">4–7</td><td>Sequence number (which byte I'm sending)</td><td class="m">1001</td></tr>
+<tr><td class="m">8–11</td><td>Acknowledgement number (which byte I expect from B)</td><td class="m">5001</td></tr>
+<tr><td class="m">12</td><td>Header length</td><td class="m">5 × 4 = 20 B</td></tr>
+<tr><td class="m">13</td><td>Flags: SYN, ACK, PSH, FIN, RST…</td><td class="m">PSH, ACK</td></tr>
+<tr><td class="m">14–15</td><td>Window (how many bytes I can receive now)</td><td class="m">64240</td></tr>
+<tr><td class="m">16–17</td><td>Checksum (header + data + both IPs)</td><td class="m">—</td></tr>
+<tr><td class="m">18–19</td><td>Urgent pointer (almost never used)</td><td class="m">0</td></tr>
+</tbody></table></div>
+<p><strong>Why two ports?</strong> <code>80</code> tells B: "give this to the web server". <code>49152</code> is picked by Windows for this connection, from a range of temporary ports; B's reply will come back to it, so Windows knows it's for <em>this</em> browser tab and not another app.</p>
+<p class="note">The values 1001 and 5001 and the PSH, ACK flags come from the TCP "handshake". We explain it in the next step, and you'll then watch it travel across the network.</p>`}},
 
 {at:"A",frame:F.pkt,kind:"data",stack:{dev:"A",max:7,on:[3],dir:"down"},
  title:{ro:"Pe A: stratul Rețea (IP)",en:"On A: the Network layer (IP)"},
@@ -616,18 +653,15 @@ const S=[
  tables:["rtR2","arpR2"],hl:{rtR2:"192.168.2.0/24",arpR2:IP.B}},
 
 {at:"SW2",frame:F.fR2,kind:"data",stack:{dev:"SW2",max:2,on:[2],dir:"updown"},
- move:[[["SW2","B"],["SW2","C"]]],rest:["B","C"],marks:{B:"ok",C:"drop"},
- fx:[["sw2",MAC.R2a,"p1"]],
- title:{ro:"SW2: destinație necunoscută → inundare",en:"SW2: unknown destination → flooding"},
- body:{ro:`<p>SW2 învață că MAC-ul <code>02:22:00:00:00:01</code> (R2) e pe portul p1.</p>
-<p>Apoi caută MAC-ul destinație al lui B… și <strong>nu îl găsește</strong> în tabelă (intrările se șterg după ~5 minute fără trafic). Ce face un switch când nu știe? <strong>Inundă</strong> (flooding): trimite cadrul pe <strong>toate porturile</strong>, mai puțin pe cel pe care a venit.</p>
-<p>Host C primește și el cadrul, vede că MAC-ul destinație nu e al lui și îl <strong>aruncă</strong>. B îl recunoaște și îl acceptă.</p>
-<p class="note">Când B va răspunde, SW2 va învăța și MAC-ul lui B, iar data viitoare va trimite direct pe portul p2.</p>`,
- en:`<p>SW2 learns that MAC <code>02:22:00:00:00:01</code> (R2) is on port p1.</p>
-<p>Then it looks up B's destination MAC… and <strong>doesn't find it</strong> in the table (entries are removed after ~5 minutes without traffic). What does a switch do when it doesn't know? It <strong>floods</strong>: it sends the frame out of <strong>every port</strong> except the one it came in on.</p>
-<p>Host C receives the frame too, sees the destination MAC isn't its own and <strong>drops</strong> it. B recognises it and accepts it.</p>
-<p class="note">When B replies, SW2 will learn B's MAC as well, and next time it will send straight out of port p2.</p>`},
- tables:["sw2"],miss:{sw2:MAC.B}},
+ move:[[["SW2","B"]]],
+ title:{ro:"SW2: acum știe unde e B",en:"SW2: now it knows where B is"},
+ body:{ro:`<p>SW2 caută MAC-ul destinație <code>02:BB:00:00:00:0B</code> în tabelă și îl <strong>găsește</strong>: portul p2. Trimite cadrul <strong>doar</strong> pe p2; Host C nici nu-l vede.</p>
+<p>De unde știe? Din <strong>strângerea de mână</strong>: când B a trimis SYN-ACK-ul, cadrul a intrat în SW2 pe portul p2, iar SW2 a notat MAC-ul sursă al lui B. Tot atunci și-a reîmprospătat și intrarea pentru R2 (portul p1).</p>
+<p class="note">Compară cu pasul SYN: acolo SW2 încă nu-l cunoștea pe B și a inundat cadrul pe toate porturile.</p>`,
+ en:`<p>SW2 looks up the destination MAC <code>02:BB:00:00:00:0B</code> in its table and <strong>finds it</strong>: port p2. It sends the frame <strong>only</strong> out of p2; Host C never even sees it.</p>
+<p>How does it know? From the <strong>handshake</strong>: when B sent the SYN-ACK, the frame entered SW2 on port p2, and SW2 noted B's source MAC. It also refreshed its entry for R2 (port p1) at that point.</p>
+<p class="note">Compare with the SYN step: back then SW2 didn't know B yet and flooded the frame out of every port.</p>`},
+ tables:["sw2"],hl:{sw2:MAC.B}},
 
 {at:"B",frame:F.pB,kind:"data",stack:{dev:"B",max:7,on:[1,2],dir:"up"},
  title:{ro:"Pe B: Legătură de date",en:"On B: Data link"},
@@ -661,14 +695,16 @@ const S=[
 <li><strong>IP-urile</strong> rămân aceleași – arată <em>capetele</em> drumului.</li>
 <li><strong>TTL-ul</strong> scade cu 1 la fiecare router; <strong>FCS</strong>-ul se recalculează pentru fiecare cadru nou.</li>
 <li><strong>Switch-urile</strong> nu modifică cadrul: învață MAC-urile sursă și trimit după MAC-ul destinație (sau inundă dacă nu-l știu).</li>
-<li><strong>ARP</strong> află MAC-ul pentru un IP din rețeaua locală.</li></ul>
+<li><strong>ARP</strong> află MAC-ul pentru un IP din rețeaua locală.</li>
+<li>Înaintea datelor, <strong>TCP</strong> deschide conexiunea în 3 pași: <strong>SYN → SYN-ACK → ACK</strong>. Primul cadru (SYN) a fost inundat de SW2; din SYN-ACK, SW2 a învățat unde e B.</li></ul>
 <p><button type="button" class="btn primary" id="toQuiz">Mergi la test ↓</button></p>`,
  en:`<p>Look at the <strong>Per-link log</strong>: the same IP packet travelled inside 3 different Ethernet frames.</p>
 <ul><li><strong>MACs</strong> change at every router – they only point to the <em>next stop</em>.</li>
 <li><strong>IPs</strong> stay the same – they point to the <em>two ends</em> of the trip.</li>
 <li>The <strong>TTL</strong> drops by 1 at every router; the <strong>FCS</strong> is recalculated for every new frame.</li>
 <li><strong>Switches</strong> don't change the frame: they learn source MACs and forward by destination MAC (or flood if they don't know it).</li>
-<li><strong>ARP</strong> finds the MAC for an IP on the local network.</li></ul>
+<li><strong>ARP</strong> finds the MAC for an IP on the local network.</li>
+<li>Before any data, <strong>TCP</strong> opens the connection in 3 steps: <strong>SYN → SYN-ACK → ACK</strong>. The first frame (SYN) was flooded by SW2; from the SYN-ACK, SW2 learned where B is.</li></ul>
 <p><button type="button" class="btn primary" id="toQuiz">Go to the quiz ↓</button></p>`}}
 ];
 /* ---------- deeper explanations ("Learn more") and commands to try, one entry per step ---------- */
@@ -720,10 +756,78 @@ const MORE=[
    en:`<p>What to learn next:</p><ul><li><strong>VLANs</strong>: split one switch into several separate networks.</li><li><strong>NAT</strong>: how many computers share a single public IP on the internet.</li><li><strong>DHCP and DNS</strong>: how a computer gets its IP and how it finds a site's IP.</li><li><strong>IPv6</strong>: longer addresses; uses NDP instead of ARP.</li></ul><p>Best exercise: install Wireshark, start a capture, run <code>ping</code> to your gateway and find the ARP request and reply.</p>`}}
 ];
 MORE.forEach((m,i)=>Object.assign(S[i],m));
+
+/* ---------- TCP 3-way handshake (inserted after the detail text above was attached) ---------- */
+const HSP={proto:"6 (TCP)"};
+const SYNF=eth(MAC.R1a,MAC.A,ET_IP,{srcIp:IP.A,dstIp:IP.B,ttl:"64",...HSP,ipChk:ipChecksum(64,0x28),srcPort:"49152",dstPort:"80 (HTTP)",seq:{ro:"1000 (ales la întâmplare)",en:"1000 (picked at random)"},ack:"0",flags:"SYN",window:"64240"});
+const SYNACKF=eth(MAC.A,MAC.R1a,ET_IP,{srcIp:IP.B,dstIp:IP.A,ttl:"62",...HSP,ipChk:ipChecksum(62,0x28),srcPort:"80 (HTTP)",dstPort:"49152",seq:{ro:"5000 (ales la întâmplare de B)",en:"5000 (picked at random by B)"},ack:"1001",flags:"SYN, ACK",window:"65160"});
+const ACKF=eth(MAC.R1a,MAC.A,ET_IP,{srcIp:IP.A,dstIp:IP.B,ttl:"64",...HSP,ipChk:ipChecksum(64,0x28),srcPort:"49152",dstPort:"80 (HTTP)",seq:"1001",ack:"5001",flags:"ACK",window:"64240"});
+const SOCKA="A (192.168.1.10:49152)",SOCKB="B (192.168.2.20:80)";
+const HS_INTRO={at:["A","B"],rest:["A"],frame:F.seg,kind:"data",stack:{dev:"A",max:7,on:[4],dir:"down"},tables:["hs","sock"],
+ title:{ro:"Înainte de date: TCP deschide o conexiune",en:"Before any data: TCP opens a connection"},
+ body:{ro:`<p>Segmentul cu <code>GET</code> e gata, dar <strong>nu pleacă încă</strong>. TCP promite că datele ajung <strong>toate, în ordine și o singură dată</strong>. Ca să poată face asta, A și B trebuie întâi să se pună de acord. Asta e <strong>strângerea de mână în 3 pași</strong> (3-way handshake):</p>
+<ol><li><strong>SYN</strong> (A → B): „Vreau să vorbim. Eu încep să număr octeții de la <code>1000</code>.”</li>
+<li><strong>SYN-ACK</strong> (B → A): „De acord. Eu încep de la <code>5000</code>. Am primit până la 1000, aștept octetul <code>1001</code> de la tine.”</li>
+<li><strong>ACK</strong> (A → B): „Am înțeles, aștept octetul <code>5001</code> de la tine.”</li></ol>
+<p>Abia după al treilea mesaj conexiunea e <strong>ESTABLISHED</strong> (stabilită), iar segmentul cu <code>GET</code> pleacă cu <code>seq = 1001</code>, <code>ack = 5001</code>.</p>
+<p>Fiecare dintre cele 3 mesaje e un segment TCP <strong>fără date</strong> (doar antetul de 20 de octeți), pus și el în pachete IP și cadre Ethernet, exact ca datele. Le vei vedea circulând după ce A află MAC-ul gateway-ului (ARP).</p>`,
+ en:`<p>The segment with the <code>GET</code> is ready, but it <strong>doesn't leave yet</strong>. TCP promises that data arrives <strong>complete, in order and exactly once</strong>. To do that, A and B first have to agree. That's the <strong>3-way handshake</strong>:</p>
+<ol><li><strong>SYN</strong> (A → B): "I want to talk. I'll start counting my bytes at <code>1000</code>."</li>
+<li><strong>SYN-ACK</strong> (B → A): "Agreed. I start at <code>5000</code>. I got up to 1000, I expect byte <code>1001</code> from you."</li>
+<li><strong>ACK</strong> (A → B): "Understood, I expect byte <code>5001</code> from you."</li></ol>
+<p>Only after the third message is the connection <strong>ESTABLISHED</strong>, and the <code>GET</code> segment leaves with <code>seq = 1001</code>, <code>ack = 5001</code>.</p>
+<p>Each of the 3 messages is a TCP segment <strong>with no data</strong> (just the 20-byte header), also wrapped in IP packets and Ethernet frames, exactly like the data. You'll watch them travel once A has learned the gateway's MAC (ARP).</p>`},
+ more:{ro:`<p>De ce numere de pornire aleatorii? Ca un atacator să nu poată ghici numerele și să „bage” pachete false într-o conexiune, și ca pachete întârziate dintr-o conexiune veche să nu fie confundate cu cele noi.</p><p>În SYN și SYN-ACK cele două părți schimbă și <strong>opțiuni</strong>: MSS (cel mai mare segment acceptat, de obicei 1460 octeți = 1500 MTU − 20 IP − 20 TCP), <em>window scaling</em> (ferestre mai mari de 64 KB) și SACK (confirmări pentru bucăți primite pe sărite).</p><p>Dacă pe B nu ascultă nimeni pe portul 80, B răspunde cu <strong>RST</strong> și browserul afișează „connection refused”. Dacă nu răspunde nimic, A retrimite SYN-ul de câteva ori, apoi afișează „timed out”.</p>`,
+  en:`<p>Why random starting numbers? So an attacker can't guess them and "inject" fake packets into a connection, and so delayed packets from an old connection aren't mistaken for new ones.</p><p>In the SYN and SYN-ACK both sides also exchange <strong>options</strong>: MSS (the largest segment accepted, usually 1460 bytes = 1500 MTU − 20 IP − 20 TCP), <em>window scaling</em> (windows larger than 64 KB) and SACK (acknowledging pieces received out of order).</p><p>If nothing is listening on port 80 on B, B answers with <strong>RST</strong> and the browser shows "connection refused". If nothing answers at all, A resends the SYN a few times, then shows "timed out".</p>`},
+ try:[{cmd:"Test-NetConnection 1.1.1.1 -Port 443",d:{ro:"Face exact o strângere de mână TCP; TcpTestSucceeded: True înseamnă că serverul a răspuns cu SYN-ACK.",en:"Does exactly one TCP handshake; TcpTestSucceeded: True means the server answered with SYN-ACK."}}]};
+const HS_SYN={at:"A",frame:SYNF,kind:"hs",tables:["sock","sw2"],miss:{sw2:MAC.B},
+ move:[[["A","SW1"]],[["SW1","R1"]],[["R1","R2"]],[["R2","SW2"]],[["SW2","B"],["SW2","C"]]],rest:["B","C"],
+ marks:{B:"ok",C:"drop"},fx:[["sw2",MAC.R2a,"p1"],["sock",SOCKA,"SYN-SENT"],["sock",SOCKB,"SYN-RECEIVED"]],
+ title:{ro:"Strângerea de mână 1/3: SYN, prin toată rețeaua",en:"Handshake 1/3: SYN, across the whole network"},
+ body:{ro:`<p>Acum că A știe MAC-ul lui R1, trimite <strong>primul cadru adevărat</strong> spre B: un segment TCP cu indicatorul <strong>SYN</strong>, fără date. În dreapta vezi cadrul așa cum pleacă de la A.</p>
+<p>Face <strong>exact drumul pe care îl vei studia pas cu pas la cererea GET</strong>: SW1 → R1 (cadru nou, TTL − 1) → R2 (cadru nou, TTL − 1) → SW2.</p>
+<p>La SW2 se întâmplă ceva important: SW2 învață că R2 e pe portul p1, dar <strong>nu cunoaște încă MAC-ul lui B</strong> (intrările se șterg după ~5 minute fără trafic). Ce face un switch când nu știe? <strong>Inundă</strong> (flooding): trimite cadrul pe <strong>toate porturile</strong>, mai puțin pe cel pe care a venit.</p>
+<p>Host C primește și el SYN-ul, vede că MAC-ul destinație nu e al lui și îl <strong>aruncă</strong>. B îl acceptă: pe portul 80 ascultă serverul web, așa că trece în starea <strong>SYN-RECEIVED</strong>.</p>`,
+ en:`<p>Now that A knows R1's MAC, it sends the <strong>first real frame</strong> towards B: a TCP segment with the <strong>SYN</strong> flag and no data. On the right you see the frame as it leaves A.</p>
+<p>It takes <strong>exactly the path you'll study step by step for the GET request</strong>: SW1 → R1 (new frame, TTL − 1) → R2 (new frame, TTL − 1) → SW2.</p>
+<p>Something important happens at SW2: it learns that R2 is on port p1, but it <strong>doesn't know B's MAC yet</strong> (entries are removed after ~5 minutes without traffic). What does a switch do when it doesn't know? It <strong>floods</strong>: it sends the frame out of <strong>every port</strong> except the one it came in on.</p>
+<p>Host C receives the SYN too, sees the destination MAC isn't its own and <strong>drops</strong> it. B accepts it: the web server is listening on port 80, so B moves to the <strong>SYN-RECEIVED</strong> state.</p>`},
+ more:{ro:`<p>În lecție am arătat ARP înaintea SYN-ului ca să-l explicăm separat. În realitate ordinea e: Windows construiește SYN-ul, IP decide că trebuie trimis la gateway, nu are MAC-ul lui în cache, deci <strong>SYN-ul așteaptă</strong> cât durează ARP-ul și pleacă imediat după.</p>`,
+  en:`<p>In the lesson we showed ARP before the SYN so we could explain it on its own. In reality the order is: Windows builds the SYN, IP decides it must go to the gateway, finds no MAC for it in the cache, so <strong>the SYN waits</strong> while ARP runs and leaves right after.</p>`}};
+const HS_SYNACK={at:"B",frame:SYNACKF,kind:"hs",tables:["sock","sw2"],hl:{sw2:MAC.B},
+ move:[[["B","SW2"]],[["SW2","R2"]],[["R2","R1"]],[["R1","SW1"]],[["SW1","A"]]],
+ fx:[["sw2",MAC.B,"p2"],["sock",SOCKA,"ESTABLISHED"]],
+ title:{ro:"Strângerea de mână 2/3: SYN-ACK înapoi la A",en:"Handshake 2/3: SYN-ACK back to A"},
+ body:{ro:`<p>B răspunde cu un segment care are <strong>doi</strong> indicatori: <strong>SYN</strong> (propriul număr de pornire, <code>5000</code>) și <strong>ACK</strong> (confirmă SYN-ul lui A: <code>ack = 1001</code>, adică „aștept octetul 1001”).</p>
+<p>Observă cum s-au <strong>inversat</strong> porturile (sursa e acum <code>80</code>, destinația <code>49152</code>) și IP-urile. În dreapta vezi cadrul așa cum <strong>ajunge la A</strong>, după două routere: TTL 62, MAC-urile ultimei legături (R1 → A).</p>
+<ul><li><strong>SW2 învață</strong> că MAC-ul lui B e pe portul p2 (cadrul a intrat pe acolo) și trimite cadrul doar pe p1, spre R2.</li>
+<li>R2 și R1 îl rutează la fel cum vor ruta cererea, doar în sens invers.</li>
+<li>A primește SYN-ACK-ul, verifică <code>ack = 1001</code> și trece în <strong>ESTABLISHED</strong>.</li></ul>`,
+ en:`<p>B replies with a segment carrying <strong>two</strong> flags: <strong>SYN</strong> (its own starting number, <code>5000</code>) and <strong>ACK</strong> (acknowledging A's SYN: <code>ack = 1001</code>, i.e. "I expect byte 1001").</p>
+<p>Note how the ports have <strong>swapped</strong> (the source is now <code>80</code>, the destination <code>49152</code>), and so have the IPs. On the right you see the frame as it <strong>arrives at A</strong>, after two routers: TTL 62, with the MACs of the last link (R1 → A).</p>
+<ul><li><strong>SW2 learns</strong> that B's MAC is on port p2 (the frame came in there) and sends the frame only out of p1, towards R2.</li>
+<li>R2 and R1 route it the same way they'll route the request, just in the opposite direction.</li>
+<li>A receives the SYN-ACK, checks <code>ack = 1001</code> and moves to <strong>ESTABLISHED</strong>.</li></ul>`}};
+const HS_ACK={at:"A",frame:ACKF,kind:"hs",tables:["hs","sock"],hl:{hs:2},
+ move:[[["A","SW1"]],[["SW1","R1"]],[["R1","R2"]],[["R2","SW2"]],[["SW2","B"]]],
+ fx:[["sock",SOCKB,"ESTABLISHED"]],
+ title:{ro:"Strângerea de mână 3/3: ACK, conexiunea e gata",en:"Handshake 3/3: ACK, the connection is ready"},
+ body:{ro:`<p>A trimite ultimul segment fără date: doar <strong>ACK</strong>, cu <code>seq = 1001</code> și <code>ack = 5001</code> („am primit SYN-ul tău, aștept octetul 5001”).</p>
+<p>De data asta SW2 <strong>știe</strong> unde e B și trimite cadrul doar pe portul p2; Host C nu mai primește nimic. B trece și el în <strong>ESTABLISHED</strong>.</p>
+<p class="key">Trei cadre au trecut deja prin toată rețeaua și <strong>nu s-a transferat niciun octet de date</strong>. Abia acum pleacă cererea <code>GET</code>, pe care o urmărim în detaliu în pașii următori.</p>`,
+ en:`<p>A sends the last segment with no data: just <strong>ACK</strong>, with <code>seq = 1001</code> and <code>ack = 5001</code> ("I got your SYN, I expect byte 5001").</p>
+<p>This time SW2 <strong>knows</strong> where B is and sends the frame only out of port p2; Host C gets nothing. B also moves to <strong>ESTABLISHED</strong>.</p>
+<p class="key">Three frames have already crossed the whole network and <strong>not a single byte of data has been transferred</strong>. Only now does the <code>GET</code> request leave, and we follow it in detail in the next steps.</p>`},
+ more:{ro:`<p>Strângerea de mână costă un „dus-întors” (RTT) înainte de primul octet util. Pe o legătură cu 50 ms până la server, asta înseamnă 50 ms în plus; HTTPS adaugă încă unul sau două pentru TLS. De aceea browserele țin conexiunile deschise (<em>keep-alive</em>) și le refolosesc pentru mai multe cereri.</p><p>La final, conexiunea se închide tot în pași: <strong>FIN</strong> → ACK → <strong>FIN</strong> → ACK (sau brusc, cu RST).</p>`,
+  en:`<p>The handshake costs one round trip (RTT) before the first useful byte. On a link with 50 ms to the server, that's 50 ms extra; HTTPS adds one or two more for TLS. That's why browsers keep connections open (<em>keep-alive</em>) and reuse them for several requests.</p><p>At the end, the connection is also closed in steps: <strong>FIN</strong> → ACK → <strong>FIN</strong> → ACK (or abruptly, with RST).</p>`},
+ try:[{cmd:"Get-NetTCPConnection -RemotePort 443 -State Established",d:{ro:"Conexiunile TCP stabilite de calculatorul tău cu servere HTTPS, cu porturile locale alese de Windows.",en:"Your computer's established TCP connections to HTTPS servers, with the local ports Windows picked."}}]};
+/* order: insert the 3 handshake steps right after the ARP reply (index 6), then the intro after the TCP step (index 2) */
+S.splice(7,0,HS_SYN,HS_SYNACK,HS_ACK);
+S.splice(3,0,HS_INTRO);
 const N=S.length;
 
 /* ---------- tables ---------- */
-const INIT={arpA:[],arpR1:[[IP.R2b,MAC.R2b]],arpR2:[[IP.B,MAC.B],[IP.R1b,MAC.R1b]],sw1:[],sw2:[[MAC.C,"p3"]]};
+const INIT={arpA:[],arpR1:[[IP.R2b,MAC.R2b]],arpR2:[[IP.B,MAC.B],[IP.R1b,MAC.R1b]],sw1:[],sw2:[[MAC.C,"p3"]],sock:[["A (192.168.1.10:49152)","CLOSED"],["B (192.168.2.20:80)",{ro:"LISTEN (serverul web așteaptă)",en:"LISTEN (web server waiting)"}]]};
 function stateAt(i){
   const s=JSON.parse(JSON.stringify(INIT));const added={};
   for(let j=0;j<=i;j++)(S[j].fx||[]).forEach(([t,k,v])=>{const r=s[t].find(x=>x[0]===k);if(r){r[1]=v}else{s[t].push([k,v]);if(j===i)(added[t]=added[t]||[]).push(k)}});
@@ -737,6 +841,9 @@ const TABLES={
   arpR2:{title:{ro:"Cache ARP – R2",en:"ARP cache – R2"},cols:["IP","MAC"],rows:s=>s.arpR2},
   sw1:{title:{ro:"Tabela MAC – SW1",en:"MAC table – SW1"},cols:["MAC","Port"],rows:s=>s.sw1},
   sw2:{title:{ro:"Tabela MAC – SW2",en:"MAC table – SW2"},cols:["MAC","Port"],rows:s=>s.sw2},
+  sock:{title:{ro:"Starea conexiunii TCP (pe fiecare capăt)",en:"TCP connection state (on each end)"},cols:[{ro:"Capăt (IP:port)",en:"End (IP:port)"},{ro:"Stare",en:"State"}],rows:s=>s.sock},
+  hs:{title:{ro:"Strângerea de mână, apoi primele date",en:"The handshake, then the first data"},cols:["#",{ro:"Sens",en:"Direction"},"Flags","seq","ack"],idx:true,
+    rows:()=>[["1","A → B","SYN","1000","0"],["2","B → A","SYN, ACK","5000","1001"],["3","A → B","ACK","1001","5001"],["4","A → B",{ro:"PSH, ACK + GET (14 octeți)",en:"PSH, ACK + GET (14 bytes)"},"1001","5001"]]},
   rtR1:{title:{ro:"Tabela de rutare – R1",en:"Routing table – R1"},cols:[{ro:"Rețea",en:"Network"},{ro:"Următorul hop",en:"Next hop"},{ro:"Interfață",en:"Interface"}],
     rows:()=>[["192.168.1.0/24",DC,"Gi0"],["10.0.0.0/30",DC,"Gi1"],["192.168.2.0/24",IP.R2b,"Gi1"]]},
   rtR2:{title:{ro:"Tabela de rutare – R2",en:"Routing table – R2"},cols:[{ro:"Rețea",en:"Network"},{ro:"Următorul hop",en:"Next hop"},{ro:"Interfață",en:"Interface"}],
@@ -780,7 +887,7 @@ const UI={
   heroEyebrow:{ro:"Lecție interactivă · Rețelistică",en:"Interactive lesson · Networking"},
   goalsT:{ro:"Ce vei învăța",en:"What you'll learn"},
   goals:[{ro:"Cum se încapsulează datele, strat cu strat",en:"How data is encapsulated, layer by layer"},{ro:"De ce MAC-urile se schimbă la fiecare hop, iar IP-urile nu",en:"Why MACs change at every hop while IPs don't"},{ro:"Cum învață și trimite un switch, cum alege drumul un router",en:"How a switch learns and forwards, how a router picks a route"},{ro:"Ce fac ARP, TTL și FCS",en:"What ARP, TTL and FCS do"}],
-  meta:[{ro:"≈ 15 minute",en:"≈ 15 minutes"},{ro:"18 pași",en:"18 steps"},{ro:"12 întrebări",en:"12 questions"},{ro:"Începător",en:"Beginner"}],
+  meta:[{ro:"≈ 20 minute",en:"≈ 20 minutes"},{ro:"22 de pași",en:"22 steps"},{ro:"15 întrebări",en:"15 questions"},{ro:"Începător",en:"Beginner"}],
   lgRing:{ro:"dispozitivul activ",en:"active device"},lgEth:{ro:"cadru Ethernet",en:"Ethernet frame"},lgArp:{ro:"cadru ARP",en:"ARP frame"},lgIp:{ro:"pachet IP",en:"IP packet"},lgTcp:{ro:"segment",en:"segment"},lgApp:{ro:"date",en:"data"},
   more:{ro:"Află mai mult",en:"Learn more"},tryT:{ro:"Încearcă pe calculatorul tău (PowerShell sau Command Prompt)",en:"Try it on your computer (PowerShell or Command Prompt)"},
   copy:{ro:"Copiază",en:"Copy"},copied:{ro:"Copiat ✓",en:"Copied ✓"},
@@ -820,6 +927,15 @@ const QUIZ=[
   e:{ro:"FCS-ul e calculat din tot conținutul cadrului. Cadru nou ⇒ FCS nou.",en:"The FCS is calculated from the whole frame's content. New frame ⇒ new FCS."}}
 ];
 QUIZ.push(
+ {q:{ro:"Care e ordinea mesajelor în strângerea de mână TCP?",en:"What is the order of messages in the TCP handshake?"},
+  o:[{ro:"ACK → SYN → SYN-ACK",en:"ACK → SYN → SYN-ACK"},{ro:"SYN → SYN-ACK → ACK",en:"SYN → SYN-ACK → ACK"},{ro:"SYN → ACK → FIN",en:"SYN → ACK → FIN"},{ro:"GET → 200 OK → ACK",en:"GET → 200 OK → ACK"}],a:1,
+  e:{ro:"A cere (SYN), B acceptă și cere la rândul lui (SYN-ACK), A confirmă (ACK). Abia apoi pleacă datele.",en:"A asks (SYN), B accepts and asks in turn (SYN-ACK), A confirms (ACK). Only then does the data leave."}},
+ {q:{ro:"Cine adaugă antetul TCP, cu porturile, în fața datelor?",en:"Who adds the TCP header, with the ports, in front of the data?"},
+  o:[{ro:"Browserul",en:"The browser"},{ro:"Stiva TCP/IP a sistemului de operare (pe Windows, tcpip.sys)",en:"The operating system's TCP/IP stack (on Windows, tcpip.sys)"},{ro:"Switch-ul",en:"The switch"},{ro:"Routerul R1",en:"Router R1"}],a:1,
+  e:{ro:"Browserul doar cere „conectează-te la IP:port și trimite asta”. Sistemul de operare construiește antetele TCP și IP.",en:"The browser only asks \"connect to IP:port and send this\". The operating system builds the TCP and IP headers."}},
+ {q:{ro:"De ce a inundat SW2 cadrul SYN, dar nu și cadrul cu GET?",en:"Why did SW2 flood the SYN frame but not the GET frame?"},
+  o:[{ro:"Pentru că GET-ul e mai mic",en:"Because the GET is smaller"},{ro:"Pentru că a învățat MAC-ul lui B din SYN-ACK-ul trimis de B",en:"Because it learned B's MAC from the SYN-ACK that B sent"},{ro:"Pentru că routerul i-a spus",en:"Because the router told it"},{ro:"Pentru că SYN-ul e broadcast",en:"Because the SYN is a broadcast"}],a:1,
+  e:{ro:"Switch-urile învață din MAC-ul sursă al cadrelor care intră. SYN-ACK-ul a intrat pe p2 cu MAC-ul sursă al lui B.",en:"Switches learn from the source MAC of incoming frames. The SYN-ACK came in on p2 with B's source MAC."}},
  {q:{ro:"La ce strat lucrează un switch obișnuit?",en:"Which layer does an ordinary switch work at?"},
   o:[{ro:"Stratul 2 – Legătură de date",en:"Layer 2 – Data link"},{ro:"Stratul 3 – Rețea",en:"Layer 3 – Network"},{ro:"Stratul 4 – Transport",en:"Layer 4 – Transport"},{ro:"Stratul 7 – Aplicație",en:"Layer 7 – Application"}],a:0,
   e:{ro:"Switch-ul citește doar antetul Ethernet (MAC-urile). Routerul lucrează la stratul 3.",en:"A switch only reads the Ethernet header (the MACs). A router works at layer 3."}},
@@ -968,8 +1084,9 @@ function buildDiagram(){
 const tokPos=id=>{const [x,y]=L.n[id];return [x,y-32]};
 function pduKey(f){if(!f)return null;if(f.dstMac)return f.arpOp?"arp":"eth";if(f.srcIp)return "ip";if(f.srcPort)return "tcp";return "app"}
 const TOK={eth:["ETH","k-data"],arp:["ARP","k-arp"],ip:["IP","k-ip"],tcp:["TCP","k-tcp"],app:[{ro:"DATE",en:"DATA"},"k-app"]};
-function tokenEl(f){const [lbl,cls]=TOK[pduKey(f)];const g=document.createElementNS(SVGNS,"g");g.setAttribute("class","token "+cls);
-  g.innerHTML=`<rect x="-21" y="-10" width="42" height="20" rx="5"/><text x="0" y="1">${T(lbl)}</text>`;return g}
+function tokenEl(f){const k=pduKey(f);let [lbl,cls]=TOK[k];if(k==="eth"&&f.flags&&!f.payload){lbl=f.flags.replace(", ","-");cls="k-tcp"}
+  const s=T(lbl),w=Math.max(42,s.length*7+14);const g=document.createElementNS(SVGNS,"g");g.setAttribute("class","token "+cls);
+  g.innerHTML=`<rect x="${-w/2}" y="-10" width="${w}" height="20" rx="5"/><text x="0" y="1">${s}</text>`;return g}
 const place=(el,[x,y])=>el.setAttribute("transform",`translate(${x.toFixed(1)},${y.toFixed(1)})`);
 function restNodes(st){if(st.rest)return st.rest;if(st.move){return st.move[st.move.length-1].map(s=>s[1])}return [].concat(st.at)}
 function setMarks(st){const g=svg.querySelector("#marks");g.innerHTML="";if(!st.marks)return;
