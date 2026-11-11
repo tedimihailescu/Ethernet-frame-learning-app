@@ -68,3 +68,7 @@ No build step and no dependencies (fonts load from Google Fonts, with system-fon
 **Mini-joc:** [Livrează pachetul](joc/index.html): rutare, porturi, MAC-uri, DNS, straturi OSI și IPv6 contra cronometru; scorul intră în rezultate.
 
 **Laboratoare:** fiecare lecție are la final un mic laborator: un terminal simulat, un calcul și pașii în ordine, cu indicii și soluții; rezultatul se salvează.
+
+**Administrare:** pagina `admin/` arată utilizatorii, cine e online și când a fost văzut fiecare; adminii pot da sau lua drepturi și pot genera un cod de acces pentru admini noi.
+
+**Mai multe jocuri:** [Zarul pachetului](zar/index.html) și roata [Ce învăț azi?](roata/index.html).

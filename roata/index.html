@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ce învăț azi?</title>
+<meta name="description" content="Roata lecțiilor: învârte și află ce lecție și ce provocare ai azi. / Spin the wheel to pick today's lesson.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/theme.css">
+<style>
+.page{max-width:980px;margin:0 auto;padding-block:20px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1{font:700 clamp(1.5rem,4vw,2.2rem) var(--head);margin:0 0 6px}
+.lead{color:var(--muted);margin:0 0 16px}
+.grid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:18px;align-items:start}
+.wheelWrap{position:relative;max-width:460px;width:100%;margin:0 auto;overflow:hidden;padding-top:10px;border-radius:50% 50% 0 0 / 10px 10px 0 0}
+.pointer{position:absolute;left:50%;top:0;transform:translateX(-50%);width:0;height:0;border-left:16px solid transparent;border-right:16px solid transparent;border-top:30px solid var(--bad);z-index:2;filter:drop-shadow(0 2px 0 rgba(0,0,0,.3))}
+#wheel{width:100%;height:auto;display:block;transition:transform 4.2s cubic-bezier(.12,.72,.12,1)}
+#wheel text{font:700 13px var(--sans);pointer-events:none}
+.hub{cursor:pointer}
+.card{background:var(--surface);border:2px solid var(--text);border-radius:14px;padding:18px;min-width:0}
+.btn{border:2px solid var(--text);background:var(--accent);color:var(--accent-text);border-radius:10px;padding:11px 18px;font:700 1rem var(--sans);cursor:pointer;text-decoration:none;display:inline-flex;align-items:center}
+.btn.sec{background:var(--surface);color:var(--text)}
+.btn:disabled{opacity:.5;cursor:default}
+.row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.kind{font:600 .74rem var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 6px}
+.res h2{font:700 1.4rem var(--head);margin:0 0 6px}
+.meta{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 12px;padding:0;list-style:none}
+.meta li{font:600 .78rem var(--mono);border:1px solid var(--text);border-radius:999px;padding:2px 9px}
+.chal{background:var(--hero);border-radius:10px;padding:12px 14px;margin:10px 0 0;font-weight:600}
+.opt{display:flex;gap:8px;align-items:center;margin:14px 0 0;font-size:.92rem}
+.hist{margin:14px 0 0;font-size:.88rem;color:var(--muted)}
+.idle{color:var(--muted)}
+.pop{animation:pop .5s ease}
+@keyframes pop{from{transform:scale(.96);opacity:.3}to{transform:none;opacity:1}}
+@media (max-width:760px){.grid{grid-template-columns:minmax(0,1fr)}}
+@media (prefers-reduced-motion:reduce){#wheel{transition:transform .3s}.pop{animation:none}}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<header class="topbar" id="top"><div class="topbar-in">
+  <a class="brand" href="../index.html"><svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="var(--accent)"/><path d="M7 16h18M19 11l6 5-6 5" fill="none" stroke="var(--accent-text)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="16" r="2.6" fill="var(--accent-text)"/></svg><span data-t="brand"></span></a>
+  <nav class="nav"><a href="../index.html" data-t="home"></a><a href="../joc/index.html" data-t="games"></a></nav>
+  <div class="tools"><div class="seg" role="group" aria-label="Limba / Language"><button type="button" data-lang="ro">RO</button><button type="button" data-lang="en">EN</button></div><button type="button" class="icon-btn" id="theme">◐</button></div>
+</div></header>
+
+<main class="page">
+  <h1 data-t="title"></h1>
+  <p class="lead" data-t="lead"></p>
+  <div class="grid">
+    <div>
+      <div class="wheelWrap"><div class="pointer" aria-hidden="true"></div><svg id="wheel" viewBox="-210 -210 420 420" role="img" aria-label="roata lecțiilor"></svg></div>
+      <div class="row" style="justify-content:center"><button type="button" class="btn" id="spin" data-t="spin"></button></div>
+      <label class="opt"><input type="checkbox" id="skipDone"> <span data-t="skip"></span></label>
+    </div>
+    <section class="card res" id="res" aria-live="polite"><p class="idle" data-t="idle"></p></section>
+  </div>
+</main>
+
+<script type="module" src="../assets/auth.js?v=5"></script>
+<script type="module">
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+let lang=store.get("cadru-lang")==="en"?"en":"ro";
+const L=(ro,en)=>lang==="en"?en:ro;
+const T=v=>Array.isArray(v)?v[lang==="en"?1:0]:v;
+const UI={brand:["Rețea pas cu pas","Network step by step"],home:["← Lecții","← Lessons"],games:["🎮 Jocuri","🎮 Games"],title:["🎡 Ce învăț azi?","🎡 What do I learn today?"],
+  lead:["Nu știi cu ce să începi? Învârte roata: alege o lecție și îți dă o mică provocare pentru azi.","Not sure where to start? Spin the wheel: it picks a lesson and gives you a small challenge for today."],
+  spin:["🎡 Învârte roata","🎡 Spin the wheel"],spinning:["Se învârte…","Spinning…"],again:["🎡 Încă o dată","🎡 Spin again"],skip:["Sari peste lecțiile la care am deja testul trecut (≥ 75%)","Skip lessons whose quiz I've already passed (≥ 75%)"],
+  idle:["Roata are toate cele 16 lecții. Apasă „Învârte roata” sau atinge centrul.","The wheel has all 16 lessons. Press \"Spin the wheel\" or tap the centre."],
+  today:["Lecția de azi","Today's lesson"],go:["▶ Începe lecția","▶ Start the lesson"],lab:["🧪 Laboratorul","🧪 The lab"],quiz:["✎ Testul","✎ The quiz"],
+  allDone:["Ai trecut deja toate testele. Bravo! Debifează opțiunea ca să învârți din toate.","You've passed every quiz already. Well done! Untick the option to spin among all lessons."],
+  hist:["Ultimele alegeri: ","Recent picks: "]};
+const LS=[
+ ["ethernet","Ethernet",["Drumul unui cadru Ethernet","The journey of an Ethernet frame"],["Începător","Beginner"],20],
+ ["vlan","VLAN",["VLAN: mai multe rețele pe un switch","VLANs: several networks on one switch"],["Începător+","Beginner+"],20],
+ ["nat","NAT",["NAT: un singur IP public","NAT: one public IP"],["Începător+","Beginner+"],20],
+ ["dns","DNS",["Cum funcționează DNS","How DNS works"],["Începător","Beginner"],15],
+ ["https","HTTPS",["HTTPS / TLS: de ce e sigur lacătul","HTTPS / TLS: why the padlock is safe"],["Intermediar","Intermediate"],20],
+ ["ipv6","IPv6",["IPv6: un laptop își face singur adresa","IPv6: a laptop builds its own address"],["Începător+","Beginner+"],25],
+ ["bgp","BGP",["BGP: cum găsește internetul drumul","BGP: how the internet finds its way"],["Intermediar","Intermediate"],25],
+ ["kubernetes","K8s DNS",["Kubernetes: Service-uri și DNS","Kubernetes: Services and DNS"],["Intermediar","Intermediate"],25],
+ ["ingress","Ingress",["Ingress: rutare HTTP în Kubernetes","Ingress: HTTP routing in Kubernetes"],["Intermediar","Intermediate"],20],
+ ["gke-retea","GKE",["Rețeaua pod-urilor în GKE","Pod networking on GKE"],["Intermediar","Intermediate"],25],
+ ["k8s-intrare",["Pachet K8s","K8s packet"],["Viața unui pachet care intră în Kubernetes","The life of a packet entering Kubernetes"],["Avansat","Advanced"],30],
+ ["service-mesh","Mesh",["Service mesh: o cerere între două microservicii","Service mesh: a request between two microservices"],["Avansat","Advanced"],25],
+ ["observabilitate",["Observab.","Observab."],["Observabilitate: de ce e lent checkout-ul?","Observability: why is checkout slow?"],["Intermediar","Intermediate"],25],
+ ["tomcat","Tomcat",["Tomcat: viața unei cereri","Tomcat: the life of a request"],["Intermediar","Intermediate"],25],
+ ["microservicii",["Microserv.","Microserv."],["Microservicii pe Tomcat în producție","Microservices on Tomcat in production"],["Intermediar","Intermediate"],25],
+ ["monolit-cpp",["Monolit C++","C++ monolith"],["Monolit C++ cu SOAP, nginx și Oracle","C++ monolith with SOAP, nginx and Oracle"],["Intermediar","Intermediate"],25]];
+const CH=[["Parcurge toată simularea, apoi explică cuiva în 3 propoziții ce ai învățat.","Go through the whole simulation, then explain to someone in 3 sentences what you learned."],
+ ["Fă laboratorul fără să ceri soluția la niciun exercițiu.","Do the lab without asking for any solution."],
+ ["Ia cel puțin 7 din 8 la test.","Score at least 7 out of 8 on the quiz."],
+ ["Rulează pe calculatorul tău una dintre comenzile din secțiunea „Încearcă”.","Run one of the commands from the \"Try it\" section on your own computer."],
+ ["Deschide dicționarul lecției și învață 3 termeni noi.","Open the lesson's glossary and learn 3 new terms."],
+ ["Parcurge lecția în cealaltă limbă (RO / EN).","Go through the lesson in the other language (RO / EN)."]];
+const N=LS.length,step=360/N,$=s=>document.querySelector(s);
+let rot=0,busy=false,pick=null,passed=new Set();
+
+function drawWheel(){
+  const cols=["#ffd83d","#14120a","#f7de6a","#2a2614"],txt=["#14120a","#ffd83d","#14120a","#ffd83d"];let h="";
+  LS.forEach((l,i)=>{const a0=(i*step-90-step/2)*Math.PI/180,a1=((i+1)*step-90-step/2)*Math.PI/180,r=200;
+    const x0=r*Math.cos(a0),y0=r*Math.sin(a0),x1=r*Math.cos(a1),y1=r*Math.sin(a1);const c=i%4,dim=$("#skipDone").checked&&passed.has(l[0]);
+    h+=`<path d="M0 0 L${x0.toFixed(1)} ${y0.toFixed(1)} A${r} ${r} 0 0 1 ${x1.toFixed(1)} ${y1.toFixed(1)} Z" fill="${cols[c]}" stroke="#14120a" stroke-width="1.5" opacity="${dim?.25:1}"/>`;
+    const am=i*step-90;h+=`<text transform="rotate(${am}) translate(118 0)" text-anchor="middle" dominant-baseline="middle" fill="${txt[c]}" opacity="${dim?.4:1}">${T(l[1])}</text>`});
+  h+=`<g class="hub" id="hub"><circle r="34" fill="#14120a" stroke="#ffd83d" stroke-width="4"/><text text-anchor="middle" dominant-baseline="middle" fill="#ffd83d" style="font:700 20px var(--head)">GO</text></g>`;
+  $("#wheel").innerHTML=h;$("#hub").onclick=spin;
+}
+function spin(){
+  if(busy)return;const pool=LS.map((l,i)=>i).filter(i=>!($("#skipDone").checked&&passed.has(LS[i][0])));
+  if(!pool.length){$("#res").innerHTML=`<p>${T(UI.allDone)}</p>`;return}
+  busy=true;$("#spin").disabled=true;$("#spin").textContent=T(UI.spinning);
+  const i=pool[Math.floor(Math.random()*pool.length)];const jitter=(Math.random()-.5)*step*.6;
+  // slice i sits at angle i*step (clockwise from the top); turn so it ends under the pointer
+  const target=360-(i*step)+jitter;const cur=((rot%360)+360)%360;rot+=360*5+((target-cur+360)%360);
+  $("#wheel").style.transform=`rotate(${rot}deg)`;
+  const done=()=>{busy=false;$("#spin").disabled=false;$("#spin").textContent=T(UI.again);show(i,Math.floor(Math.random()*CH.length),true)};
+  const reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;setTimeout(done,reduce?350:4300);
+}
+function show(i,c,fresh){
+  pick={i,c};const l=LS[i];
+  if(fresh){let h=[];try{h=JSON.parse(store.get("roata-hist")||"[]")}catch(e){}h=[l[0],...h.filter(x=>x!==l[0])].slice(0,5);store.set("roata-hist",JSON.stringify(h));store.set("roata-today",JSON.stringify({d:new Date().toDateString(),i,c}))}
+  let hist=[];try{hist=JSON.parse(store.get("roata-hist")||"[]")}catch(e){}
+  $("#res").innerHTML=`<div class="pop"><p class="kind">${T(UI.today)}</p><h2>${T(l[2])}</h2><ul class="meta"><li>${T(l[3])}</li><li>≈ ${l[4]} min</li>${passed.has(l[0])?`<li>✓ ${L("test trecut","quiz passed")}</li>`:""}</ul>
+<p class="chal">🎯 ${T(CH[c])}</p>
+<div class="row"><a class="btn" href="../${l[0]}/index.html">${T(UI.go)}</a><a class="btn sec" href="../${l[0]}/index.html#lab">${T(UI.lab)}</a><a class="btn sec" href="../${l[0]}/index.html#quiz">${T(UI.quiz)}</a></div>
+${hist.length>1?`<p class="hist">${T(UI.hist)}${hist.map(id=>{const x=LS.find(y=>y[0]===id);return x?T(x[1]):id}).join(" · ")}</p>`:""}</div>`;
+}
+function render(){
+  document.documentElement.lang=lang;document.title=L("Ce învăț azi?","What do I learn today?");
+  document.querySelectorAll("[data-t]").forEach(e=>{if(UI[e.dataset.t])e.textContent=T(UI[e.dataset.t])});
+  document.querySelectorAll("[data-lang]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.lang===lang?"true":"false"));
+  if(pick&&!busy)$("#spin").textContent=T(UI.again);
+  drawWheel();if(pick)show(pick.i,pick.c,false);
+}
+$("#spin").onclick=spin;$("#skipDone").onchange=drawWheel;
+document.querySelectorAll("[data-lang]").forEach(b=>b.onclick=()=>{lang=b.dataset.lang;store.set("cadru-lang",lang);render()});
+const saved=store.get("cadru-theme");if(saved==="light"||saved==="dark")document.documentElement.dataset.theme=saved;
+$("#theme").onclick=()=>{const r=document.documentElement,d=r.dataset.theme?r.dataset.theme==="dark":matchMedia("(prefers-color-scheme: dark)").matches;const nt=d?"light":"dark";r.dataset.theme=nt;store.set("cadru-theme",nt)};
+// today's pick survives a reload
+try{const t=JSON.parse(store.get("roata-today")||"null");if(t&&t.d===new Date().toDateString()&&LS[t.i]){rot=360-t.i*step;$("#wheel").style.transition="none";$("#wheel").style.transform=`rotate(${rot}deg)`;pick={i:t.i,c:t.c};requestAnimationFrame(()=>requestAnimationFrame(()=>{$("#wheel").style.transition=""}))}}catch(e){}
+render();
+if(location.protocol!=="file:"){
+  try{const [{auth,db},{onAuthStateChanged},{collection,query,where,getDocs}]=await Promise.all([import("../assets/firebase.js?v=5"),import("https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js"),import("https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js")]);
+    onAuthStateChanged(auth,async u=>{if(!u)return;try{const s=await getDocs(query(collection(db,"results"),where("uid","==",u.uid)));passed=new Set();s.docs.forEach(d=>{const x=d.data();if(x.total&&x.score/x.total>=.75)passed.add(x.lesson)});render()}catch(e){console.warn(e)}})}catch(e){console.warn(e)}
+}
+</script>
+</body>
+</html>

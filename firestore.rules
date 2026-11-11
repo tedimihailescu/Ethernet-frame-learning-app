@@ -25,10 +25,27 @@ service cloud.firestore {
       allow write: if signedIn() && request.auth.uid == uid;
     }
 
-    // Admin list: created by hand in the Firebase console only.
+    // Admin list. Three ways in:
+    //  1. by hand in the Firebase console;
+    //  2. an existing admin grants it from the admin page;
+    //  3. the user enters the current access code (config/admin.code, at least 16 characters).
+    function codeOk() {
+      return exists(/databases/$(database)/documents/config/admin)
+        && request.resource.data.code is string
+        && get(/databases/$(database)/documents/config/admin).data.code.size() >= 16
+        && request.resource.data.code == get(/databases/$(database)/documents/config/admin).data.code;
+    }
     match /admins/{uid} {
-      allow read: if signedIn() && request.auth.uid == uid;
-      allow write: if false;
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['role', 'how', 'code', 'by', 'at', 'name', 'email'])
+        && (isAdmin() || (request.auth.uid == uid && codeOk()));
+      allow update, delete: if isAdmin();
+    }
+
+    // The admin access code: only admins can see or change it.
+    match /config/admin {
+      allow read, write: if isAdmin();
     }
   }
 }

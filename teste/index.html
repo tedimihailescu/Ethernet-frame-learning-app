@@ -49,7 +49,7 @@ h2.grp{font:700 1.05rem var(--head);margin:22px 0 10px}
   <div id="list"></div>
 </main>
 
-<script type="module" src="../assets/auth.js?v=4"></script>
+<script type="module" src="../assets/auth.js?v=5"></script>
 <script type="module">
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
 let lang=store.get("cadru-lang")==="en"?"en":"ro";
@@ -58,7 +58,7 @@ const UI={brand:["Rețea pas cu pas","Network step by step"],home:["← Lecții"
   start:["Începe testul →","Start the quiz →"],again:["Refă testul →","Retake the quiz →"],best:["Cel mai bun","Best"],tries:["încercări","attempts"],none:["Încă neîncercat","Not taken yet"],
   done:["teste încercate","quizzes taken"],avg:["media celor mai bune scoruri","average of best scores"],total:["teste disponibile","quizzes available"],
   g1:["Rețele: bazele","Networking basics"],g2:["Internet și web","Internet and web"],g3:["Kubernetes și operare","Kubernetes and operations"],g4:["Aplicații în producție","Production apps"],
-  gameK:["Pauză de joacă","Play break"],gameT:["🎮 Livrează pachetul: mini-joc de 2 minute →","🎮 Deliver the packet: a 2-minute mini-game →"],gameD:["Rutare, porturi, MAC-uri, DNS, OSI și IPv6, contra cronometru. Scorul intră în rezultate.","Routing, ports, MACs, DNS, OSI and IPv6, against the clock. The score goes into your results."]};
+  gameK:["Pauză de joacă: 3 jocuri","Play break: 3 games"],gameT:["🎮 Livrează pachetul: mini-joc de 2 minute →","🎮 Deliver the packet: a 2-minute mini-game →"],gameD:["Rutare, porturi, MAC-uri, DNS, OSI și IPv6, contra cronometru. Mai sunt 🎲 Zarul pachetului și 🎡 roata „Ce învăț azi?”, din pagina jocului.","Routing, ports, MACs, DNS, OSI and IPv6, against the clock. The game page also has 🎲 The packet die and 🎡 the \"What do I learn today?\" wheel."]};
 const T=k=>UI[k][lang==="en"?1:0];
 const G=[
  ["g1",[["ethernet","Drumul unui cadru Ethernet","The journey of an Ethernet frame","Începător","Beginner"],["vlan","VLAN: mai multe rețele pe un switch","VLANs: several networks on one switch","Începător+","Beginner+"],["nat","NAT: un singur IP public","NAT: one public IP","Începător+","Beginner+"]]],
@@ -85,7 +85,7 @@ const saved=store.get("cadru-theme");if(saved==="light"||saved==="dark")document
 document.getElementById("theme").onclick=()=>{const r=document.documentElement,d=r.dataset.theme?r.dataset.theme==="dark":matchMedia("(prefers-color-scheme: dark)").matches;const nt=d?"light":"dark";r.dataset.theme=nt;store.set("cadru-theme",nt)};
 render();
 if(location.protocol!=="file:"){
-  const [{auth,db},{onAuthStateChanged},{collection,query,where,getDocs}]=await Promise.all([import("../assets/firebase.js?v=4"),import("https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js"),import("https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js")]);
+  const [{auth,db},{onAuthStateChanged},{collection,query,where,getDocs}]=await Promise.all([import("../assets/firebase.js?v=5"),import("https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js"),import("https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js")]);
   onAuthStateChanged(auth,async u=>{if(!u)return;try{const snap=await getDocs(query(collection(db,"results"),where("uid","==",u.uid)));stats={};
     snap.docs.forEach(d=>{const x=d.data();const p=x.total?Math.round(100*x.score/x.total):0;const s=stats[x.lesson]=stats[x.lesson]||{best:0,n:0};s.n++;if(p>s.best)s.best=p});render()}catch(e){console.error(e)}});
 }

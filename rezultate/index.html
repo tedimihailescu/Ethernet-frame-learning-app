@@ -72,6 +72,7 @@ td.n{font-variant-numeric:tabular-nums;white-space:nowrap}
 
   <section class="block setup" id="help" hidden>
     <h2 data-t="helpT"></h2>
+    <p><b data-t="codeWay"></b> <a class="go-btn" href="../admin/index.html" data-t="toAdmin"></a></p>
     <p class="lead" data-t="helpLead"></p>
     <div class="uid-row"><code id="uid"></code><button type="button" class="btn-sm" id="copy" data-t="copy"></button></div>
     <ol id="steps"></ol>
@@ -79,9 +80,9 @@ td.n{font-variant-numeric:tabular-nums;white-space:nowrap}
   </section>
 </main>
 
-<script type="module" src="../assets/auth.js?v=4"></script>
+<script type="module" src="../assets/auth.js?v=5"></script>
 <script type="module">
-import { app, auth, db } from "../assets/firebase.js?v=4";
+import { app, auth, db } from "../assets/firebase.js?v=5";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import { collection, query, where, getDocs, getDoc, doc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
@@ -97,6 +98,7 @@ const UI={
   kPeople:["participanți","participants"],kAttempts:["teste terminate","quizzes finished"],kAvg:["scor mediu","average score"],kLessons:["lecții încercate","lessons attempted"],
   filter:["Caută după nume, e-mail sau lecție","Search by name, email or lesson"],csv:["Descarcă CSV","Download CSV"],
   helpT:["Ești administratorul site-ului? Activează vederea de administrator","Are you the site administrator? Turn on the admin view"],
+  codeWay:["Mai simplu: dacă ai un cod de acces de la un administrator, introdu-l pe pagina Administrare.","Easier: if you have an access code from an administrator, enter it on the Administration page."],toAdmin:["⚙ Pagina Administrare →","⚙ Administration page →"],
   helpLead:["Acum vezi doar rezultatele tale. Ca să vezi rezultatele tuturor participanților, adaugă o singură dată ID-ul tău în lista de administratori din consola Firebase. ID-ul tău de utilizator:","Right now you only see your own results. To see every participant's results, add your ID to the admin list in the Firebase console, once. Your user ID:"],
   steps:[["Apasă <b>Copiază ID-ul</b> de mai sus.","Deschide consola Firestore cu butonul de mai jos (sau: meniul din stânga → <b>Databases &amp; Storage → Firestore</b>).","Apasă <b>+ Start collection</b>. La <b>Collection ID</b> scrie <code>admins</code> → <b>Next</b>.","La <b>Document ID</b> lipește ID-ul copiat.","Adaugă un câmp: <b>Field</b> <code>role</code>, <b>Type</b> string, <b>Value</b> <code>admin</code> → <b>Save</b>.","Revino aici și apasă <b>Verifică din nou</b>. Apar participanții, mediile pe lecții, toate încercările și exportul CSV."],
          ["Click <b>Copy ID</b> above.","Open the Firestore console with the button below (or: left menu → <b>Databases &amp; Storage → Firestore</b>).","Click <b>+ Start collection</b>. For <b>Collection ID</b> type <code>admins</code> → <b>Next</b>.","For <b>Document ID</b> paste the copied ID.","Add one field: <b>Field</b> <code>role</code>, <b>Type</b> string, <b>Value</b> <code>admin</code> → <b>Save</b>.","Come back here and click <b>Check again</b>. Participants, lesson averages, every attempt and the CSV export appear."]],
@@ -167,6 +169,7 @@ async function checkAdmin(){
     const s2=await getDocs(collection(db,"results"));
     all=s2.docs.map(norm).sort((a,b)=>(b.d||0)-(a.d||0));
     $("#admin").hidden=false;$("#help").hidden=true;renderAdmin();
+    const top=document.querySelector(".top-actions");if(top&&!top.querySelector(".to-admin")){const a=document.createElement("a");a.className="go-btn to-admin";a.href="../admin/index.html";a.textContent=lang==="en"?"⚙ Users & online status":"⚙ Utilizatori și cine e online";top.appendChild(a)}
   }else{$("#help").hidden=false}
 }
 $("#recheck").onclick=()=>{if(me)checkAdmin().catch(e=>console.error(e))};

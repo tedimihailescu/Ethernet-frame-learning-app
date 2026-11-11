@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Zarul pachetului</title>
+<meta name="description" content="Mini-joc cu zar: duci un pachet de la Host A la Host B, răspunzând la întrebări din tema arătată de zar. / Dice mini-game.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/theme.css">
+<style>
+.page{max-width:900px;margin:0 auto;padding-block:20px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1{font:700 clamp(1.5rem,4vw,2.2rem) var(--head);margin:0 0 6px}
+.lead{color:var(--muted);margin:0 0 16px}
+.card{background:var(--surface);border:2px solid var(--text);border-radius:14px;padding:16px;min-width:0;margin-bottom:14px}
+.hud{display:flex;flex-wrap:wrap;gap:6px 18px;justify-content:space-between;font:600 .95rem var(--sans);margin:0 0 12px}
+.hud b{font:700 1.2rem var(--head);font-variant-numeric:tabular-nums}
+.board{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:4px}
+.sq{position:relative;aspect-ratio:1;border:1px solid var(--border);border-radius:7px;background:var(--surface2);display:grid;place-items:center;font:600 .68rem var(--mono);color:var(--muted);min-width:0;overflow:hidden}
+.sq.rt{background:#d6f0dc;color:#1f6b3a;border-color:#7cc596}
+.sq.ls{background:#fbd9d3;color:#9b2c1c;border-color:#e59a8c}
+.sq.end,.sq.start{background:var(--text);color:var(--surface);font-size:.62rem;text-align:center;line-height:1.1}
+.sq .ic{font-size:1rem}
+.tok{position:absolute;inset:0;display:grid;place-items:center;font-size:1.3rem;animation:hop .25s ease}
+@keyframes hop{50%{transform:translateY(-6px) scale(1.15)}}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.82rem;color:var(--muted);margin:10px 0 0}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-1px;border:1px solid var(--border)}
+.play{display:grid;grid-template-columns:150px minmax(0,1fr);gap:16px;align-items:start}
+.die{width:110px;height:110px;margin:0 auto;border-radius:18px;background:var(--surface);border:3px solid var(--text);display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);padding:14px;gap:4px;box-shadow:0 6px 0 var(--text)}
+.die.roll{animation:roll .7s ease}
+@keyframes roll{0%{transform:rotate(0) scale(1)}30%{transform:rotate(200deg) scale(.85)}70%{transform:rotate(330deg) scale(1.08)}100%{transform:rotate(360deg) scale(1)}}
+.pip{width:100%;height:100%;border-radius:50%;background:transparent}
+.pip.on{background:var(--text)}
+.cat{text-align:center;font:700 .9rem var(--head);margin:10px 0 0}
+.btn{border:2px solid var(--text);background:var(--accent);color:var(--accent-text);border-radius:10px;padding:11px 18px;font:700 1rem var(--sans);cursor:pointer;text-decoration:none;display:inline-flex}
+.btn.sec{background:var(--surface);color:var(--text)}
+.btn:disabled{opacity:.5;cursor:default}
+.center{text-align:center;margin-top:12px}
+.q{font:600 1.05rem var(--sans);margin:0 0 12px}
+.opts{display:grid;grid-template-columns:minmax(0,1fr);gap:8px}
+.opt{text-align:left;border:2px solid var(--text);background:var(--surface);color:var(--text);border-radius:10px;padding:10px 12px;font:600 .95rem var(--sans);cursor:pointer;overflow-wrap:anywhere}
+.opt:hover:not(:disabled){background:var(--surface2)}
+.opt.ok{background:var(--ok);border-color:var(--ok);color:#fff}.opt.no{background:var(--bad);border-color:var(--bad);color:#fff}
+.opt:disabled{cursor:default}
+.fb{min-height:2.6em;margin:10px 0 0;font-size:.94rem}
+.fb b.good{color:var(--ok)}.fb b.bad{color:var(--bad)}
+.idle{color:var(--muted)}
+.big{font:700 2.4rem var(--head);margin:4px 0}
+.row{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
+@media (max-width:620px){.play{grid-template-columns:minmax(0,1fr)}.board{grid-template-columns:repeat(6,minmax(0,1fr))}}
+@media (prefers-reduced-motion:reduce){.die.roll,.tok{animation:none}}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<header class="topbar" id="top"><div class="topbar-in">
+  <a class="brand" href="../index.html"><svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="var(--accent)"/><path d="M7 16h18M19 11l6 5-6 5" fill="none" stroke="var(--accent-text)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="16" r="2.6" fill="var(--accent-text)"/></svg><span data-t="brand"></span></a>
+  <nav class="nav"><a href="../index.html" data-t="home"></a><a href="../joc/index.html" data-t="games"></a></nav>
+  <div class="tools"><div class="seg" role="group" aria-label="Limba / Language"><button type="button" data-lang="ro">RO</button><button type="button" data-lang="en">EN</button></div><button type="button" class="icon-btn" id="theme">◐</button></div>
+</div></header>
+
+<main class="page">
+  <h1 data-t="title"></h1>
+  <p class="lead" data-t="lead"></p>
+
+  <section class="card">
+    <div class="hud"><span><span data-t="rolls"></span> <b id="rl"></b></span><span><span data-t="square"></span> <b id="pos"></b></span><span><span data-t="right"></span> <b id="ok">0</b></span></div>
+    <div class="board" id="board"></div>
+    <div class="legend" id="legend"></div>
+  </section>
+
+  <section class="card" id="playCard">
+    <div class="play">
+      <div><div class="die" id="die" aria-live="polite"></div><p class="cat" id="cat"></p><div class="center"><button type="button" class="btn" id="roll" data-t="roll"></button></div></div>
+      <div id="qbox"><p class="idle" id="idle"></p></div>
+    </div>
+  </section>
+
+  <section class="card" id="end" hidden>
+    <p class="big" id="endT"></p><p id="endS"></p><p id="endB" class="lead"></p>
+    <div class="row"><button type="button" class="btn" id="again" data-t="again"></button><a class="btn sec" href="../roata/index.html" data-t="wheel"></a><a class="btn sec" href="../rezultate/index.html" data-t="results"></a></div>
+  </section>
+</main>
+
+<script type="module" src="../assets/auth.js?v=5"></script>
+<script>
+(function(){
+"use strict";
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+let lang=store.get("cadru-lang")==="en"?"en":"ro";
+const L=(ro,en)=>lang==="en"?en:ro;
+const T=v=>Array.isArray(v)?v[lang==="en"?1:0]:v;
+const UI={brand:["Rețea pas cu pas","Network step by step"],home:["← Lecții","← Lessons"],games:["🎮 Jocuri","🎮 Games"],title:["🎲 Zarul pachetului","🎲 The packet die"],
+  lead:["Du pachetul de la Host A la Host B. Dai cu zarul: numărul arată și câte căsuțe poți avansa, și tema întrebării. Răspunzi corect, avansezi; greșești, rămâi pe loc. Ai 15 aruncări.","Carry the packet from Host A to Host B. Roll the die: the number sets both how far you can move and the question's topic. Answer right and you move; answer wrong and you stay. You have 15 rolls."],
+  rolls:["Aruncări","Rolls"],square:["Căsuța","Square"],right:["Corecte","Correct"],roll:["🎲 Dă cu zarul","🎲 Roll the die"],again:["↻ Joacă din nou","↻ Play again"],wheel:["🎡 Ce învăț azi?","🎡 What do I learn today?"],results:["★ Rezultate","★ Results"]};
+const MAX=15,GOAL=30,ROUTERS=[6,14,22],LOSS=[10,18,26];
+const CATS=[["Ethernet & ARP","Ethernet & ARP"],["IP & rutare","IP & routing"],["TCP, UDP & porturi","TCP, UDP & ports"],["DNS","DNS"],["Securitate","Security"],["Kubernetes & cloud","Kubernetes & cloud"]];
+// [question, [correct, wrong, wrong, wrong]]  (shuffled when shown)
+const Q=[
+ [[["Câți octeți are o adresă MAC?","How many bytes is a MAC address?"],["6","4","16","8"]],
+  [["Ce face ARP?","What does ARP do?"],[["Află MAC-ul pentru un IP din rețeaua locală","Finds the MAC for an IP on the local network"],["Află IP-ul unui nume","Finds a name's IP"],["Criptează cadrul","Encrypts the frame"],["Dă adrese IP","Hands out IP addresses"]]],
+  [["Ce verifică FCS-ul de la finalul cadrului?","What does the FCS at the end of the frame check?"],[["Dacă s-a stricat cadrul pe drum","Whether the frame got corrupted on the way"],["Adresa IP","The IP address"],["Portul TCP","The TCP port"],["TTL-ul","The TTL"]]],
+  [["Ce MAC destinație are un broadcast?","What destination MAC does a broadcast use?"],["ff:ff:ff:ff:ff:ff","00:00:00:00:00:00","01:00:5e:00:00:01","33:33:00:00:00:01"]],
+  [["Ce face un switch cu un cadru spre un MAC necunoscut?","What does a switch do with a frame for an unknown MAC?"],[["Îl trimite pe toate porturile (flood)","Floods it out every port"],["Îl aruncă","Drops it"],["Îl trimite doar la router","Sends it only to the router"],["Îl întoarce expeditorului","Returns it to the sender"]]],
+  [["Ce schimbă un router în cadru, la fiecare hop?","What does a router change in the frame at each hop?"],[["MAC-urile sursă și destinație","The source and destination MACs"],["IP-urile","The IPs"],["Porturile","The ports"],["Datele","The data"]]]],
+ [[["Ce rută câștigă pentru 10.1.2.3?","Which route wins for 10.1.2.3?"],["10.1.0.0/16","10.0.0.0/8","0.0.0.0/0",["Toate, pe rând","All, in turn"]]],
+  [["Ce înseamnă ruta 0.0.0.0/0?","What does the 0.0.0.0/0 route mean?"],[["Ruta implicită: tot ce nu se potrivește altundeva","The default route: anything not matched elsewhere"],["Nicio rută","No route"],["Broadcast","Broadcast"],["Calculatorul local","The local computer"]]],
+  [["Ce se întâmplă când TTL ajunge la 0?","What happens when TTL reaches 0?"],[["Pachetul e aruncat (și se trimite un ICMP)","The packet is dropped (and an ICMP is sent)"],["Crește la loc","It goes back up"],["Merge mai departe","It carries on"],["Devine broadcast","It becomes a broadcast"]]],
+  [["Câte adrese are un bloc /24?","How many addresses in a /24?"],["256","24","128","1024"]],
+  [["Care adresă e privată?","Which address is private?"],["192.168.1.10","8.8.8.8","203.0.113.5","1.1.1.1"]],
+  [["Ce protocol leagă între ele rețelele internetului (AS-urile)?","Which protocol connects the internet's networks (ASes)?"],["BGP","OSPF","ARP","DHCP"]]],
+ [[["Care e primul mesaj al unei conexiuni TCP?","What's the first message of a TCP connection?"],["SYN","ACK","FIN","RST"]],
+  [["Pe ce port ascultă HTTPS?","Which port does HTTPS listen on?"],["443","80","22","53"]],
+  [["Pe ce port ascultă SSH?","Which port does SSH listen on?"],["22","21","443","3389"]],
+  [["Ce nu face UDP, spre deosebire de TCP?","What doesn't UDP do, unlike TCP?"],[["Nu garantează livrarea și ordinea","It doesn't guarantee delivery and order"],["Nu are porturi","It has no ports"],["Nu merge pe IP","It doesn't run over IP"],["Nu poate trimite date","It can't send data"]]],
+  [["Ce identifică o conexiune TCP?","What identifies a TCP connection?"],[["IP-urile și porturile sursă/destinație","The source/destination IPs and ports"],["Doar MAC-ul","Only the MAC"],["Doar IP-ul destinație","Only the destination IP"],["Numele site-ului","The site's name"]]],
+  [["Ce flag închide politicos o conexiune TCP?","Which flag closes a TCP connection gracefully?"],["FIN","SYN","URG","PSH"]]],
+ [[["Ce înregistrare DNS dă adresa IPv4 a unui nume?","Which DNS record gives a name's IPv4 address?"],["A","AAAA","MX","NS"]],
+  [["Ce înregistrare arată serverul de e-mail?","Which record points to the mail server?"],["MX","CNAME","TXT","A"]],
+  [["Ce face resolverul DNS?","What does the DNS resolver do?"],[["Caută răspunsul în locul tău și îl ține în cache","Looks up the answer for you and caches it"],["Găzduiește site-ul","Hosts the site"],["Dă adrese IP","Hands out IP addresses"],["Criptează traficul","Encrypts traffic"]]],
+  [["Ce înseamnă TTL-ul unei înregistrări DNS?","What does a DNS record's TTL mean?"],[["Cât timp poate sta în cache","How long it may be cached"],["Câte routere traversează","How many routers it crosses"],["Prioritatea","Its priority"],["Mărimea","Its size"]]],
+  [["Pe ce port lucrează de obicei DNS?","Which port does DNS usually use?"],["53","25","443","123"]],
+  [["Ce e un CNAME?","What is a CNAME?"],[["Un alias spre alt nume","An alias for another name"],["O adresă IPv6","An IPv6 address"],["Un server de e-mail","A mail server"],["Un certificat","A certificate"]]]],
+ [[["Ce face NAT-ul de acasă?","What does home NAT do?"],[["Scoate mai multe adrese private pe internet printr-un IP public","Takes several private addresses online through one public IP"],["Criptează traficul","Encrypts traffic"],["Blochează virușii","Blocks viruses"],["Accelerează internetul","Speeds up the internet"]]],
+  [["Ce garantează certificatul unui site HTTPS?","What does an HTTPS site's certificate guarantee?"],[["Că vorbești cu site-ul adevărat","That you're talking to the real site"],["Că site-ul e rapid","That the site is fast"],["Că site-ul n-are bug-uri","That the site has no bugs"],["Că e gratuit","That it's free"]]],
+  [["Ce înseamnă mTLS?","What does mTLS mean?"],[["Ambele părți prezintă certificate","Both sides present certificates"],["TLS mai rapid","Faster TLS"],["TLS fără criptare","TLS without encryption"],["TLS doar pe mobil","TLS on mobile only"]]],
+  [["De ce nu blochezi ICMPv6 în firewall?","Why don't you block ICMPv6 in a firewall?"],[["Fără el nu merg NDP și Path MTU Discovery","Without it NDP and Path MTU Discovery break"],["E doar ping","It's only ping"],["E criptat","It's encrypted"],["Se poate bloca","It can be blocked"]]],
+  [["Ce oprește RPKI?","What does RPKI stop?"],[["Anunțuri BGP cu origine falsă","BGP announcements with a false origin"],["Spam-ul","Spam"],["Atacurile pe parole","Password attacks"],["Pachetele mari","Large packets"]]],
+  [["Ce e port forwarding-ul?","What is port forwarding?"],[["O regulă DNAT spre un dispozitiv intern","A DNAT rule to an internal device"],["Un cablu","A cable"],["Un tip de VLAN","A kind of VLAN"],["Criptarea porturilor","Port encryption"]]]],
+ [[["Ce adresă primește un Service de tip ClusterIP?","What address does a ClusterIP Service get?"],[["Un IP virtual, stabil","A stable virtual IP"],["IP-ul unui pod","A pod's IP"],["Un IP public","A public IP"],["Niciunul","None"]]],
+  [["Cine răspunde la întrebările DNS din cluster?","Who answers DNS queries in the cluster?"],["CoreDNS","kube-proxy","etcd","kubelet"]],
+  [["Ce face kube-proxy?","What does kube-proxy do?"],[["Scrie reguli care trimit traficul Service-ului la poduri","Writes rules sending Service traffic to pods"],["Pornește containere","Starts containers"],["Păstrează datele clusterului","Stores the cluster's data"],["Face DNS","Does DNS"]]],
+  [["După ce rutează un Ingress?","What does an Ingress route by?"],[["Host și cale HTTP","HTTP host and path"],["Adresa MAC","The MAC address"],["VLAN","VLAN"],["TTL","TTL"]]],
+  [["Ce e un sidecar?","What is a sidecar?"],[["Un container lângă aplicație, în același pod","A container next to the app, in the same pod"],["Un nod de rezervă","A spare node"],["Un tip de Service","A kind of Service"],["Un disc","A disk"]]],
+  [["Ce înseamnă p99 = 300 ms?","What does p99 = 300 ms mean?"],[["99% din cereri sunt mai rapide de 300 ms","99% of requests are faster than 300 ms"],["Media e 300 ms","The average is 300 ms"],["99 de servere","99 servers"],["Uptime 99%","99% uptime"]]]]
+];
+const PIPS={1:[4],2:[0,8],3:[0,4,8],4:[0,2,6,8],5:[0,2,4,6,8],6:[0,2,3,5,6,8]};
+const $=s=>document.querySelector(s);
+const R=n=>Math.floor(Math.random()*n),shuf=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=R(i+1);[a[i],a[j]]=[a[j],a[i]]}return a};
+let g=null;
+
+function newGame(){g={pos:0,rolls:0,ok:0,asked:0,face:null,used:{},busy:false,saved:false,over:false};$("#end").hidden=true;$("#playCard").hidden=false;$("#roll").disabled=false;$("#qbox").innerHTML=`<p class="idle" id="idle">${L("Apasă „Dă cu zarul”.","Press \"Roll the die\".")}</p>`;drawDie(1);$("#cat").textContent="";draw()}
+function drawDie(n){$("#die").innerHTML=[...Array(9)].map((_,i)=>`<i class="pip ${PIPS[n].includes(i)?"on":""}"></i>`).join("");$("#die").setAttribute("aria-label",L("Zarul arată ","The die shows ")+n)}
+function draw(){
+  $("#rl").textContent=g.rolls+" / "+MAX;$("#pos").textContent=g.pos+" / "+GOAL;$("#ok").textContent=g.ok;
+  let h="";for(let i=0;i<=GOAL;i++){const cls=i===0?"start":i===GOAL?"end":ROUTERS.includes(i)?"rt":LOSS.includes(i)?"ls":"";
+    const lab=i===0?"Host A":i===GOAL?"Host B":ROUTERS.includes(i)?'<span class="ic">⇄</span>':LOSS.includes(i)?'<span class="ic">✗</span>':i;
+    h+=`<div class="sq ${cls}">${lab}${g.pos===i?'<span class="tok">📦</span>':""}</div>`}
+  $("#board").innerHTML=h;
+  $("#legend").innerHTML=`<span><i style="background:#d6f0dc"></i>${L("router: +2 căsuțe","router: +2 squares")}</span><span><i style="background:#fbd9d3"></i>${L("pachet pierdut: −3 căsuțe","packet lost: −3 squares")}</span>`;
+}
+function roll(){
+  if(g.busy||g.over)return;g.busy=true;$("#roll").disabled=true;g.rolls++;
+  const n=R(6)+1;let k=0;$("#die").classList.remove("roll");void $("#die").offsetWidth;$("#die").classList.add("roll");
+  const iv=setInterval(()=>{drawDie(R(6)+1);if(++k>=7){clearInterval(iv);drawDie(n);g.face=n;$("#cat").textContent=n+" · "+T(CATS[n-1]);ask(n);draw()}},90);
+}
+function ask(n){
+  const bank=Q[n-1];g.used[n]=g.used[n]||[];if(g.used[n].length>=bank.length)g.used[n]=[];
+  let i;do{i=R(bank.length)}while(g.used[n].includes(i));g.used[n].push(i);
+  const [q,opts]=bank[i];const right=T(opts[0]);g.cur={right};
+  $("#qbox").innerHTML=`<p class="q">${T(q)}</p><div class="opts">${shuf(opts.map(T)).map(o=>`<button type="button" class="opt" data-v="${o.replace(/"/g,"&quot;")}">${o}</button>`).join("")}</div><p class="fb" id="fb"></p>`;
+}
+function answer(v){
+  if(!g.cur||g.cur.done)return;g.cur.done=true;g.asked++;const good=v===g.cur.right;
+  document.querySelectorAll(".opt").forEach(b=>{b.disabled=true;if(b.dataset.v===g.cur.right)b.classList.add("ok");else if(b.dataset.v===v)b.classList.add("no")});
+  if(!good){$("#fb").innerHTML=`<b class="bad">${L("Greșit, rămâi pe loc.","Wrong, you stay put.")}</b> ${L("Corect: ","Correct: ")}<b>${g.cur.right}</b>`;return next()}
+  g.ok++;const steps=g.face;$("#fb").innerHTML=`<b class="good">${L("Corect! Avansezi ","Correct! You move ")}${steps}.</b>`;
+  let s=0;const iv=setInterval(()=>{g.pos=Math.min(GOAL,g.pos+1);draw();if(++s>=steps||g.pos>=GOAL){clearInterval(iv);special()}},220);
+}
+function special(){
+  if(ROUTERS.includes(g.pos)){g.pos=Math.min(GOAL,g.pos+2);$("#fb").innerHTML+=` ${L("Router! TTL ok, mai sari 2 căsuțe.","Router! TTL ok, jump 2 more squares.")}`}
+  else if(LOSS.includes(g.pos)){g.pos=Math.max(0,g.pos-3);$("#fb").innerHTML+=` ${L("Pachet pierdut! Retransmisie: înapoi 3 căsuțe.","Packet lost! Retransmission: back 3 squares.")}`}
+  draw();next();
+}
+function next(){g.busy=false;if(g.pos>=GOAL||g.rolls>=MAX){g.over=true;setTimeout(endGame,900);return}$("#roll").disabled=false;$("#roll").focus({preventScroll:true})}
+function endGame(){
+  $("#end").hidden=false;$("#roll").disabled=true;
+  const won=g.pos>=GOAL;$("#endT").textContent=won?L("📦 Livrat!","📦 Delivered!"):L("⏱ Pachetul n-a ajuns","⏱ The packet didn't make it");
+  $("#endS").textContent=won?L(`Ai ajuns la Host B în ${g.rolls} aruncări, cu ${g.ok} răspunsuri corecte din ${g.asked}.`,`You reached Host B in ${g.rolls} rolls, with ${g.ok} correct answers out of ${g.asked}.`):L(`Ai ajuns la căsuța ${g.pos} din ${GOAL}, cu ${g.ok} răspunsuri corecte din ${g.asked}.`,`You reached square ${g.pos} of ${GOAL}, with ${g.ok} correct answers out of ${g.asked}.`);
+  const best=+(store.get("zar-best")||0);if(won&&(!best||g.rolls<best))store.set("zar-best",String(g.rolls));
+  $("#endB").textContent=won?(best&&g.rolls>=best?L("Recordul tău: "+best+" aruncări.","Your best: "+best+" rolls."):L("Record personal nou!","New personal best!")):(best?L("Recordul tău: "+best+" aruncări.","Your best: "+best+" rolls."):"");
+  if(!g.saved&&g.asked){g.saved=true;window.dispatchEvent(new CustomEvent("quiz:complete",{detail:{lesson:"zar",title:"Mini-joc: Zarul pachetului",score:g.ok,total:g.asked,answers:[]}}))}
+  $("#end").scrollIntoView({behavior:"smooth",block:"nearest"});
+}
+function render(){
+  document.documentElement.lang=lang;document.title=L("Zarul pachetului","The packet die");
+  document.querySelectorAll("[data-t]").forEach(e=>{if(UI[e.dataset.t])e.textContent=T(UI[e.dataset.t])});
+  document.querySelectorAll("[data-lang]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.lang===lang?"true":"false"));
+  if(g){draw();if(g.face)$("#cat").textContent=g.face+" · "+T(CATS[g.face-1]);const idle=$("#idle");if(idle)idle.textContent=L("Apasă „Dă cu zarul”.","Press \"Roll the die\".")}
+}
+$("#roll").onclick=roll;$("#again").onclick=newGame;
+$("#qbox").addEventListener("click",e=>{const b=e.target.closest(".opt");if(b&&!b.disabled)answer(b.dataset.v)});
+document.addEventListener("keydown",e=>{if(e.key===" "&&document.activeElement===$("#roll"))return;if((e.key==="r"||e.key==="R")&&!$("#roll").disabled&&!e.ctrlKey&&!e.metaKey)roll()});
+document.querySelectorAll("[data-lang]").forEach(b=>b.onclick=()=>{lang=b.dataset.lang;store.set("cadru-lang",lang);render()});
+const saved=store.get("cadru-theme");if(saved==="light"||saved==="dark")document.documentElement.dataset.theme=saved;
+$("#theme").onclick=()=>{const r=document.documentElement,d=r.dataset.theme?r.dataset.theme==="dark":matchMedia("(prefers-color-scheme: dark)").matches;const nt=d?"light":"dark";r.dataset.theme=nt;store.set("cadru-theme",nt)};
+newGame();render();
+})();
+</script>
+</body>
+</html>
