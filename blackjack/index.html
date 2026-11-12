@@ -117,11 +117,11 @@ h1{font:700 clamp(1.5rem,4vw,2.2rem) var(--head);margin:0 0 6px}
       <div><b id="sp">0</b><span data-t="sPush"></span></div>
       <div><b id="sb">0</b><span data-t="sBest"></span></div>
     </div>
-    <div class="row"><a class="btn sec" href="../joc/index.html" data-t="game"></a><a class="btn sec" href="../zar/index.html" data-t="dice"></a><a class="btn sec" href="../roata/index.html" data-t="wheel"></a></div>
+    <div class="row"><a class="btn sec" href="../joc/index.html" data-t="game"></a><a class="btn sec" href="../zar/index.html" data-t="dice"></a><a class="btn sec" href="../roata/index.html" data-t="wheel"></a><a class="btn sec" href="../ruleta/index.html" data-t="rul"></a></div>
   </section>
 </main>
 
-<script type="module" src="../assets/auth.js?v=5"></script>
+<script type="module" src="../assets/auth.js?v=6"></script>
 <script>
 (function(){
 "use strict";
@@ -138,7 +138,7 @@ const UI={brand:["Rețea pas cu pas","Network step by step"],home:["← Lecții"
   refill:["🔌 Repornește routerul (+100 jetoane)","🔌 Reboot the router (+100 chips)"],
   rules:["Reguli: dealerul trage până la 17 și stă pe 17. Blackjack (As + 10 din primele două cărți) plătește 3:2. „Dublez” = dublezi pariul, primești exact o carte. Taste: H încă una, S stau, D dublez, Enter împarte.","Rules: the dealer draws to 17 and stands on 17. Blackjack (Ace + 10 on the first two cards) pays 3:2. \"Double\" = double your bet, get exactly one card. Keys: H hit, S stand, D double, Enter deal."],
   sWon:["câștigate","won"],sLost:["pierdute","lost"],sPush:["egaluri","pushes"],sBest:["record jetoane","best chips"],
-  game:["🎮 Livrează pachetul","🎮 Deliver the packet"],dice:["🎲 Zarul pachetului","🎲 The packet die"],wheel:["🎡 Ce învăț azi?","🎡 What do I learn today?"]};
+  game:["🎮 Livrează pachetul","🎮 Deliver the packet"],dice:["🎲 Zarul pachetului","🎲 The packet die"],wheel:["🎡 Ce învăț azi?","🎡 What do I learn today?"],rul:["🎰 Ruleta","🎰 Roulette"]};
 
 // Dealer lines: [ro, en]. One is picked at random for each moment of the game.
 const LINES={

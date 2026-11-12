@@ -61,7 +61,7 @@
     <h1 data-t="h1"></h1>
     <p class="sub" data-t="sub"></p>
     <ul class="meta" id="meta"></ul>
-    <p class="hero-cta"><a class="btn primary" href="teste/index.html" data-t="ctaTests"></a> <a class="btn" href="roata/index.html" data-t="ctaWheel"></a> <a class="btn" href="joc/index.html" data-t="ctaGame"></a> <a class="btn" href="zar/index.html" data-t="ctaDice"></a> <a class="btn" href="blackjack/index.html" data-t="ctaBJ"></a> <a class="btn" href="rezultate/index.html" data-t="ctaResults"></a></p>
+    <p class="hero-cta"><a class="btn primary" href="teste/index.html" data-t="ctaTests"></a> <a class="btn" href="roata/index.html" data-t="ctaWheel"></a> <a class="btn" href="joc/index.html" data-t="ctaGame"></a> <a class="btn" href="zar/index.html" data-t="ctaDice"></a> <a class="btn" href="blackjack/index.html" data-t="ctaBJ"></a> <a class="btn" href="ruleta/index.html" data-t="ctaRul"></a> <a class="btn" href="rezultate/index.html" data-t="ctaResults"></a></p>
   </div>
   <ul class="how" id="how"></ul>
 </div></section>
@@ -91,7 +91,7 @@ const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},se
 let lang=store.get("cadru-lang")==="en"?"en":"ro";
 const T=v=>(v&&typeof v==="object"&&!Array.isArray(v))?v[lang]:v;
 const UI={
-  ctaTests:{ro:"✎ Testează-ți cunoștințele",en:"✎ Test your knowledge"},ctaResults:{ro:"★ Rezultatele mele",en:"★ My results"},ctaGame:{ro:"🎮 Livrează pachetul",en:"🎮 Deliver the packet"},ctaDice:{ro:"🎲 Zarul pachetului",en:"🎲 The packet die"},ctaBJ:{ro:"🃏 Blackjack",en:"🃏 Blackjack"},ctaWheel:{ro:"🎡 Ce învăț azi?",en:"🎡 What do I learn today?"},
+  ctaTests:{ro:"✎ Testează-ți cunoștințele",en:"✎ Test your knowledge"},ctaResults:{ro:"★ Rezultatele mele",en:"★ My results"},ctaGame:{ro:"🎮 Livrează pachetul",en:"🎮 Deliver the packet"},ctaDice:{ro:"🎲 Zarul pachetului",en:"🎲 The packet die"},ctaBJ:{ro:"🃏 Blackjack",en:"🃏 Blackjack"},ctaRul:{ro:"🎰 Ruleta punctelor",en:"🎰 Points roulette"},ctaWheel:{ro:"🎡 Ce învăț azi?",en:"🎡 What do I learn today?"},
   brand:{ro:"Rețea pas cu pas",en:"Network step by step"},navLessons:{ro:"Lecții",en:"Lessons"},navSoon:{ro:"În curând",en:"Coming soon"},
   eyebrow:{ro:"Lecții interactive · gratuite · RO / EN",en:"Interactive lessons · free · RO / EN"},
   h1:{ro:"Înțelege rețelele urmărind pachetele, pas cu pas",en:"Understand networks by following the packets, step by step"},
@@ -227,6 +227,6 @@ document.getElementById("theme").onclick=()=>{const r=document.documentElement,d
 render();
 })();
 </script>
-<script type="module" src="assets/auth.js?v=5"></script>
+<script type="module" src="assets/auth.js?v=6"></script>
 </body>
 </html>

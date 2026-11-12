@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ruleta punctelor</title>
+<meta name="description" content="Ruletă europeană jucată cu punctele câștigate la teste. / European roulette played with the points you earn from quizzes.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/theme.css">
+<style>
+.page{max-width:980px;margin:0 auto;padding-block:20px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1{font:700 clamp(1.5rem,4vw,2.2rem) var(--head);margin:0 0 6px}
+.lead{color:var(--muted);margin:0 0 16px}
+.card{background:var(--surface);border:2px solid var(--text);border-radius:14px;padding:16px;min-width:0;margin-bottom:14px}
+.hud{display:flex;flex-wrap:wrap;gap:6px 18px;justify-content:space-between;font:600 .95rem var(--sans);margin:0 0 12px}
+.hud b{font:700 1.25rem var(--head);font-variant-numeric:tabular-nums}
+.croup{display:grid;grid-template-columns:52px minmax(0,1fr);gap:12px;align-items:center;margin-bottom:14px}
+.face{width:52px;height:52px;border-radius:50%;background:var(--accent);border:2px solid var(--text);display:grid;place-items:center;font-size:1.7rem}
+.bubble{position:relative;background:var(--surface2);border:2px solid var(--text);border-radius:12px;padding:9px 12px;font:500 .96rem var(--sans);margin:0;overflow-wrap:anywhere}
+.bubble .who{display:block;font:700 .72rem var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.layout{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:16px;align-items:start}
+.wheelBox{position:relative;max-width:340px;margin:0 auto;width:100%}
+.wheelBox svg{display:block;width:100%;height:auto}
+#rot{transform-origin:150px 150px;transition:transform 5.2s cubic-bezier(.12,.6,.12,1)}
+.pointer{position:absolute;left:50%;top:-4px;transform:translateX(-50%);width:0;height:0;border-left:11px solid transparent;border-right:11px solid transparent;border-top:20px solid var(--accent);filter:drop-shadow(0 2px 0 var(--text))}
+.result{text-align:center;font:700 1.15rem var(--head);min-height:1.6em;margin:10px 0 0}
+.result .n{display:inline-grid;place-items:center;min-width:2.1em;height:2.1em;border-radius:50%;color:#fff;margin-right:6px;font-size:1.05rem;vertical-align:middle}
+.hist{display:flex;flex-wrap:wrap;gap:4px;justify-content:center;margin-top:8px}
+.hist span{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font:700 .72rem var(--mono);color:#fff}
+.r{background:#c0281b}.k{background:#151515}.g{background:#1d8a4f}
+.board{display:grid;grid-template-columns:1.1fr 1.1fr repeat(3,minmax(0,1fr));gap:3px;background:#1d6b45;padding:6px;border-radius:12px;border:2px solid var(--text)}
+.cell{position:relative;border:1px solid rgba(255,255,255,.55);border-radius:5px;color:#fff;font:700 .9rem var(--head);min-height:32px;display:grid;place-items:center;cursor:pointer;background:transparent;padding:0;user-select:none;-webkit-tap-highlight-color:transparent}
+.cell.r{background:#c0281b}.cell.k{background:#151515}.cell.g{background:#1d8a4f}
+.cell.out{font-size:.74rem;line-height:1.1;text-align:center;padding:2px}
+.cell:hover{outline:2px solid #ffe766;outline-offset:-2px}
+.cell.win{outline:3px solid #ffe766;outline-offset:-3px;animation:pulse .6s ease 3}
+@keyframes pulse{50%{filter:brightness(1.5)}}
+.cell .stk{position:absolute;right:-4px;top:-6px;min-width:22px;height:22px;padding:0 4px;border-radius:11px;background:#f5c400;color:#151515;border:2px solid #151515;font:700 .7rem var(--mono);display:grid;place-items:center;z-index:2;pointer-events:none}
+.board.locked .cell{cursor:default}
+.chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:12px 0 0}
+.chip{width:46px;height:46px;border-radius:50%;border:4px dashed #fff;outline:2px solid var(--text);font:700 .9rem var(--head);color:#fff;cursor:pointer;display:grid;place-items:center}
+.chip[aria-pressed="true"]{outline:4px solid var(--accent);transform:scale(1.1)}
+.chip:disabled{opacity:.35;cursor:default}
+.c1{background:#6b6b6b}.c2{background:#c0281b}.c5{background:#2457c5}.c10{background:#1d6b45}.c25{background:#151515}
+.btn{border:2px solid var(--text);background:var(--accent);color:var(--accent-text);border-radius:10px;padding:11px 16px;font:700 1rem var(--sans);cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+.btn.sec{background:var(--surface);color:var(--text)}
+.btn:disabled{opacity:.45;cursor:default}
+.row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.note{font-size:.85rem;color:var(--muted);margin:10px 0 0}
+.empty{border:2px dashed var(--text);border-radius:12px;padding:12px;margin:0 0 14px;background:var(--surface2)}
+@media (max-width:760px){.layout{grid-template-columns:minmax(0,1fr)}.wheelBox{max-width:280px}}
+@media (prefers-reduced-motion:reduce){#rot{transition-duration:.01s}.cell.win{animation:none}}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<header class="topbar" id="top"><div class="topbar-in">
+  <a class="brand" href="../index.html"><svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="var(--accent)"/><path d="M7 16h18M19 11l6 5-6 5" fill="none" stroke="var(--accent-text)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="16" r="2.6" fill="var(--accent-text)"/></svg><span data-t="brand"></span></a>
+  <nav class="nav"><a href="../index.html" data-t="home"></a><a href="../joc/index.html" data-t="games"></a></nav>
+  <div class="tools"><div class="seg" role="group" aria-label="Limba / Language"><button type="button" data-lang="ro">RO</button><button type="button" data-lang="en">EN</button></div><button type="button" class="icon-btn" id="theme">◐</button></div>
+</div></header>
+
+<main class="page">
+  <h1 data-t="title"></h1>
+  <p class="lead" data-t="lead"></p>
+
+  <p class="empty" id="noPts" hidden><span data-t="noPts"></span> <a href="../teste/index.html" data-t="toTests"></a></p>
+
+  <section class="card">
+    <div class="croup"><div class="face" id="face" aria-hidden="true">🎩</div><p class="bubble" aria-live="polite"><span class="who" data-t="who"></span><span id="line"></span></p></div>
+    <div class="hud"><span><span data-t="ptsL"></span> <b id="bal">…</b></span><span><span data-t="betL"></span> <b id="tot">0</b></span><span><span data-t="lastWin"></span> <b id="lw">–</b></span></div>
+    <div class="layout">
+      <div>
+        <div class="wheelBox"><div class="pointer" aria-hidden="true"></div><svg viewBox="0 0 300 300" id="wheel" role="img" aria-label="Ruletă"></svg></div>
+        <p class="result" id="res" aria-live="polite"></p>
+        <div class="hist" id="hist"></div>
+      </div>
+      <div>
+        <div class="board" id="board"></div>
+        <div class="chips" id="chips"></div>
+        <div class="row">
+          <button type="button" class="btn" id="spin" data-t="spin"></button>
+          <button type="button" class="btn sec" id="undo" data-t="undo"></button>
+          <button type="button" class="btn sec" id="clear" data-t="clear"></button>
+          <button type="button" class="btn sec" id="rebet" data-t="rebet"></button>
+        </div>
+        <p class="note" data-t="rules"></p>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="row" style="margin-top:0"><a class="btn sec" href="../teste/index.html" data-t="toTests"></a><a class="btn sec" href="../blackjack/index.html" data-t="bj"></a><a class="btn sec" href="../rezultate/index.html" data-t="results"></a></div>
+  </section>
+</main>
+
+<script type="module" src="../assets/auth.js?v=6"></script>
+<script type="module">
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+let lang=store.get("cadru-lang")==="en"?"en":"ro";
+const L=(ro,en)=>lang==="en"?en:ro;
+const T=v=>Array.isArray(v)?v[lang==="en"?1:0]:v;
+const $=s=>document.querySelector(s);
+const UI={brand:["Rețea pas cu pas","Network step by step"],home:["← Lecții","← Lessons"],games:["🎮 Jocuri","🎮 Games"],
+  title:["🎰 Ruleta punctelor","🎰 Points roulette"],
+  lead:["Ruletă europeană adevărată (0–36), jucată cu punctele tale. Fiecare test terminat cu peste 80% îți dă 🪙 5 puncte. Alegi un jeton, pui pe masă, apeși „Învârte”.","Real European roulette (0–36), played with your points. Every quiz finished with over 80% gives you 🪙 5 points. Pick a chip, place it on the table, press \"Spin\"."],
+  noPts:["N-ai încă puncte. Termină un test cu peste 80% și primești 🪙 5 puncte.","You don't have any points yet. Finish a quiz with over 80% and you get 🪙 5 points."],toTests:["✎ Mergi la teste →","✎ Go to the quizzes →"],
+  who:["Crupierul Pachet","Croupier Packet"],ptsL:["🪙 Puncte","🪙 Points"],betL:["Pe masă","On the table"],lastWin:["Ultimul câștig","Last win"],
+  spin:["🎰 Învârte","🎰 Spin"],undo:["↶ Anulează","↶ Undo"],clear:["✕ Golește masa","✕ Clear table"],rebet:["↻ Același pariu","↻ Same bet"],
+  rules:["Plăți: număr exact 35:1 · tuzină sau coloană 2:1 · roșu/negru, par/impar, 1–18/19–36 1:1. Pe 0 pierd toate pariurile în afară de cel pe 0. Câștigul se adaugă la punctele tale.","Payouts: single number 35:1 · dozen or column 2:1 · red/black, even/odd, 1–18/19–36 1:1. On 0 every bet loses except a bet on 0. Winnings are added to your points."],
+  bj:["🃏 Blackjack","🃏 Blackjack"],results:["★ Rezultate","★ Results"]};
+
+const LINES={
+ hello:[["Faceți jocurile! Mingea e ca un pachet UDP: nu știe nici ea unde ajunge.","Place your bets! The ball is like a UDP packet: even it doesn't know where it's going."],["Bine ai venit. Aici punctele câștigate cu greu la teste se pierd ușor. Ca în viață.","Welcome. Points earned the hard way in quizzes are lost the easy way here. Just like life."]],
+ bet:[["Pariu înregistrat. Fără rollback.","Bet logged. No rollback."],["Interesant. Ai calculat subnetul, sau mergi pe instinct?","Interesting. Did you calculate the subnet, or going on instinct?"],["Jeton pus. Îl țin în cache până se oprește roata.","Chip placed. I'll cache it until the wheel stops."]],
+ spin:[["Rien ne va plus! Pachetul e în tranzit…","No more bets! Packet in transit…"],["Se învârte… ca un spinner de loading pe Wi-Fi-ul de la hotel.","Spinning… like a loading spinner on hotel Wi-Fi."],["Round-robin în desfășurare…","Round-robin in progress…"]],
+ win:[["Câștig! Felicitări, îți trimit punctele cu prioritate QoS.","A win! Congrats, sending your points with QoS priority."],["Ai nimerit! Acum chiar arăți ca cineva care a citit lecția despre probabilitate.","You hit it! You almost look like someone who read a lesson on probability."]],
+ big:[["NUMĂR EXACT! 35 la 1! Sun la NOC, cred că am un incident.","STRAIGHT UP! 35 to 1! Calling the NOC, I think we have an incident."]],
+ lose:[["Mingea a făcut alt traseu. BGP, ce să-i faci.","The ball took another route. BGP, what can you do."],["Nimic de data asta. Punctele tale au fost puse la /dev/null.","Nothing this time. Your points went to /dev/null."],["Pierdut. Dar punctele se refac: un test cu peste 80% și ești înapoi online.","Lost. But points come back: one quiz over 80% and you're back online."]],
+ zero:[["Zero! Ruta implicită a casei. Scuze, e în RFC.","Zero! The house's default route. Sorry, it's in the RFC."]],
+ broke:[["Ai rămas fără puncte. Mergi la teste și revino cu un pachet plin.","Out of points. Go take a quiz and come back with a full packet."]],
+ noBet:[["Masa e goală. Nici eu nu rutez pachete fără destinație.","The table's empty. I don't route packets without a destination either."]],
+ tooMuch:[["N-ai destule puncte pentru jetonul ăsta. Încearcă unul mai mic.","Not enough points for that chip. Try a smaller one."]]
+};
+let cur=null;const lastI={};
+function say(k){const a=LINES[k];let i=Math.floor(Math.random()*a.length);if(a.length>1&&i===lastI[k])i=(i+1)%a.length;lastI[k]=i;cur=[k,i];$("#line").textContent=T(a[i]);
+  $("#face").textContent={win:"🥲",big:"😱",lose:"😏",zero:"😎",broke:"🫠"}[k]||"🎩"}
+
+// European wheel order, red numbers.
+const ORDER=[0,32,15,19,4,21,2,25,17,34,6,27,13,36,11,30,8,23,10,5,24,16,33,1,20,14,31,9,22,18,29,7,28,12,35,3,26];
+const RED=new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
+const col=n=>n===0?"g":RED.has(n)?"r":"k";
+// Bets: id → {label, test(n), pay}
+const BETS={};
+for(let n=0;n<=36;n++)BETS["n"+n]={lab:String(n),test:x=>x===n,pay:35};
+const out=(id,ro,en,test,pay)=>BETS[id]={lab:[ro,en],test,pay};
+out("low","1–18","1–18",x=>x>=1&&x<=18,1);out("high","19–36","19–36",x=>x>=19,1);
+out("even","Par","Even",x=>x>0&&x%2===0,1);out("odd","Impar","Odd",x=>x%2===1,1);
+out("red","◆ Roșu","◆ Red",x=>RED.has(x),1);out("black","◆ Negru","◆ Black",x=>x>0&&!RED.has(x),1);
+out("d1","1–12","1–12",x=>x>=1&&x<=12,2);out("d2","13–24","13–24",x=>x>=13&&x<=24,2);out("d3","25–36","25–36",x=>x>=25,2);
+out("c1","2:1","2:1",x=>x>0&&x%3===1,2);out("c2","2:1","2:1",x=>x>0&&x%3===2,2);out("c3","2:1","2:1",x=>x>0&&x%3===0,2);
+
+// ---- state ----
+let bal=null,bets={},stack=[],lastBets=null,spinning=false,rot=0,hist=[],chip=1,ctx=null;
+let net=0;
+const total=()=>Object.values(bets).reduce((a,b)=>a+b,0);
+
+// ---- wheel SVG ----
+function buildWheel(){
+  const s=360/37,R=140,ri=92,c=150;let h=`<circle cx="150" cy="150" r="148" fill="#5a3a1a" stroke="var(--text)" stroke-width="2"/><g id="rot">`;
+  const P=(r,a)=>[c+r*Math.sin(a*Math.PI/180),c-r*Math.cos(a*Math.PI/180)];
+  ORDER.forEach((n,i)=>{const a0=i*s-s/2,a1=i*s+s/2,[x0,y0]=P(R,a0),[x1,y1]=P(R,a1),[x2,y2]=P(ri,a1),[x3,y3]=P(ri,a0);
+    const fill=n===0?"#1d8a4f":RED.has(n)?"#c0281b":"#151515";
+    h+=`<path d="M${x0} ${y0}A${R} ${R} 0 0 1 ${x1} ${y1}L${x2} ${y2}A${ri} ${ri} 0 0 0 ${x3} ${y3}Z" fill="${fill}" stroke="#d9b45a" stroke-width=".8"/>`;
+    const [tx,ty]=P(124,i*s);h+=`<text x="${tx}" y="${ty}" fill="#fff" font-size="10" font-weight="700" font-family="Space Grotesk,sans-serif" text-anchor="middle" dominant-baseline="central" transform="rotate(${i*s} ${tx} ${ty})">${n}</text>`});
+  h+=`<circle cx="150" cy="150" r="${ri}" fill="#2c5e3f" stroke="#d9b45a" stroke-width="2"/><circle cx="150" cy="150" r="56" fill="#3b7a52"/>`;
+  for(let k=0;k<8;k++){const [x,y]=P(70,k*45);h+=`<line x1="150" y1="150" x2="${x}" y2="${y}" stroke="#d9b45a" stroke-width="5" stroke-linecap="round"/>`}
+  h+=`<circle cx="150" cy="150" r="16" fill="#d9b45a" stroke="#151515" stroke-width="2"/></g><circle id="ball" cx="150" cy="16" r="6" fill="#fff" stroke="#151515" stroke-width="1.5" opacity="0"/>`;
+  $("#wheel").innerHTML=h;
+}
+
+// ---- board ----
+function buildBoard(){
+  let h=`<div style="grid-column:1/3"></div><button type="button" class="cell g" data-b="n0" style="grid-column:3/6">0</button>`;
+  const evens=["low","even","red","black","odd","high"];
+  for(let r=0;r<12;r++){
+    const row=r+2;
+    if(r%2===0)h+=`<button type="button" class="cell out ${evens[r/2]==="red"?"r":evens[r/2]==="black"?"k":""}" data-b="${evens[r/2]}" style="grid-column:1;grid-row:${row}/span 2"></button>`;
+    if(r%4===0)h+=`<button type="button" class="cell out" data-b="d${r/4+1}" style="grid-column:2;grid-row:${row}/span 4"></button>`;
+    for(let c=1;c<=3;c++){const n=r*3+c;h+=`<button type="button" class="cell ${col(n)}" data-b="n${n}" style="grid-column:${c+2};grid-row:${row}">${n}</button>`}
+  }
+  h+=`<div style="grid-column:1/3;grid-row:14"></div>`;for(let c=1;c<=3;c++)h+=`<button type="button" class="cell out" data-b="c${c}" style="grid-column:${c+2};grid-row:14"></button>`;
+  $("#board").innerHTML=h;labels();
+}
+function labels(){document.querySelectorAll(".cell.out").forEach(b=>{b.firstChild&&b.firstChild.nodeType===3?b.firstChild.nodeValue=T(BETS[b.dataset.b].lab):b.prepend(document.createTextNode(T(BETS[b.dataset.b].lab)))});
+  document.querySelectorAll(".cell").forEach(b=>b.setAttribute("aria-label",(T(BETS[b.dataset.b].lab))+(bets[b.dataset.b]?" · "+bets[b.dataset.b]:"")))}
+function paintBets(){document.querySelectorAll(".cell").forEach(b=>{let s=b.querySelector(".stk");const v=bets[b.dataset.b];
+  if(v){if(!s){s=document.createElement("span");s.className="stk";b.appendChild(s)}s.textContent=v}else if(s)s.remove()});labels();paint()}
+function paint(){
+  const free=bal===null?0:bal-total();
+  $("#bal").textContent=bal===null?"…":free;$("#tot").textContent=total();
+  $("#spin").disabled=spinning||!total();$("#undo").disabled=spinning||!stack.length;$("#clear").disabled=spinning||!total();
+  $("#rebet").disabled=spinning||!lastBets||Object.values(lastBets).reduce((a,b)=>a+b,0)>free+total()||!!total();
+  $("#board").classList.toggle("locked",spinning);
+  document.querySelectorAll(".chip").forEach(c=>{c.setAttribute("aria-pressed",+c.dataset.c===chip?"true":"false");c.disabled=+c.dataset.c>Math.max(free,0)&&!spinning});
+  $("#noPts").hidden=!(bal!==null&&bal<=0&&!total());
+  $("#hist").innerHTML=hist.map(n=>`<span class="${col(n)}">${n}</span>`).join("");
+}
+function buildChips(){$("#chips").innerHTML=[1,2,5,10,25].map(v=>`<button type="button" class="chip c${v}" data-c="${v}">${v}</button>`).join("")}
+
+function place(id){
+  if(spinning||bal===null)return;const free=bal-total();
+  if(free<=0){say(bal<=0?"broke":"tooMuch");return}
+  const v=Math.min(chip,free);bets[id]=(bets[id]||0)+v;stack.push([id,v]);paintBets();if(Math.random()<.35)say("bet");
+}
+function undo(){const s=stack.pop();if(!s)return;bets[s[0]]-=s[1];if(bets[s[0]]<=0)delete bets[s[0]];paintBets()}
+function clearT(){bets={};stack=[];document.querySelectorAll(".cell.win").forEach(c=>c.classList.remove("win"));paintBets()}
+function rebet(){if(!lastBets)return;bets={...lastBets};stack=Object.entries(bets);paintBets()}
+
+function spin(){
+  if(spinning)return;const bet=total();if(!bet){say("noBet");return}
+  spinning=true;lastBets={...bets};document.querySelectorAll(".cell.win").forEach(c=>c.classList.remove("win"));
+  $("#res").textContent="";$("#ball").setAttribute("opacity","0");say("spin");paint();
+  const buf=new Uint32Array(1);crypto.getRandomValues(buf);const n=buf[0]%37,i=ORDER.indexOf(n),s=360/37;
+  // bring pocket i to the pointer at the top
+  const target=-(i*s)+(Math.random()-.5)*s*.6;let r=rot-(rot%360)+360*6+((target%360)+360)%360;if(r-rot<360*5)r+=360;rot=r;
+  $("#rot").style.transform=`rotate(${rot}deg)`;
+  setTimeout(()=>settle(n,bet),matchMedia("(prefers-reduced-motion: reduce)").matches?200:5400);
+}
+async function settle(n,bet){
+  let won=0,straight=false;
+  for(const [id,v] of Object.entries(bets)){if(BETS[id].test(n)){won+=v*(BETS[id].pay+1);if(BETS[id].pay===35)straight=true}}
+  const delta=won-bet;bal=Math.max(0,bal+delta);
+  hist.unshift(n);hist=hist.slice(0,12);
+  $("#ball").setAttribute("opacity","1");
+  $("#res").innerHTML=`<span class="n ${col(n)}">${n}</span>${won?L(`Câștigi ${won} (net ${delta>=0?"+":""}${delta})`,`You win ${won} (net ${delta>=0?"+":""}${delta})`):L(`Pierzi ${bet}`,`You lose ${bet}`)}`;
+  $("#lw").textContent=won?"+"+won:"0";
+  document.querySelectorAll(".cell").forEach(c=>{if(BETS[c.dataset.b].test(n))c.classList.add("win")});
+  say(straight?"big":won?"win":n===0?"zero":"lose");
+  bets={};stack=[];spinning=false;paintBets();
+  if(bal<=0)setTimeout(()=>say("broke"),2200);
+  await saveDelta(delta);
+}
+async function saveDelta(delta){
+  if(!delta)return;
+  if(!ctx){store.set("ruleta-demo",String(bal));return}
+  try{await ctx.setDoc(ctx.doc(ctx.db,"users",ctx.uid),{roulette:ctx.increment(delta)},{merge:true})}catch(e){console.error(e)}
+  window.dispatchEvent(new CustomEvent("points:changed",{detail:{total:bal}}));
+}
+
+function render(){
+  document.documentElement.lang=lang;document.title=L("Ruleta punctelor","Points roulette");
+  document.querySelectorAll("[data-t]").forEach(e=>{if(UI[e.dataset.t])e.textContent=T(UI[e.dataset.t])});
+  document.querySelectorAll("[data-lang]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.lang===lang?"true":"false"));
+  if(cur)$("#line").textContent=T(LINES[cur[0]][cur[1]]);labels();
+}
+
+buildWheel();buildBoard();buildChips();render();say("hello");paint();
+$("#board").addEventListener("click",e=>{const b=e.target.closest(".cell");if(b)place(b.dataset.b)});
+$("#chips").addEventListener("click",e=>{const b=e.target.closest(".chip");if(b&&!b.disabled){chip=+b.dataset.c;paint()}});
+$("#spin").onclick=spin;$("#undo").onclick=undo;$("#clear").onclick=clearT;$("#rebet").onclick=rebet;
+document.querySelectorAll("[data-lang]").forEach(b=>b.onclick=()=>{lang=b.dataset.lang;store.set("cadru-lang",lang);render()});
+const saved=store.get("cadru-theme");if(saved==="light"||saved==="dark")document.documentElement.dataset.theme=saved;
+$("#theme").onclick=()=>{const r=document.documentElement,d=r.dataset.theme?r.dataset.theme==="dark":matchMedia("(prefers-color-scheme: dark)").matches;const nt=d?"light":"dark";r.dataset.theme=nt;store.set("cadru-theme",nt)};
+
+// Points come from Firestore when signed in; opened as a local file it runs in demo mode with 50 points.
+if(location.protocol==="file:"||window.RULETA_DEMO){bal=+(store.get("ruleta-demo")||50);paint()}
+else{
+  const [{auth,db},{onAuthStateChanged},fs,pts]=await Promise.all([import("../assets/firebase.js?v=5"),import("https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js"),import("https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js"),import("../assets/points.js?v=1")]);
+  onAuthStateChanged(auth,async user=>{if(!user)return;
+    ctx={db,uid:user.uid,doc:fs.doc,setDoc:fs.setDoc,increment:fs.increment};
+    try{bal=(await pts.balance(db,user.uid,fs)).total}catch(e){console.error(e);bal=0}
+    paint();if(bal<=0)say("broke")});
+}
+</script>
+</body>
+</html>

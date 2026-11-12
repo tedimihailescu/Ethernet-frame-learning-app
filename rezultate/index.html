@@ -40,6 +40,7 @@ td.n{font-variant-numeric:tabular-nums;white-space:nowrap}
 .uid-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .uid-row code{user-select:all;padding:6px 10px;font-size:.95rem}
 .go-btn{display:inline-flex;padding:9px 14px;border-radius:8px;background:var(--accent);color:var(--accent-text);font:700 .9rem var(--sans);text-decoration:none}
+.pts{background:var(--accent);color:var(--accent-text);border:2px solid var(--text);border-radius:12px;padding:10px 14px;font:600 .95rem var(--sans);margin:0 0 12px}.pts b{font:700 1.3rem var(--head)}.pts a{color:inherit;font-weight:700}
 .top-actions{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px}
 .btn-sm{border:1px solid var(--border);background:var(--surface2);color:var(--text);border-radius:7px;padding:6px 10px;font:600 .82rem var(--sans);cursor:pointer}
 @media (max-width:720px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
@@ -80,11 +81,13 @@ td.n{font-variant-numeric:tabular-nums;white-space:nowrap}
   </section>
 </main>
 
-<script type="module" src="../assets/auth.js?v=5"></script>
+<script type="module" src="../assets/auth.js?v=6"></script>
 <script type="module">
 import { app, auth, db } from "../assets/firebase.js?v=5";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import { collection, query, where, getDocs, getDoc, doc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { qualifies, PER_TEST } from "../assets/points.js?v=1";
+let rouletteNet=0;
 
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
 let lang=store.get("cadru-lang")==="en"?"en":"ro";
@@ -127,12 +130,14 @@ function render(){
 }
 function renderMine(){
   if(!me)return;
-  if(!mine.length){$("#mineBody").innerHTML=`<p class="empty">${T("noMine")}</p>`;return}
+  const nOk=mine.filter(qualifies).length,earned=nOk*PER_TEST,tot=Math.max(0,earned+rouletteNet),en=lang==="en";
+  const ptsBox=`<p class="pts">🪙 <b>${tot}</b> ${en?"points":"puncte"} · ${en?`${nOk} quizzes over 80% × ${PER_TEST} = ${earned}`:`${nOk} teste peste 80% × ${PER_TEST} = ${earned}`}${rouletteNet?` · ${en?"roulette":"ruletă"} ${rouletteNet>0?"+":""}${rouletteNet}`:""} · <a href="../ruleta/index.html">${en?"🎰 Play roulette →":"🎰 Joacă la ruletă →"}</a></p>`;
+  if(!mine.length){$("#mineBody").innerHTML=ptsBox+`<p class="empty">${T("noMine")}</p>`;return}
   const by={};mine.forEach(r=>{(by[r.lesson]=by[r.lesson]||[]).push(r)});
   let h=`<div class="scroll"><table><thead><tr><th>${T("lesson")}</th><th>${T("best")}</th><th>${T("attempts")}</th><th>${T("last")}</th></tr></thead><tbody>`;
   Object.values(by).sort((a,b)=>b[0].d-a[0].d).forEach(list=>{const best=list.reduce((m,r)=>Math.max(m,pct(r.score,r.total)),0);const lastR=list[0];
     h+=`<tr><td><a href="${lhref(lastR.lesson)}">${esc(lastR.title)}</a></td><td>${bar(best)}</td><td class="n">${list.length}</td><td class="n">${lastR.score}/${lastR.total} · ${fmt(lastR.d)}</td></tr>`});
-  $("#mineBody").innerHTML=h+`</tbody></table></div>`;
+  $("#mineBody").innerHTML=ptsBox+h+`</tbody></table></div>`;
 }
 function renderAdmin(){
   const people={},lessons={};
@@ -177,6 +182,7 @@ onAuthStateChanged(auth,async user=>{
   if(!user)return;me=user;render();
   try{
     const snap=await getDocs(query(collection(db,"results"),where("uid","==",user.uid)));
+    try{const u=await getDoc(doc(db,"users",user.uid));if(u.exists()&&typeof u.data().roulette==="number")rouletteNet=u.data().roulette}catch(e){}
     mine=snap.docs.map(norm).sort((a,b)=>(b.d||0)-(a.d||0));renderMine();
     await checkAdmin();
   }catch(e){console.error(e);$("#mineBody").innerHTML=`<p class="empty">${T("err")}</p>`}

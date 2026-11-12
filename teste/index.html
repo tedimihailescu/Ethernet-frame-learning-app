@@ -49,12 +49,12 @@ h2.grp{font:700 1.05rem var(--head);margin:22px 0 10px}
   <div id="list"></div>
 </main>
 
-<script type="module" src="../assets/auth.js?v=5"></script>
+<script type="module" src="../assets/auth.js?v=6"></script>
 <script type="module">
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
 let lang=store.get("cadru-lang")==="en"?"en":"ro";
 const UI={brand:["Rețea pas cu pas","Network step by step"],home:["← Lecții","← Lessons"],title:["Teste","Quizzes"],
-  lead:["Alege un test. Fiecare deschide lecția direct la „Test final”; după ce răspunzi la toate întrebările, scorul se salvează automat. Poți reface un test oricând.","Pick a quiz. Each one opens the lesson straight at the \"Final quiz\"; once you answer every question the score is saved automatically. You can retake a quiz any time."],
+  lead:["Alege un test. Fiecare deschide lecția direct la „Test final”; după ce răspunzi la toate întrebările, scorul se salvează automat. Poți reface un test oricând. Fiecare test terminat cu peste 80% îți dă 🪙 5 puncte, pe care le poți juca la 🎰 Ruleta punctelor.","Pick a quiz. Each one opens the lesson straight at the \"Final quiz\"; once you answer every question the score is saved automatically. You can retake a quiz any time. Every quiz finished with over 80% gives you 🪙 5 points, which you can play at the 🎰 Points roulette."],
   start:["Începe testul →","Start the quiz →"],again:["Refă testul →","Retake the quiz →"],best:["Cel mai bun","Best"],tries:["încercări","attempts"],none:["Încă neîncercat","Not taken yet"],
   done:["teste încercate","quizzes taken"],avg:["media celor mai bune scoruri","average of best scores"],total:["teste disponibile","quizzes available"],
   g1:["Rețele: bazele","Networking basics"],g2:["Internet și web","Internet and web"],g3:["Kubernetes și operare","Kubernetes and operations"],g4:["Aplicații în producție","Production apps"],
