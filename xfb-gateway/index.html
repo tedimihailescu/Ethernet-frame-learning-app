@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>XFB Gateway</title>
+<meta name="description" content="Lecție interactivă: un flux XFB spre un partener extern: Gateway în DMZ, store-and-forward, reguli de rutare, PGP, SFTP, reîncercări, SecureTransport, Sentinel și definirea centrală a fluxului. / Interactive lesson: an XFB flow to an external partner.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<script>
+(function(){
+const SZ={ro:"3 MB · extrase de cont (camt.053)",en:"3 MB · account statements (camt.053)"};
+const G1={fname:"STMT_20261112.xml",size:SZ,from:"CFT CORE",to:{ro:"BANCA-P (partener extern)",en:"BANCA-P (external partner)"},idf:"STMT",proto:{ro:"PeSIT + TLS (rețea internă)",en:"PeSIT + TLS (internal network)"},state:{ro:"primit pe Gateway și scris pe disc",en:"received on the Gateway and written to disk"}};
+const G2={...G1,rule:{ro:"IDF=STMT + destinație BANCA-P → regula „extrase-banca-p”",en:"IDF=STMT + destination BANCA-P → rule \"statements-banca-p\""},state:{ro:"în coada de ieșire spre BANCA-P",en:"in the outbound queue for BANCA-P"}};
+delete G2.proto;
+const G3={...G2,fname:"BP_STMT_20261112_001.xml.pgp",sec:{ro:"PGP: criptat cu cheia publică BANCA-P, semnat cu cheia noastră",en:"PGP: encrypted with BANCA-P's public key, signed with our key"},state:{ro:"pregătit pentru partener",en:"ready for the partner"}};
+const G4={...G3,proto:{ro:"SFTP (SSH) · sftp.banca-p.example:22",en:"SFTP (SSH) · sftp.banca-p.example:22"},sec:{ro:"cheia serverului verificată; login cu cheie SSH; conținut PGP",en:"server host key checked; login with an SSH key; PGP content"},state:{ro:"încarcă în /inbox ca .part, apoi redenumește",en:"uploads to /inbox as .part, then renames"}};
+const G5={...G4,state:{ro:"în așteptare · reîncercarea 3 din 10, la 15 minute",en:"waiting · retry 3 of 10, every 15 minutes"},info:{ro:"partenerul nu răspunde; fișierul stă în siguranță pe Gateway",en:"the partner doesn't answer; the file stays safe on the Gateway"}};
+const G6={...G4,state:{ro:"livrat · partenerul a pus BP_STMT_20261112_001.ack în /outbox",en:"delivered · the partner put BP_STMT_20261112_001.ack in /outbox"}};
+const G7={fname:"BP_PAYIN_20261112.xml.pgp",size:{ro:"1 MB · plăți primite",en:"1 MB · incoming payments"},from:"BANCA-P",to:"CFT CORE",idf:"PAYIN",proto:{ro:"SFTP: partenerul încarcă pe SecureTransport → Gateway → PeSIT intern",en:"SFTP: the partner uploads to SecureTransport → Gateway → internal PeSIT"},sec:{ro:"PGP decriptat, semnătura BANCA-P verificată",en:"PGP decrypted, BANCA-P's signature verified"},state:{ro:"livrat la CFT CORE ca BP_PAYIN_20261112.xml",en:"delivered to CFT CORE as BP_PAYIN_20261112.xml"}};
+const G8={fname:"STMT_20261112.xml",idf:"STMT",from:"CFT CORE",to:"BANCA-P",track:{ro:"un singur ID de ciclu leagă cele două etape: CFT → Gateway și Gateway → BANCA-P",en:"one cycle ID ties both legs together: CFT → Gateway and Gateway → BANCA-P"},state:{ro:"un rând în Sentinel: „STMT spre BANCA-P: livrat 02:14, ACK 02:31”",en:"one row in Sentinel: \"STMT to BANCA-P: delivered 02:14, ACK 02:31\""}};
+
+window.LESSON={
+docTitle:{ro:"XFB Gateway",en:"XFB Gateway"},
+eyebrow:{ro:"Lecție interactivă · Transfer de fișiere",en:"Interactive lesson · File transfer"},
+title:{ro:"XFB Gateway: fișierul pleacă la un partener extern",en:"XFB Gateway: the file goes to an external partner"},
+sub:{ro:"Extrasele de cont trebuie trimise în fiecare noapte unei bănci partenere, prin internet, iar plățile ei trebuie primite înapoi. Serverele interne nu au voie să vorbească direct cu internetul. Urmărim fluxul prin Gateway-ul XFB din DMZ: store-and-forward, regula de rutare, criptare PGP, SFTP spre partener, reîncercări, primirea fișierelor prin SecureTransport, urmărirea cap-coadă în Sentinel și definirea fluxului într-un singur loc.",en:"Account statements must be sent every night to a partner bank, over the internet, and its payments must come back. Internal servers aren't allowed to talk to the internet directly. We follow the flow through the XFB Gateway in the DMZ: store-and-forward, the routing rule, PGP encryption, SFTP to the partner, retries, receiving files through SecureTransport, end-to-end tracking in Sentinel and defining the flow in one place."},
+meta:[{ro:"≈ 25 minute",en:"≈ 25 minutes"},{ro:"11 pași",en:"11 steps"},{ro:"8 întrebări",en:"8 questions"},{ro:"Intermediar",en:"Intermediate"}],
+goals:[{ro:"De ce fișierele spre exterior trec printr-un Gateway în DMZ",en:"Why files to the outside go through a Gateway in the DMZ"},{ro:"Store-and-forward și regulile de rutare",en:"Store-and-forward and routing rules"},{ro:"PGP peste SFTP: cine criptează, cine verifică",en:"PGP over SFTP: who encrypts, who verifies"},{ro:"Reîncercări, confirmarea partenerului și urmărirea cap-coadă în Sentinel",en:"Retries, the partner's confirmation and end-to-end tracking in Sentinel"}],
+foot:{ro:"Nume de bănci, servere și fișiere fictive. Începe cu lecția „XFB / Transfer CFT” dacă nu ai făcut-o.",en:"Fictional bank, server and file names. Start with the \"XFB / Transfer CFT\" lesson if you haven't done it."},
+ui:{frameT:{ro:"Fișierul (live)",en:"The file (live)"},refT:{ro:"Comenzi și configurare",en:"Commands and configuration"},refLead:{ro:"Regula de rutare, comenzile PGP și SFTP echivalente și o definiție de flux.",en:"The routing rule, the equivalent PGP and SFTP commands and a flow definition."}},
+tryT:{ro:"Încearcă (pe un server de test)",en:"Try it (on a test server)"},
+legend:[["lg-app","FILE",{ro:"fișierul",en:"the file"}],["lg-arp","SFTP",{ro:"spre / dinspre internet",en:"to / from the internet"}]],
+
+nodes:{
+  core:{type:"server",name:"core-banking",lines:[{ro:"produce extrase",en:"makes statements"}]},
+  cft:{type:"box",name:"CFT CORE",lines:["Transfer CFT"]},
+  gw:{type:"box",name:"Gateway",lines:[{ro:"hub XFB",en:"XFB hub"}]},
+  st:{type:"box",name:"SecureTransport",lines:[{ro:"server SFTP",en:"SFTP server"}]},
+  partner:{type:"globe",name:"BANCA-P",lines:[{ro:"partener",en:"partner"}]},
+  sent:{type:"box",name:"Sentinel",lines:[{ro:"monitorizare",en:"monitoring"}]}
+},
+links:[["core","cft"],["cft","gw"],["gw","partner"],["partner","st"],["st","gw"],["cft","sent"],["gw","sent"]],
+layouts:{
+  wide:{vb:[0,0,1000,500],n:{core:[80,200],cft:[250,200],gw:[520,200],st:[700,380],partner:[900,200],sent:[385,400]},
+    zones:[{x:10,y:40,w:440,h:440,l:{ro:"rețea internă",en:"internal network"},top:true},{x:460,y:40,w:330,h:440,l:"DMZ",top:true},{x:800,y:40,w:190,h:440,l:"internet",top:true}]},
+  narrow:{vb:[0,0,360,820],n:{core:[110,60],cft:[110,180],sent:[270,180],gw:[110,390],st:[270,520],partner:[110,700]},
+    zones:[{x:6,y:6,w:348,h:260,l:{ro:"rețea internă",en:"internal network"}},{x:6,y:276,w:348,h:320,l:"DMZ"},{x:6,y:606,w:348,h:208,l:"internet"}]}
+},
+groups:[
+  {id:"file",color:"l7",fields:["fname","size"],name:{ro:"Fișierul",en:"The file"},short:{ro:"Fișier",en:"File"},grow:3},
+  {id:"route",color:"l3",fields:["from","to","idf","rule"],name:{ro:"De unde, unde, după ce regulă",en:"From, to, by which rule"},short:{ro:"Rută",en:"Route"},grow:2},
+  {id:"net",color:"arp",fields:["proto","sec","track"],name:{ro:"Transport și securitate",en:"Transport and security"},short:{ro:"Drum",en:"Path"},grow:2},
+  {id:"state",color:"l4",fields:["state","info"],name:{ro:"Stare",en:"State"},short:{ro:"Stare",en:"State"},grow:2}
+],
+fieldLabels:{fname:{ro:"Nume",en:"Name"},size:{ro:"Conținut",en:"Content"},from:{ro:"De la",en:"From"},to:{ro:"Către",en:"To"},idf:"IDF",rule:{ro:"Regulă",en:"Rule"},proto:{ro:"Protocol",en:"Protocol"},sec:{ro:"Securitate",en:"Security"},track:"Sentinel",state:{ro:"Stare",en:"State"},info:"Info"},
+pdu:f=>f.info?{badge:{ro:"Fișier în așteptare",en:"File waiting"},tok:["WAIT","k-tcp"]}:f.track?{badge:{ro:"Urmărire cap-coadă",en:"End-to-end tracking"},tok:["TRACK","k-ip"]}:f.proto&&/SFTP/.test(typeof f.proto==="object"?f.proto.en:f.proto)?{badge:{ro:"Fișier pe SFTP",en:"File over SFTP"},tok:["SFTP","k-arp"]}:f.sec?{badge:{ro:"Fișier criptat PGP",en:"PGP-encrypted file"},tok:["PGP","k-data"]}:{badge:{ro:"Fișier intern",en:"Internal file"},tok:["FILE","k-app"]},
+
+init:{},
+tables:{
+  zones:{title:{ro:"Cine stă unde",en:"Who sits where"},cols:[{ro:"Zonă",en:"Zone"},{ro:"Componente",en:"Components"},{ro:"Cine are voie să intre",en:"Who may connect in"}],plain:[0,1,2],
+    rows:()=>[[{ro:"Internă",en:"Internal"},"core-banking, CFT CORE, Sentinel",{ro:"doar Gateway-ul, pe porturi anume",en:"only the Gateway, on specific ports"}],["DMZ","Gateway, SecureTransport",{ro:"partenerii, doar pe SFTP 22",en:"partners, only on SFTP 22"}],["Internet","BANCA-P",{ro:"—",en:"—"}]]},
+  route:{idx:true,title:{ro:"Reguli de rutare pe Gateway",en:"Routing rules on the Gateway"},cols:[{ro:"Regulă",en:"Rule"},{ro:"Condiție",en:"Condition"},{ro:"Acțiuni",en:"Actions"},{ro:"Ieșire",en:"Out"}],plain:[2],
+    rows:()=>[[{ro:"extrase-banca-p",en:"statements-banca-p"},"IDF=STMT, DEST=BANCA-P",{ro:"PGP + redenumire BP_STMT_…",en:"PGP + rename BP_STMT_…"},"SFTP push"],[{ro:"plati-banca-p",en:"payments-banca-p"},"IDF=PAYIN, FROM=BANCA-P",{ro:"verifică semnătura, decriptează",en:"verify signature, decrypt"},"PeSIT → CFT CORE"],[{ro:"rapoarte-bnr",en:"reports-cb"},"IDF=REPORT",{ro:"doar semnare",en:"sign only"},"HTTPS"]]},
+  track:{title:{ro:"Evenimentele unui ciclu în Sentinel",en:"A cycle's events in Sentinel"},cols:[{ro:"Ora",en:"Time"},{ro:"Etapă",en:"Leg"},{ro:"Stare",en:"State"}],plain:[1,2],
+    rows:()=>[["01:02","CFT CORE → Gateway",{ro:"primit",en:"received"}],["01:03","Gateway",{ro:"rutat, PGP aplicat",en:"routed, PGP applied"}],["01:03–01:45","Gateway → BANCA-P",{ro:"partener indisponibil, reîncercări",en:"partner down, retries"}],["02:14","Gateway → BANCA-P",{ro:"livrat",en:"delivered"}],["02:31","BANCA-P",{ro:"ACK primit",en:"ACK received"}]]},
+  flowdef:{title:{ro:"Fluxul, definit o singură dată",en:"The flow, defined once"},cols:[{ro:"Câmp",en:"Field"},{ro:"Valoare",en:"Value"}],plain:[0],
+    rows:()=>[[{ro:"Nume",en:"Name"},"STMT → BANCA-P"],[{ro:"Sursă",en:"Source"},"core-banking (CFT CORE), IDF=STMT"],[{ro:"Prin",en:"Via"},"Gateway (DMZ)"],[{ro:"Destinație",en:"Target"},"BANCA-P · SFTP · /inbox"],[{ro:"Securitate",en:"Security"},{ro:"PGP (chei BANCA-P), cheie SSH",en:"PGP (BANCA-P keys), SSH key"}],[{ro:"Program / alertă",en:"Schedule / alert"},{ro:"zilnic; alertă dacă lipsește ACK la 06:00",en:"daily; alert if no ACK by 06:00"}]]}
+},
+log:{title:{ro:"Jurnalul fișierului",en:"The file's log"},lead:{ro:"Fișierul trece prin trei zone de rețea, dar fluxul e unul singur.",en:"The file crosses three network zones, but it's a single flow."},first:{ro:"Pas",en:"Step"},minWidth:560,
+  cols:[{h:{ro:"Fișier",en:"File"},v:f=>f.fname||"",cls:"mac"},{h:{ro:"Către",en:"To"},v:f=>f.to||"",cls:"ip"},{h:{ro:"Stare",en:"State"},v:f=>f.state||"",cls:""}]},
+
+steps:[
+{at:["gw","st"],frame:null,kind:"none",tables:["zones"],who:{ro:"Ideea",en:"The idea"},
+ title:{ro:"De ce un Gateway între rețeaua internă și parteneri",en:"Why a Gateway between the internal network and partners"},
+ body:{ro:`<p>Banca trebuie să schimbe fișiere cu zeci de parteneri: alte bănci, procesatori de carduri, autorități. Fiecare vrea alt protocol, alte chei, alte nume de fișiere.</p>
+<p>Dacă fiecare server intern ar vorbi direct cu internetul, am avea zeci de găuri în firewall. În schimb, totul trece printr-un <strong>hub</strong> în <strong>DMZ</strong> (zona dintre rețeaua internă și internet):</p>
+<ul><li><strong>Gateway</strong> (familia XFB, Axway) primește fișierele de la CFT-urile interne și le duce la parteneri;</li>
+<li><strong>SecureTransport</strong> e serverul SFTP pe care partenerii își încarcă fișierele.</li></ul>
+<p class="key">Serverele interne vorbesc doar cu Gateway-ul. Doar DMZ-ul vede internetul.</p>`,
+ en:`<p>The bank must exchange files with dozens of partners: other banks, card processors, authorities. Each one wants a different protocol, different keys, different file names.</p>
+<p>If every internal server talked to the internet directly, we'd have dozens of holes in the firewall. Instead, everything goes through a <strong>hub</strong> in the <strong>DMZ</strong> (the zone between the internal network and the internet):</p>
+<ul><li>the <strong>Gateway</strong> (XFB family, Axway) takes files from the internal CFTs and delivers them to partners;</li>
+<li><strong>SecureTransport</strong> is the SFTP server partners upload their files to.</li></ul>
+<p class="key">Internal servers only talk to the Gateway. Only the DMZ sees the internet.</p>`}},
+
+{at:"cft",frame:G1,kind:"f",move:[[["core","cft"]],[["cft","gw"]]],log:{ro:"CFT CORE → Gateway",en:"CFT CORE → Gateway"},who:"CFT CORE",
+ title:{ro:"Primul pas e intern: CFT CORE → Gateway",en:"The first leg is internal: CFT CORE → Gateway"},
+ body:{ro:`<p>La 01:00, core-banking scrie extrasele zilei și cere: <code>CFTUTIL SEND PART=GATEWAY, IDF=STMT, FNAME=STMT_20261112.xml</code>, cu destinația finală <strong>BANCA-P</strong>.</p>
+<p>Observă: partenerul lui CFT CORE nu e banca, ci <strong>Gateway-ul</strong>. Transferul e exact ca în lecția anterioară: PeSIT peste TLS, checkpoint-uri, catalog. Când Gateway-ul confirmă, partea internă e gata.</p>`,
+ en:`<p>At 01:00, core-banking writes the day's statements and requests: <code>CFTUTIL SEND PART=GATEWAY, IDF=STMT, FNAME=STMT_20261112.xml</code>, with the final destination <strong>BANCA-P</strong>.</p>
+<p>Note: CFT CORE's partner isn't the bank but the <strong>Gateway</strong>. The transfer is exactly like the previous lesson: PeSIT over TLS, checkpoints, catalog. Once the Gateway confirms, the internal leg is done.</p>`}},
+
+{at:"gw",frame:G2,kind:"f",tables:["route"],hl:{route:0},log:{ro:"stocat și rutat",en:"stored and routed"},who:"Gateway",
+ title:{ro:"Store-and-forward: Gateway-ul păstrează și rutează",en:"Store-and-forward: the Gateway keeps and routes"},
+ body:{ro:`<p>Gateway-ul nu trimite fișierul mai departe „în timp real”. Întâi îl <strong>scrie pe disc</strong> (store), apoi îl trimite când poate (forward). Asta decuplează cele două capete: CFT CORE a terminat, chiar dacă banca parteneră e oprită.</p>
+<p>Apoi caută o <strong>regulă de rutare</strong> după IDF și destinație. Pentru <code>IDF=STMT</code> spre BANCA-P, regula spune: criptează PGP, redenumește după convenția băncii, trimite prin SFTP.</p>`,
+ en:`<p>The Gateway doesn't pass the file on "in real time". It first <strong>writes it to disk</strong> (store), then sends it when it can (forward). That decouples the two ends: CFT CORE is done, even if the partner bank is down.</p>
+<p>Then it looks up a <strong>routing rule</strong> by IDF and destination. For <code>IDF=STMT</code> to BANCA-P, the rule says: PGP-encrypt, rename to the bank's convention, send via SFTP.</p>`}},
+
+{at:"gw",frame:G3,kind:"f",log:{ro:"PGP și redenumire",en:"PGP and rename"},who:"Gateway",
+ title:{ro:"PGP: fișierul e criptat și semnat",en:"PGP: the file is encrypted and signed"},
+ body:{ro:`<p>SFTP criptează <em>conexiunea</em>. Dar fișierul va sta apoi pe serverul băncii, poate în alte sisteme. De aceea băncile cer și criptarea <em>fișierului</em>, cu <strong>PGP</strong>:</p>
+<ul><li><strong>criptat cu cheia publică a BANCA-P</strong>: doar BANCA-P, cu cheia ei privată, îl poate deschide;</li>
+<li><strong>semnat cu cheia noastră privată</strong>: BANCA-P verifică, cu cheia noastră publică, că vine de la noi și că nu a fost modificat.</li></ul>
+<p>Numele devine cel cerut de bancă: <code>BP_STMT_20261112_001.xml.pgp</code>.</p>`,
+ en:`<p>SFTP encrypts the <em>connection</em>. But the file will then sit on the bank's server, maybe in other systems too. That's why banks also require encrypting the <em>file</em>, with <strong>PGP</strong>:</p>
+<ul><li><strong>encrypted with BANCA-P's public key</strong>: only BANCA-P, with its private key, can open it;</li>
+<li><strong>signed with our private key</strong>: BANCA-P checks, with our public key, that it came from us and wasn't changed.</li></ul>
+<p>The name becomes the one the bank asked for: <code>BP_STMT_20261112_001.xml.pgp</code>.</p>`},
+ try:[{cmd:"gpg --encrypt --sign -r banca-p@example STMT_20261112.xml",d:{ro:"Echivalentul manual al pasului PGP.",en:"The manual equivalent of the PGP step."}}]},
+
+{at:"gw",frame:G4,kind:"s",move:[[["gw","partner"]]],log:{ro:"SFTP spre BANCA-P",en:"SFTP to BANCA-P"},who:"SFTP",
+ title:{ro:"SFTP spre partener: cheia serverului și cheia noastră",en:"SFTP to the partner: the server's key and ours"},
+ body:{ro:`<p>Gateway-ul deschide o conexiune <strong>SFTP</strong> (peste SSH, portul 22) spre <code>sftp.banca-p.example</code>. Două verificări:</p>
+<ol><li><strong>Host key</strong>: cheia serverului băncii trebuie să fie cea salvată la configurare. Dacă diferă, conexiunea se oprește (poate fi un atac).</li>
+<li><strong>Autentificarea noastră</strong>: cu o <strong>cheie SSH</strong>, nu cu parolă.</li></ol>
+<p>Fișierul e încărcat întâi ca <code>.part</code> și redenumit la final, ca BANCA-P să nu ia un fișier pe jumătate.</p>`,
+ en:`<p>The Gateway opens an <strong>SFTP</strong> connection (over SSH, port 22) to <code>sftp.banca-p.example</code>. Two checks:</p>
+<ol><li><strong>Host key</strong>: the bank server's key must match the one saved during setup. If it differs, the connection stops (it could be an attack).</li>
+<li><strong>Our authentication</strong>: with an <strong>SSH key</strong>, not a password.</li></ol>
+<p>The file is uploaded as <code>.part</code> first and renamed at the end, so BANCA-P doesn't pick up half a file.</p>`},
+ try:[{cmd:"sftp -i ~/.ssh/gw_banca_p xfb@sftp.banca-p.example",d:{ro:"Conectare manuală cu aceeași cheie, pentru depanare.",en:"A manual connection with the same key, for troubleshooting."}}]},
+
+{at:"gw",frame:G5,kind:"s",move:[[["gw","partner"]]],marks:{partner:{k:"drop",t:{ro:"nu răspunde",en:"no answer"}}},log:{ro:"partener indisponibil",en:"partner down"},who:{ro:"Reîncercări",en:"Retries"},
+ title:{ro:"Partenerul e oprit: Gateway-ul reîncearcă",en:"The partner is down: the Gateway retries"},
+ body:{ro:`<p>Între 01:00 și 02:00, BANCA-P are mentenanță și serverul SFTP nu răspunde. Datorită store-and-forward, nu e o problemă:</p>
+<ul><li>fișierul rămâne pe discul Gateway-ului;</li>
+<li>Gateway-ul reîncearcă după regula partenerului: de 10 ori, la 15 minute;</li>
+<li>dacă se termină toate încercările, transferul trece în eroare și Sentinel trimite o alertă.</li></ul>
+<p>Nimeni din rețeaua internă nu trebuie să retrimită nimic.</p>`,
+ en:`<p>Between 01:00 and 02:00, BANCA-P has maintenance and its SFTP server doesn't answer. Thanks to store-and-forward, that's fine:</p>
+<ul><li>the file stays on the Gateway's disk;</li>
+<li>the Gateway retries per the partner's rule: 10 times, every 15 minutes;</li>
+<li>if all attempts run out, the transfer goes into error and Sentinel raises an alert.</li></ul>
+<p>Nobody on the internal network has to resend anything.</p>`}},
+
+{at:"partner",frame:G6,kind:"s",move:[[["gw","partner"]]],marks:{partner:{k:"ok",t:{ro:"livrat",en:"delivered"}}},log:{ro:"livrat și confirmat",en:"delivered and confirmed"},who:"BANCA-P",
+ title:{ro:"Livrat, apoi confirmat de partener",en:"Delivered, then confirmed by the partner"},
+ body:{ro:`<p>La 02:14 serverul revine și încărcarea reușește. Dar SFTP nu are „confirmare de aplicație”: știm doar că fișierul a ajuns pe disc.</p>
+<p>De aceea, în contract, BANCA-P promite că după procesare pune un fișier <code>.ack</code> (sau <code>.nack</code>, la erori) în <code>/outbox</code>. Gateway-ul îl ridică periodic și îl leagă de transferul original. Acum avem dovada completă.</p>`,
+ en:`<p>At 02:14 the server is back and the upload succeeds. But SFTP has no "application acknowledgement": we only know the file reached the disk.</p>
+<p>That's why, in the contract, BANCA-P promises to put a <code>.ack</code> file (or <code>.nack</code>, on errors) in <code>/outbox</code> after processing. The Gateway picks it up regularly and ties it to the original transfer. Now we have full proof.</p>`}},
+
+{at:"st",frame:G7,kind:"f",move:[[["partner","st"]],[["st","gw"]],[["gw","cft"]]],log:{ro:"fișier primit de la partener",en:"file received from the partner"},who:"SecureTransport",
+ title:{ro:"Sensul invers: partenerul ne trimite plăți",en:"The other direction: the partner sends us payments"},
+ body:{ro:`<p>BANCA-P trimite și ea fișiere: plățile primite. Ea se conectează prin SFTP la <strong>SecureTransport</strong>, cu propriul cont și propria cheie SSH, și încarcă <code>BP_PAYIN_20261112.xml.pgp</code>.</p>
+<ol><li>SecureTransport predă fișierul Gateway-ului.</li>
+<li>Regula <em>plati-banca-p</em>: <strong>verifică semnătura</strong> BANCA-P și <strong>decriptează</strong> cu cheia noastră privată.</li>
+<li>Gateway-ul îl trimite prin PeSIT la CFT CORE, cu <code>IDF=PAYIN</code>; acolo, procedura de final pornește importul.</li></ol>
+<p class="key">Partenerul vede doar SecureTransport din DMZ, niciodată rețeaua internă.</p>`,
+ en:`<p>BANCA-P sends files too: incoming payments. It connects over SFTP to <strong>SecureTransport</strong>, with its own account and SSH key, and uploads <code>BP_PAYIN_20261112.xml.pgp</code>.</p>
+<ol><li>SecureTransport hands the file to the Gateway.</li>
+<li>The <em>payments-banca-p</em> rule <strong>verifies</strong> BANCA-P's <strong>signature</strong> and <strong>decrypts</strong> with our private key.</li>
+<li>The Gateway sends it via PeSIT to CFT CORE, with <code>IDF=PAYIN</code>; there, the end procedure starts the import.</li></ol>
+<p class="key">The partner only sees SecureTransport in the DMZ, never the internal network.</p>`}},
+
+{at:"sent",frame:G8,kind:"t",move:[[["cft","sent"],["gw","sent"]]],tables:["track"],log:{ro:"urmărire cap-coadă",en:"end-to-end tracking"},who:"Sentinel",
+ title:{ro:"Sentinel: un singur ciclu, de la core-banking la bancă",en:"Sentinel: one cycle, from core-banking to the bank"},
+ body:{ro:`<p>Fișierul a avut două transferuri tehnice: CFT CORE → Gateway și Gateway → BANCA-P. Ambele trimit evenimente către <strong>Sentinel</strong>, cu același <strong>ID de ciclu</strong>, așa că suportul vede o singură linie: „STMT spre BANCA-P”.</p>
+<p>Când un coleg întreabă „au primit extrasele?”, răspunsul e pe un singur ecran: livrat la 02:14, confirmat la 02:31, cu reîncercările din timpul mentenanței.</p>`,
+ en:`<p>The file had two technical transfers: CFT CORE → Gateway and Gateway → BANCA-P. Both send events to <strong>Sentinel</strong> with the same <strong>cycle ID</strong>, so support sees a single line: "STMT to BANCA-P".</p>
+<p>When a colleague asks "did they get the statements?", the answer is on one screen: delivered at 02:14, confirmed at 02:31, with the retries during maintenance.</p>`}},
+
+{at:["cft","gw"],frame:null,kind:"none",tables:["flowdef"],who:{ro:"Definirea fluxului",en:"Defining the flow"},
+ title:{ro:"Fluxul se definește o singură dată",en:"The flow is defined once"},
+ body:{ro:`<p>Fără un instrument central, un flux nou înseamnă configurare manuală pe CFT CORE, pe Gateway, pe SecureTransport și în Sentinel, cu riscul ca un IDF să fie scris diferit într-un loc.</p>
+<p>Cu <strong>Central Governance</strong> sau <strong>Flow Manager</strong> (Axway), fluxul e un singur obiect: sursă, intermediar, destinație, protocoale, chei, program și alerte. Instrumentul împinge configurarea pe fiecare componentă.</p>
+<p>Un flux nou cu alt partener devine o cerere: „ca STMT → BANCA-P, dar pentru BANCA-Q”.</p>`,
+ en:`<p>Without a central tool, a new flow means manual setup on CFT CORE, on the Gateway, on SecureTransport and in Sentinel, with the risk of an IDF spelled differently somewhere.</p>
+<p>With <strong>Central Governance</strong> or <strong>Flow Manager</strong> (Axway), the flow is a single object: source, intermediary, target, protocols, keys, schedule and alerts. The tool pushes the configuration to each component.</p>
+<p>A new flow with another partner becomes a request: "like STMT → BANCA-P, but for BANCA-Q".</p>`}},
+
+{at:["cft","gw","partner"],frame:null,kind:"none",summary:true,
+ title:{ro:"Recapitulare",en:"Recap"},
+ body:{ro:`<ul><li>Fișierele spre exterior trec prin <strong>DMZ</strong>: <strong>Gateway</strong> pentru trimis, <strong>SecureTransport</strong> pentru primit.</li>
+<li>Primul pas e intern: CFT CORE → Gateway, prin <strong>PeSIT</strong>.</li>
+<li><strong>Store-and-forward</strong>: Gateway-ul păstrează fișierul și reîncearcă dacă partenerul e oprit.</li>
+<li><strong>Regula de rutare</strong> (după IDF și destinație) decide: PGP, redenumire, protocol.</li>
+<li><strong>PGP</strong> protejează fișierul; <strong>SFTP</strong> protejează conexiunea (host key + cheie SSH).</li>
+<li><strong>.ack</strong> de la partener = dovada procesării; <strong>Sentinel</strong> leagă etapele cu un ID de ciclu.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Mergi la laborator ↓</button></p>`,
+ en:`<ul><li>Files to the outside go through the <strong>DMZ</strong>: the <strong>Gateway</strong> for sending, <strong>SecureTransport</strong> for receiving.</li>
+<li>The first leg is internal: CFT CORE → Gateway, via <strong>PeSIT</strong>.</li>
+<li><strong>Store-and-forward</strong>: the Gateway keeps the file and retries if the partner is down.</li>
+<li>The <strong>routing rule</strong> (by IDF and destination) decides: PGP, renaming, protocol.</li>
+<li><strong>PGP</strong> protects the file; <strong>SFTP</strong> protects the connection (host key + SSH key).</li>
+<li>The partner's <strong>.ack</strong> = proof of processing; <strong>Sentinel</strong> ties the legs together with a cycle ID.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Go to the lab ↓</button></p>`}}
+],
+
+reference:(T,lang)=>{
+  const ro=lang==="ro";
+  return `<div class="ref-grid"><section class="card refcard"><h2>${ro?"Regula de rutare (schematic)":"The routing rule (schematic)"}</h2>
+<pre class="yaml"><span class="c"># ${ro?"pe Gateway: STMT spre BANCA-P":"on the Gateway: STMT to BANCA-P"}</span>
+rule: statements-banca-p
+  match:    IDF=STMT  DEST=BANCA-P
+  actions:
+    - pgp_encrypt: key=banca-p.pub
+    - pgp_sign:    key=our-signing.key
+    - rename:      BP_STMT_&amp;FDATE_&amp;SEQ.xml.pgp
+  out:
+    protocol: SFTP
+    host:     sftp.banca-p.example:22
+    user:     xfb
+    auth:     ssh-key gw_banca_p
+    hostkey:  SHA256:3f1c…a9
+    dir:      /inbox   (upload .part → rename)
+  retry:    10 x 15 min
+  ack:      poll /outbox *.ack | *.nack</pre></section>
+<section class="card refcard"><h2>${ro?"Echivalentul manual":"The manual equivalent"}</h2>
+<pre class="yaml"><span class="c"># ${ro?"criptare + semnare":"encrypt + sign"}</span>
+gpg --encrypt --sign -r banca-p@example \
+    -o BP_STMT_20261112_001.xml.pgp STMT_20261112.xml
+
+<span class="c"># ${ro?"încărcare SFTP":"SFTP upload"}</span>
+sftp -i ~/.ssh/gw_banca_p xfb@sftp.banca-p.example
+sftp&gt; put BP_STMT_20261112_001.xml.pgp /inbox/BP_STMT_20261112_001.part
+sftp&gt; rename /inbox/BP_STMT_20261112_001.part /inbox/BP_STMT_20261112_001.xml.pgp
+
+<span class="c"># ${ro?"primire: verificare + decriptare":"receive: verify + decrypt"}</span>
+gpg --decrypt -o BP_PAYIN_20261112.xml BP_PAYIN_20261112.xml.pgp</pre></section></div>`;
+},
+
+gloss:[
+ ["Gateway","Axway Gateway",{ro:"Hub XFB din DMZ care primește fișiere intern și le trimite partenerilor (store-and-forward).",en:"An XFB hub in the DMZ that takes files internally and forwards them to partners (store-and-forward)."}],
+ ["SecureTransport","Axway SecureTransport",{ro:"Server de transfer (SFTP, HTTPS) pe care partenerii externi își încarcă fișierele.",en:"A transfer server (SFTP, HTTPS) that external partners upload their files to."}],
+ ["DMZ",{ro:"zonă demilitarizată",en:"demilitarised zone"},{ro:"Zona de rețea dintre rețeaua internă și internet.",en:"The network zone between the internal network and the internet."}],
+ ["Store-and-forward",null,{ro:"Fișierul e scris întâi pe disc, apoi trimis când destinația e disponibilă.",en:"The file is first written to disk, then sent when the destination is available."}],
+ [{ro:"Regulă de rutare",en:"Routing rule"},null,{ro:"Spune ce se face cu un fișier după IDF și destinație: transformări și protocol.",en:"Says what to do with a file by IDF and destination: transformations and protocol."}],
+ ["PGP","OpenPGP",{ro:"Criptarea și semnarea fișierului însuși, cu chei publice / private.",en:"Encrypting and signing the file itself, with public / private keys."}],
+ ["SFTP","SSH File Transfer Protocol",{ro:"Transfer de fișiere peste SSH, de obicei pe portul 22.",en:"File transfer over SSH, usually on port 22."}],
+ ["Host key",{ro:"cheia serverului",en:"server key"},{ro:"Cheia SSH a serverului; trebuie să fie cea cunoscută, altfel conexiunea se oprește.",en:"The server's SSH key; it must match the known one, or the connection stops."}],
+ ["ACK / NACK",null,{ro:"Fișier de confirmare (sau de respingere) pus de partener după procesare.",en:"A confirmation (or rejection) file the partner drops after processing."}],
+ [{ro:"ID de ciclu",en:"Cycle ID"},null,{ro:"Identificator comun care leagă în Sentinel toate etapele unui fișier.",en:"A shared identifier that ties all of a file's legs together in Sentinel."}],
+ ["Central Governance",{ro:"sau Flow Manager",en:"or Flow Manager"},{ro:"Instrument Axway în care un flux se definește o dată și se aplică pe toate componentele.",en:"An Axway tool where a flow is defined once and applied to every component."}]
+],
+glossEx:{
+ "PGP":{ro:"criptat cu cheia publică BANCA-P, semnat cu cheia noastră privată.",en:"encrypted with BANCA-P's public key, signed with our private key."},
+ "Store-and-forward":{ro:"BANCA-P e în mentenanță; fișierul așteaptă pe Gateway.",en:"BANCA-P is under maintenance; the file waits on the Gateway."}
+},
+
+quiz:[
+ {q:{ro:"De ce nu trimite CFT CORE fișierul direct la banca parteneră?",en:"Why doesn't CFT CORE send the file straight to the partner bank?"},o:[{ro:"Pentru că PeSIT e lent",en:"Because PeSIT is slow"},{ro:"Serverele interne nu au voie să vorbească cu internetul; totul trece prin Gateway-ul din DMZ",en:"Internal servers may not talk to the internet; everything goes through the Gateway in the DMZ"},{ro:"Pentru că fișierul e prea mare",en:"Because the file is too big"},{ro:"Pentru că banca nu are server",en:"Because the bank has no server"}],a:1,e:{ro:"Un singur punct de ieșire, controlat.",en:"A single, controlled exit point."}},
+ {q:{ro:"BANCA-P e oprită o oră. Ce se întâmplă cu fișierul?",en:"BANCA-P is down for an hour. What happens to the file?"},o:[{ro:"Se pierde",en:"It's lost"},{ro:"CFT CORE trebuie să-l retrimită",en:"CFT CORE must resend it"},{ro:"Stă pe Gateway, care reîncearcă (store-and-forward)",en:"It waits on the Gateway, which retries (store-and-forward)"},{ro:"E trimis altei bănci",en:"It's sent to another bank"}],a:2,e:{ro:"Partea internă se terminase deja.",en:"The internal leg had already finished."}},
+ {q:{ro:"Cu ce cheie criptezi fișierul pentru BANCA-P?",en:"Which key do you encrypt the file for BANCA-P with?"},o:[{ro:"Cheia publică a BANCA-P",en:"BANCA-P's public key"},{ro:"Cheia noastră publică",en:"Our public key"},{ro:"Cheia privată a BANCA-P",en:"BANCA-P's private key"},{ro:"Parola SFTP",en:"The SFTP password"}],a:0,e:{ro:"Doar cheia ei privată îl poate decripta.",en:"Only its private key can decrypt it."}},
+ {q:{ro:"Ce dovedește semnătura PGP pusă cu cheia noastră privată?",en:"What does the PGP signature made with our private key prove?"},o:[{ro:"Că fișierul e mic",en:"That the file is small"},{ro:"Că SFTP e activ",en:"That SFTP is on"},{ro:"Că BANCA-P l-a procesat",en:"That BANCA-P processed it"},{ro:"Că fișierul vine de la noi și nu a fost modificat",en:"That the file comes from us and wasn't modified"}],a:3,e:{ro:"BANCA-P o verifică cu cheia noastră publică.",en:"BANCA-P checks it with our public key."}},
+ {q:{ro:"Host key-ul serverului SFTP al băncii s-a schimbat fără anunț. Ce face Gateway-ul?",en:"The bank's SFTP host key changed without notice. What does the Gateway do?"},o:[{ro:"Acceptă noua cheie",en:"Accepts the new key"},{ro:"Oprește conexiunea: poate fi un atac",en:"Stops the connection: it could be an attack"},{ro:"Trimite fișierul necriptat",en:"Sends the file unencrypted"},{ro:"Folosește FTP",en:"Uses FTP"}],a:1,e:{ro:"Se verifică cu partenerul, apoi se actualizează cheia.",en:"Check with the partner, then update the key."}},
+ {q:{ro:"De ce se încarcă fișierul întâi ca .part?",en:"Why is the file first uploaded as .part?"},o:[{ro:"Ca BANCA-P să nu ia un fișier incomplet",en:"So BANCA-P doesn't pick up an incomplete file"},{ro:"Pentru compresie",en:"For compression"},{ro:"E cerut de PGP",en:"PGP requires it"},{ro:"Ca să fie mai rapid",en:"To make it faster"}],a:0,e:{ro:"Redenumirea vine doar după ultimul byte.",en:"The rename only comes after the last byte."}},
+ {q:{ro:"Pe unde ne trimite BANCA-P fișierele ei?",en:"How does BANCA-P send us its files?"},o:[{ro:"Direct pe core-banking",en:"Straight to core-banking"},{ro:"Pe CFT CORE, prin PeSIT",en:"To CFT CORE, via PeSIT"},{ro:"Prin SFTP pe SecureTransport din DMZ, apoi Gateway → CFT CORE",en:"Via SFTP to SecureTransport in the DMZ, then Gateway → CFT CORE"},{ro:"Prin e-mail",en:"By email"}],a:2,e:{ro:"Partenerul nu vede niciodată rețeaua internă.",en:"The partner never sees the internal network."}},
+ {q:{ro:"Cum vede suportul cele două etape (CFT → Gateway, Gateway → bancă) ca un singur flux?",en:"How does support see both legs (CFT → Gateway, Gateway → bank) as one flow?"},o:[{ro:"După numele fișierului",en:"By the file name"},{ro:"Din logurile SFTP",en:"From the SFTP logs"},{ro:"Nu se poate",en:"It can't"},{ro:"Sentinel le leagă printr-un ID de ciclu comun",en:"Sentinel ties them together with a shared cycle ID"}],a:3,e:{ro:"O linie: livrat, confirmat, cu ore.",en:"One line: delivered, confirmed, with times."}}
+]
+};
+})();
+</script>
+<script src="../assets/engine.js?v=2"></script>
+<script src="../assets/labs-data.js?v=3"></script>
+<script src="../assets/lab.js?v=1"></script>
+<script type="module" src="../assets/auth.js?v=8"></script>
+</body>
+</html>

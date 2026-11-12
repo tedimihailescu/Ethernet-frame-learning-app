@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>XFB / Transfer CFT</title>
+<meta name="description" content="Lecție interactivă: un flux XFB prin Axway Transfer CFT: partener, IDF, PeSIT, checkpoint și reluare, procedura de final, confirmare, stările din catalog și Sentinel. / Interactive lesson: an XFB flow through Axway Transfer CFT.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<script>
+(function(){
+const FN="/data/out/PAY_20261112.xml",SIZE={ro:"48 MB · 120.000 de plăți",en:"48 MB · 120,000 payments"};
+const F1={fname:FN,size:SIZE,idf:"PAYOUT",part:"CORE",dir:"SEND",state:{ro:"D · în catalog, așteaptă o sesiune",en:"D · in the catalog, waiting for a session"}};
+const F2={...F1,proto:"PeSIT + TLS",port:"TCP 1761",state:{ro:"C · sesiune deschisă, partenerii s-au autentificat",en:"C · session open, both partners authenticated"}};
+const F3={...F2,sync:{ro:"checkpoint la fiecare 1 MB (puncte de sincronizare)",en:"a checkpoint every 1 MB (sync points)"},state:{ro:"C · în curs, 29 MB din 48 (60%)",en:"C · in progress, 29 MB of 48 (60%)"}};
+const F4={...F3,state:{ro:"D · rețeaua a căzut la 60%; reîncercare automată peste 5 min",en:"D · the network dropped at 60%; automatic retry in 5 min"},diag:{ro:"reluare de la checkpoint-ul 29 MB, nu de la zero",en:"restart from the 29 MB checkpoint, not from zero"}};
+const F5={fname:{ro:"tmp/K1112093 → /data/in/PAY_20261112.xml (redenumit la final)",en:"tmp/K1112093 → /data/in/PAY_20261112.xml (renamed at the end)"},size:SIZE,idf:"PAYOUT",part:"APP",dir:"RECV",proto:"PeSIT + TLS",port:"TCP 1761",sync:F3.sync,state:{ro:"T · transfer terminat, fișier complet",en:"T · transfer finished, file complete"}};
+const F6={...F5,fname:"/data/in/PAY_20261112.xml",exec:"/opt/cft/exec/import_payments.sh",state:{ro:"X · procedura de final a rulat (cod 0)",en:"X · the end-of-transfer procedure ran (exit 0)"}};
+const F7={fname:FN,idf:"PAYOUT",part:"CORE",dir:"SEND",ack:{ro:"ACK primit: „120.000 de plăți importate”",en:"ACK received: \"120,000 payments imported\""},state:{ro:"X · trimis, livrat și confirmat",en:"X · sent, delivered and acknowledged"}};
+const F8={fname:"/data/in/PAY_20261113.xml",size:{ro:"51 MB",en:"51 MB"},idf:"PAYOUT",part:"APP",dir:"RECV",proto:"PeSIT + TLS",state:{ro:"K · oprit cu eroare, păstrat în catalog",en:"K · stopped on error, kept in the catalog"},diag:{ro:"disc plin pe serverul CORE (ENOSPC)",en:"disk full on the CORE server (ENOSPC)"}};
+const F9={fname:FN,idf:"PAYOUT",part:"APP → CORE",track:{ro:"obiect XFBTransfer: Submitted → Transferring → Received → Executed → Acknowledged",en:"XFBTransfer object: Submitted → Transferring → Received → Executed → Acknowledged"},state:{ro:"vizibil în Sentinel, cu ora fiecărei etape",en:"visible in Sentinel, with the time of each stage"}};
+
+window.LESSON={
+docTitle:{ro:"XFB / Transfer CFT",en:"XFB / Transfer CFT"},
+eyebrow:{ro:"Lecție interactivă · Transfer de fișiere",en:"Interactive lesson · File transfer"},
+title:{ro:"XFB / Transfer CFT: drumul unui fișier de plăți",en:"XFB / Transfer CFT: the journey of a payments file"},
+sub:{ro:"În fiecare noapte, aplicația de plăți produce un fișier mare cu toate plățile zilei, care trebuie să ajungă la core-banking întreg, o singură dată și cu dovadă. Urmărim un flux XFB prin Axway Transfer CFT: partener și IDF, sesiune PeSIT cu TLS, checkpoint-uri și reluare după o cădere de rețea, procedura de final, confirmarea, stările din catalog și urmărirea în Sentinel.",en:"Every night, the payments app produces a large file with all of the day's payments, which must reach core-banking complete, exactly once and with proof. We follow an XFB flow through Axway Transfer CFT: partner and IDF, a PeSIT session with TLS, checkpoints and restart after a network drop, the end-of-transfer procedure, the acknowledgement, the catalog states and tracking in Sentinel."},
+meta:[{ro:"≈ 25 minute",en:"≈ 25 minutes"},{ro:"12 pași",en:"12 steps"},{ro:"8 întrebări",en:"8 questions"},{ro:"Intermediar",en:"Intermediate"}],
+goals:[{ro:"Ce e un flux XFB: partener + IDF + sens",en:"What an XFB flow is: partner + IDF + direction"},{ro:"Cum trimite Transfer CFT un fișier prin PeSIT, cu checkpoint-uri și reluare",en:"How Transfer CFT sends a file over PeSIT, with checkpoints and restart"},{ro:"Stările din catalog (D, C, T, X, H, K) și ce faci când un transfer e în K",en:"The catalog states (D, C, T, X, H, K) and what to do when a transfer is in K"},{ro:"Procedura de final, confirmarea (ACK) și urmărirea în Sentinel",en:"The end-of-transfer procedure, the acknowledgement (ACK) and tracking in Sentinel"}],
+foot:{ro:"Nume de servere, parteneri și fișiere fictive. Lecția continuă cu „XFB Gateway: fișierul pleacă la un partener extern”.",en:"Fictional server, partner and file names. The lesson continues with \"XFB Gateway: the file goes to an external partner\"."},
+ui:{frameT:{ro:"Transferul (live)",en:"The transfer (live)"},refT:{ro:"Comenzi și configurare",en:"Commands and configuration"},refLead:{ro:"Definiții CFTUTIL pentru partener și flux, plus comenzile de zi cu zi.",en:"CFTUTIL definitions for the partner and the flow, plus the everyday commands."}},
+tryT:{ro:"Încearcă (CFTUTIL pe un Transfer CFT de test)",en:"Try it (CFTUTIL on a test Transfer CFT)"},
+legend:[["lg-app","FILE",{ro:"fișierul / cererea de transfer",en:"the file / transfer request"}],["lg-arp","PeSIT",{ro:"sesiune între două CFT-uri",en:"a session between two CFTs"}]],
+
+nodes:{
+  app:{type:"server",name:"batch-plati",lines:[{ro:"aplicația",en:"the app"}]},
+  cft1:{type:"box",name:"CFT APP",lines:["Transfer CFT"]},
+  cft2:{type:"box",name:"CFT CORE",lines:["Transfer CFT"]},
+  core:{type:"server",name:"core-banking",lines:[{ro:"importă plățile",en:"imports payments"}]},
+  sent:{type:"box",name:"Sentinel",lines:[{ro:"monitorizare",en:"monitoring"}]}
+},
+links:[["app","cft1"],["cft1","cft2"],["cft2","core"],["cft1","sent"],["cft2","sent"]],
+layouts:{
+  wide:{vb:[0,0,1000,480],n:{app:[90,190],cft1:[330,190],cft2:[650,190],core:[900,190],sent:[490,390]},
+    texts:[{x:490,y:170,t:"PeSIT · TLS"}]},
+  narrow:{vb:[0,0,360,780],n:{app:[180,60],cft1:[100,240],cft2:[100,450],core:[180,640],sent:[280,345]}}
+},
+groups:[
+  {id:"file",color:"l7",fields:["fname","size"],name:{ro:"Fișierul",en:"The file"},short:{ro:"Fișier",en:"File"},grow:3},
+  {id:"flow",color:"l3",fields:["idf","part","dir"],name:{ro:"Fluxul (partener + IDF)",en:"The flow (partner + IDF)"},short:{ro:"Flux",en:"Flow"},grow:2},
+  {id:"net",color:"arp",fields:["proto","port","sync","exec","ack","track"],name:{ro:"Transport și după",en:"Transport and after"},short:{ro:"Drum",en:"Route"},grow:2},
+  {id:"state",color:"l4",fields:["state","diag"],name:{ro:"Starea în catalog",en:"Catalog state"},short:{ro:"Stare",en:"State"},grow:2}
+],
+fieldLabels:{fname:{ro:"Fișier",en:"File"},size:{ro:"Mărime",en:"Size"},idf:"IDF",part:{ro:"Partener",en:"Partner"},dir:{ro:"Sens",en:"Direction"},proto:{ro:"Protocol",en:"Protocol"},port:"Port",sync:{ro:"Checkpoint",en:"Checkpoint"},exec:{ro:"Procedură de final",en:"End procedure"},ack:{ro:"Confirmare",en:"Acknowledgement"},track:"Sentinel",state:{ro:"Stare",en:"State"},diag:{ro:"Diagnostic",en:"Diagnostic"}},
+pdu:f=>f.diag&&/^K/.test(typeof f.state==="object"?f.state.en:f.state)?{badge:{ro:"Transfer oprit cu eroare",en:"Transfer stopped on error"},tok:["K","k-tcp"]}:f.track?{badge:{ro:"Eveniment de monitorizare",en:"Monitoring event"},tok:["TRACK","k-ip"]}:f.ack?{badge:{ro:"Confirmare (ACK)",en:"Acknowledgement (ACK)"},tok:["ACK","k-app"]}:f.proto?{badge:{ro:"Transfer PeSIT",en:"PeSIT transfer"},tok:["PeSIT","k-arp"]}:{badge:{ro:"Cerere de transfer",en:"Transfer request"},tok:["FILE","k-app"]},
+
+init:{},
+tables:{
+  vs:{title:{ro:"Script FTP vs. Transfer CFT",en:"FTP script vs Transfer CFT"},cols:["",{ro:"Script cu FTP / scp",en:"FTP / scp script"},"Transfer CFT (XFB)"],plain:[0,1,2],
+    rows:()=>[[{ro:"Cădere de rețea",en:"Network drop"},{ro:"reiei de la zero, dacă observă cineva",en:"start over, if anyone notices"},{ro:"reia singur, de la ultimul checkpoint",en:"resumes on its own, from the last checkpoint"}],[{ro:"Fișier pe jumătate",en:"Half a file"},{ro:"poate fi importat din greșeală",en:"may get imported by mistake"},{ro:"nume temporar până e complet",en:"temporary name until complete"}],[{ro:"Dovadă",en:"Proof"},{ro:"loguri împrăștiate",en:"scattered logs"},{ro:"catalog, confirmare, Sentinel",en:"catalog, acknowledgement, Sentinel"}],[{ro:"Ce urmează",en:"What comes next"},{ro:"cron care „ghicește” ora",en:"a cron job that \"guesses\" the time"},{ro:"procedura de final rulează imediat",en:"the end procedure runs straight away"}]]},
+  conf:{title:{ro:"Ce e definit pe CFT APP",en:"What's defined on CFT APP"},cols:[{ro:"Obiect",en:"Object"},"ID",{ro:"Ce spune",en:"What it says"}],plain:[2],
+    rows:()=>[["CFTPART","CORE",{ro:"cine e partenerul, ce protocol, ce identități folosim",en:"who the partner is, which protocol, which identities"}],["CFTTCP","CORE",{ro:"adresa lui (core-cft.example.com) și reîncercările",en:"its address (core-cft.example.com) and retries"}],["CFTSEND","PAYOUT",{ro:"cum trimitem fluxul PAYOUT: ce fișier, ce format",en:"how we send the PAYOUT flow: which file, which format"}],["CFTPROT","PESITSSL",{ro:"PeSIT peste TLS, port 1761",en:"PeSIT over TLS, port 1761"}]]},
+  states:{title:{ro:"Stările din catalog",en:"Catalog states"},cols:[{ro:"Stare",en:"State"},{ro:"Înseamnă",en:"Means"},{ro:"Ce faci",en:"What you do"}],plain:[1,2],
+    rows:()=>[["D",{ro:"disponibil: așteaptă să pornească",en:"disposed: waiting to start"},{ro:"nimic, pornește singur",en:"nothing, it starts on its own"}],["C",{ro:"în curs",en:"current: in progress"},{ro:"urmărești progresul",en:"watch the progress"}],["H",{ro:"ținut (hold), oprit voit",en:"hold, stopped on purpose"},{ro:"START când vrei să meargă",en:"START when you want it to run"}],["K",{ro:"oprit cu eroare (kept)",en:"kept: stopped on error"},{ro:"citești DIAGI, repari, START",en:"read DIAGI, fix, START"}],["T",{ro:"transfer terminat",en:"transfer terminated"},{ro:"așteaptă procedura de final",en:"waits for the end procedure"}],["X",{ro:"executat: totul gata",en:"executed: all done"},{ro:"nimic",en:"nothing"}]]}
+},
+log:{title:{ro:"Catalogul transferului",en:"The transfer's catalog"},lead:{ro:"Fiecare transfer are o linie în catalogul CFT (CFTCAT), pe ambele părți.",en:"Every transfer has a line in the CFT catalog (CFTCAT), on both sides."},first:{ro:"Pas",en:"Step"},minWidth:560,
+  cols:[{h:{ro:"Partener",en:"Partner"},v:f=>f.part||"",cls:"ip"},{h:"IDF",v:f=>f.idf||"",cls:"mac"},{h:{ro:"Stare",en:"State"},v:f=>f.state||"",cls:""}]},
+
+steps:[
+{at:["cft1","cft2"],frame:null,kind:"none",tables:["vs"],who:{ro:"Ideea",en:"The idea"},
+ title:{ro:"De ce un monitor de transfer și nu un script FTP",en:"Why a transfer monitor and not an FTP script"},
+ body:{ro:`<p>Fișierul de plăți are 48 MB. Dacă îl copiem cu un script FTP și rețeaua cade la jumătate, avem trei probleme: trebuie luat de la zero, cineva trebuie să observe, iar core-banking ar putea importa <strong>o jumătate de fișier</strong>.</p>
+<p><strong>Transfer CFT</strong> (familia de produse XFB de la Axway) rezolvă asta. Pe fiecare server rulează un CFT; cele două vorbesc între ele, țin evidența fiecărui transfer într-un <strong>catalog</strong>, reiau singure după erori și lasă o dovadă.</p>
+<p class="key">Un <strong>flux XFB</strong> = ce fișier, de la cine, la cine și ce se întâmplă după ce ajunge.</p>`,
+ en:`<p>The payments file is 48 MB. If we copy it with an FTP script and the network drops halfway, we have three problems: it must start over, someone has to notice, and core-banking might import <strong>half a file</strong>.</p>
+<p><strong>Transfer CFT</strong> (Axway's XFB product family) solves this. A CFT runs on each server; the two talk to each other, record every transfer in a <strong>catalog</strong>, resume on their own after errors and leave proof.</p>
+<p class="key">An <strong>XFB flow</strong> = which file, from whom, to whom, and what happens once it arrives.</p>`}},
+
+{at:"cft1",frame:null,kind:"none",tables:["conf"],who:{ro:"Configurare",en:"Configuration"},
+ title:{ro:"Partenerul și IDF-ul: fluxul are un nume",en:"The partner and the IDF: the flow has a name"},
+ body:{ro:`<p>Înainte de primul transfer, administratorii definesc două lucruri pe fiecare CFT:</p>
+<ul><li><strong>Partenerul</strong> (<code>CFTPART</code> + <code>CFTTCP</code>): cu cine vorbim, la ce adresă, cu ce protocol și cu ce nume ne prezentăm. Pentru CFT APP, partenerul se numește <code>CORE</code>.</li>
+<li><strong>IDF-ul</strong> (identificatorul de fișier): numele <em>fluxului</em>, aici <code>PAYOUT</code>. Pe CFT APP există un <code>CFTSEND ID=PAYOUT</code> (cum trimit), pe CFT CORE un <code>CFTRECV ID=PAYOUT</code> (unde pun fișierul și ce rulez apoi).</li></ul>
+<p>Aplicația nu știe adrese, porturi sau parole. Spune doar: „trimite fișierul ăsta, fluxul PAYOUT, partenerului CORE”.</p>`,
+ en:`<p>Before the first transfer, admins define two things on each CFT:</p>
+<ul><li><strong>The partner</strong> (<code>CFTPART</code> + <code>CFTTCP</code>): who we talk to, at which address, with which protocol and under which name we introduce ourselves. For CFT APP, the partner is called <code>CORE</code>.</li>
+<li><strong>The IDF</strong> (file identifier): the <em>flow's</em> name, here <code>PAYOUT</code>. CFT APP has a <code>CFTSEND ID=PAYOUT</code> (how I send), CFT CORE has a <code>CFTRECV ID=PAYOUT</code> (where I put the file and what I run next).</li></ul>
+<p>The app knows no addresses, ports or passwords. It just says: "send this file, flow PAYOUT, to partner CORE".</p>`}},
+
+{at:"app",frame:F1,kind:"f",move:[[["app","cft1"]]],log:{ro:"cererea de transfer",en:"the transfer request"},who:"batch-plati",
+ title:{ro:"Aplicația cere transferul",en:"The app requests the transfer"},
+ body:{ro:`<p>Jobul de noapte a scris <code>PAY_20261112.xml</code>. Ultima lui comandă:</p>
+<p><code>CFTUTIL SEND PART=CORE, IDF=PAYOUT, FNAME=/data/out/PAY_20261112.xml</code></p>
+<p>CFT APP creează o linie în <strong>catalog</strong>, cu un identificator unic al transferului (IDT), în starea <strong>D</strong> (disponibil). Jobul se termină imediat: de aici, livrarea e treaba CFT-ului.</p>`,
+ en:`<p>The nightly job has written <code>PAY_20261112.xml</code>. Its last command:</p>
+<p><code>CFTUTIL SEND PART=CORE, IDF=PAYOUT, FNAME=/data/out/PAY_20261112.xml</code></p>
+<p>CFT APP creates a line in the <strong>catalog</strong>, with a unique transfer identifier (IDT), in state <strong>D</strong> (disposed, ready). The job ends at once: from here, delivery is the CFT's job.</p>`},
+ try:[{cmd:"CFTUTIL LISTCAT PART=CORE, IDF=PAYOUT",d:{ro:"Vezi transferul în catalog, cu starea lui.",en:"See the transfer in the catalog, with its state."}}]},
+
+{at:"cft1",frame:F2,kind:"x",move:[[["cft1","cft2"]]],log:{ro:"sesiune PeSIT",en:"PeSIT session"},who:"PeSIT",
+ title:{ro:"Sesiunea PeSIT: cele două CFT-uri se recunosc",en:"The PeSIT session: the two CFTs recognise each other"},
+ body:{ro:`<p>CFT APP deschide o conexiune TCP spre CFT CORE pe portul <strong>1761</strong> și pornește <strong>TLS</strong>: fiecare parte își arată certificatul (mTLS).</p>
+<p>Peste TLS vorbesc <strong>PeSIT</strong>, protocolul nativ între CFT-uri, făcut pentru transferuri bancare. În prima cerere, CFT APP se prezintă cu numele lui de partener și o parolă de partener; CFT CORE verifică dacă îl cunoaște și dacă are voie să trimită fluxul PAYOUT.</p>
+<p>Starea devine <strong>C</strong> (în curs).</p>`,
+ en:`<p>CFT APP opens a TCP connection to CFT CORE on port <strong>1761</strong> and starts <strong>TLS</strong>: each side shows its certificate (mTLS).</p>
+<p>Over TLS they speak <strong>PeSIT</strong>, the native protocol between CFTs, designed for banking transfers. In the first request, CFT APP introduces itself with its partner name and a partner password; CFT CORE checks that it knows it and that it may send the PAYOUT flow.</p>
+<p>The state becomes <strong>C</strong> (current).</p>`},
+ more:{ro:`<p>Transfer CFT știe și alte protocoale (SFTP, FTP/S, ODETTE), dar între două CFT-uri PeSIT e alegerea obișnuită: are checkpoint-uri, reluare și confirmări încorporate.</p>`,
+  en:`<p>Transfer CFT also speaks other protocols (SFTP, FTP/S, ODETTE), but between two CFTs PeSIT is the usual choice: checkpoints, restart and acknowledgements are built in.</p>`}},
+
+{at:"cft2",frame:F3,kind:"x",move:[[["cft1","cft2"]]],log:{ro:"transfer cu checkpoint-uri",en:"transfer with checkpoints"},who:"PeSIT",
+ title:{ro:"Datele curg, cu checkpoint-uri",en:"The data flows, with checkpoints"},
+ body:{ro:`<p>Fișierul pleacă în blocuri. La fiecare 1 MB, cele două CFT-uri pun un <strong>punct de sincronizare</strong> (checkpoint): receptorul confirmă „am scris pe disc tot până aici”.</p>
+<p>Checkpoint-urile costă puțin timp, dar fac posibilă <strong>reluarea</strong>: dacă ceva se strică, nu se pierde decât porțiunea de după ultimul checkpoint.</p>`,
+ en:`<p>The file goes out in blocks. Every 1 MB, the two CFTs set a <strong>sync point</strong> (checkpoint): the receiver confirms "I've written everything up to here to disk".</p>
+<p>Checkpoints cost a little time, but they make <strong>restart</strong> possible: if something breaks, only the part after the last checkpoint is lost.</p>`}},
+
+{at:"cft1",frame:F4,kind:"x",move:[[["cft1","cft2"]]],marks:{cft2:{k:"drop",t:{ro:"rețea căzută",en:"network down"}}},log:{ro:"cădere și reluare",en:"drop and restart"},who:{ro:"Cădere de rețea",en:"Network drop"},
+ title:{ro:"Rețeaua cade la 60%: reluare de la checkpoint",en:"The network drops at 60%: restart from the checkpoint"},
+ body:{ro:`<p>La 29 MB, un firewall repornește și conexiunea se rupe. Nimeni nu trebuie să intervină:</p>
+<ol><li>CFT APP pune transferul înapoi în <strong>D</strong> și programează o reîncercare (din <code>CFTTCP</code>: de exemplu de 12 ori, la 5 minute).</li>
+<li>La reconectare, cele două CFT-uri compară ultimul checkpoint comun: <strong>29 MB</strong>.</li>
+<li>Transferul continuă de acolo. Nu se retrimit cei 29 MB.</li></ol>
+<p class="key">Pe CFT CORE, fișierul e încă sub un <strong>nume temporar</strong>. Nimic nu poate importa o jumătate de fișier.</p>`,
+ en:`<p>At 29 MB, a firewall restarts and the connection breaks. Nobody needs to step in:</p>
+<ol><li>CFT APP puts the transfer back in <strong>D</strong> and schedules a retry (from <code>CFTTCP</code>: for example 12 times, every 5 minutes).</li>
+<li>On reconnect, the two CFTs compare their last common checkpoint: <strong>29 MB</strong>.</li>
+<li>The transfer carries on from there. The 29 MB aren't sent again.</li></ol>
+<p class="key">On CFT CORE, the file still has a <strong>temporary name</strong>. Nothing can import half a file.</p>`}},
+
+{at:"cft2",frame:F5,kind:"r",log:{ro:"fișierul a ajuns",en:"the file has arrived"},who:"CFT CORE",
+ title:{ro:"Fișierul ajunge întreg și primește numele final",en:"The file arrives whole and gets its final name"},
+ body:{ro:`<p>Ultimul bloc ajunge. CFT CORE verifică mărimea și numărul de înregistrări, apoi <strong>redenumește</strong> fișierul temporar (<code>WFNAME</code>) în numele final (<code>FNAME</code>) din <code>CFTRECV ID=PAYOUT</code>: <code>/data/in/PAY_20261112.xml</code>.</p>
+<p>Pe ambele CFT-uri, transferul trece în starea <strong>T</strong> (terminat). Partea de rețea s-a încheiat.</p>`,
+ en:`<p>The last block arrives. CFT CORE checks the size and record count, then <strong>renames</strong> the temporary file (<code>WFNAME</code>) to the final name (<code>FNAME</code>) from <code>CFTRECV ID=PAYOUT</code>: <code>/data/in/PAY_20261112.xml</code>.</p>
+<p>On both CFTs, the transfer moves to state <strong>T</strong> (terminated). The network part is over.</p>`}},
+
+{at:"cft2",frame:F6,kind:"r",move:[[["cft2","core"]]],log:{ro:"procedura de final",en:"the end procedure"},who:"CFT CORE",
+ title:{ro:"Procedura de final pornește importul",en:"The end procedure starts the import"},
+ body:{ro:`<p>În <code>CFTRECV ID=PAYOUT</code> scrie și <code>EXEC=/opt/cft/exec/import_payments.sh</code>. Imediat după T, CFT CORE rulează acest script și îi dă variabilele transferului: numele fișierului, partenerul, IDF-ul, IDT-ul.</p>
+<p>Scriptul pornește importul în core-banking. Nu mai e nevoie de un cron care să verifice „a venit fișierul?”: <strong>sosirea fișierului declanșează procesarea</strong>.</p>
+<p>Când scriptul se termină cu succes, starea devine <strong>X</strong> (executat).</p>`,
+ en:`<p><code>CFTRECV ID=PAYOUT</code> also says <code>EXEC=/opt/cft/exec/import_payments.sh</code>. Right after T, CFT CORE runs this script and passes it the transfer's variables: file name, partner, IDF, IDT.</p>
+<p>The script starts the import in core-banking. There's no need for a cron job checking "has the file arrived?": <strong>the file's arrival triggers the processing</strong>.</p>
+<p>When the script finishes successfully, the state becomes <strong>X</strong> (executed).</p>`}},
+
+{at:"cft2",frame:F7,kind:"f",move:[[["cft2","cft1"]]],log:{ro:"confirmarea",en:"the acknowledgement"},who:{ro:"Confirmare",en:"Acknowledgement"},
+ title:{ro:"Confirmarea: „am primit și am procesat”",en:"The acknowledgement: \"received and processed\""},
+ body:{ro:`<p>Faptul că fișierul a ajuns nu înseamnă că plățile au fost importate. De aceea fluxul cere o <strong>confirmare de aplicație</strong>: la sfârșitul importului, scriptul trimite înapoi un <strong>ACK</strong> (sau un NACK, dacă a găsit erori) legat de transferul original.</p>
+<p>Pe CFT APP, linia din catalog arată acum: trimis, livrat și <strong>confirmat</strong>. Echipa de plăți are dovada completă, cu ore.</p>`,
+ en:`<p>A file arriving doesn't mean the payments were imported. That's why the flow asks for an <strong>application acknowledgement</strong>: at the end of the import, the script sends back an <strong>ACK</strong> (or a NACK if it found errors) tied to the original transfer.</p>
+<p>On CFT APP, the catalog line now shows: sent, delivered and <strong>acknowledged</strong>. The payments team has full proof, with times.</p>`}},
+
+{at:"cft2",frame:F8,kind:"x",marks:{cft2:{k:"drop",t:{ro:"disc plin",en:"disk full"}}},tables:["states"],hl:{states:"K"},log:{ro:"a doua zi: eroare",en:"the next day: an error"},who:{ro:"Starea K",en:"State K"},
+ title:{ro:"A doua zi: transferul rămâne în K",en:"The next day: the transfer stays in K"},
+ body:{ro:`<p>A doua noapte, discul de pe serverul CORE se umple la jumătatea transferului. Aceasta nu e o problemă de rețea, iar reîncercarea n-ar ajuta. CFT oprește transferul în starea <strong>K</strong> (kept, păstrat cu eroare) și scrie un cod de diagnostic (<code>DIAGI</code>).</p>
+<p>Operatorul:</p>
+<ol><li>caută transferurile în K (<code>LISTCAT STATE=K</code>) și citește diagnosticul;</li>
+<li>eliberează spațiu pe disc;</li>
+<li>dă <code>CFTUTIL START</code> pe acel transfer: continuă de la ultimul checkpoint.</li></ol>`,
+ en:`<p>The next night, the disk on the CORE server fills up halfway through the transfer. This isn't a network problem, and a retry wouldn't help. CFT stops the transfer in state <strong>K</strong> (kept on error) and writes a diagnostic code (<code>DIAGI</code>).</p>
+<p>The operator:</p>
+<ol><li>looks for transfers in K (<code>LISTCAT STATE=K</code>) and reads the diagnostic;</li>
+<li>frees disk space;</li>
+<li>runs <code>CFTUTIL START</code> on that transfer: it carries on from the last checkpoint.</li></ol>`},
+ try:[{cmd:"CFTUTIL LISTCAT STATE=K",d:{ro:"Toate transferurile oprite cu eroare.",en:"Every transfer stopped on error."}},{cmd:"CFTUTIL START PART=APP, IDF=PAYOUT, IDT=K1113021",d:{ro:"Repornește transferul după reparație.",en:"Restarts the transfer after the fix."}}]},
+
+{at:"sent",frame:F9,kind:"t",move:[[["cft1","sent"],["cft2","sent"]]],log:{ro:"urmărire în Sentinel",en:"tracking in Sentinel"},who:"Sentinel",
+ title:{ro:"Sentinel: tot fluxul pe un singur ecran",en:"Sentinel: the whole flow on one screen"},
+ body:{ro:`<p>Ambele CFT-uri trimit evenimente către <strong>Axway Sentinel</strong>. Pentru fiecare transfer, Sentinel ține un obiect <strong>XFBTransfer</strong> și îl actualizează la fiecare etapă: cerut, în curs, primit, executat, confirmat.</p>
+<p>Echipa de suport nu mai intră pe servere. Vede în Sentinel:</p>
+<ul><li>fluxurile de azi, cu starea și durata fiecăruia;</li>
+<li>transferurile în eroare, cu diagnosticul;</li>
+<li>o <strong>alertă</strong> dacă fluxul PAYOUT nu a ajuns în X până la ora 06:00.</li></ul>`,
+ en:`<p>Both CFTs send events to <strong>Axway Sentinel</strong>. For each transfer, Sentinel keeps an <strong>XFBTransfer</strong> object and updates it at every stage: requested, in progress, received, executed, acknowledged.</p>
+<p>The support team no longer logs on to servers. In Sentinel they see:</p>
+<ul><li>today's flows, each with its state and duration;</li>
+<li>transfers in error, with the diagnostic;</li>
+<li>an <strong>alert</strong> if the PAYOUT flow hasn't reached X by 06:00.</li></ul>`}},
+
+{at:["cft1","cft2"],frame:null,kind:"none",summary:true,tables:["states"],
+ title:{ro:"Recapitulare",en:"Recap"},
+ body:{ro:`<ul><li>Un <strong>flux XFB</strong> = partener + IDF + sens; aplicația dă doar <code>SEND PART= IDF= FNAME=</code>.</li>
+<li>Între CFT-uri: <strong>PeSIT peste TLS</strong>, cu autentificare de partener.</li>
+<li><strong>Checkpoint-urile</strong> permit reluarea de la ultimul punct, nu de la zero; reîncercările sunt automate.</li>
+<li>Fișierul are un <strong>nume temporar</strong> până e complet; apoi rulează <strong>procedura de final</strong>.</li>
+<li>Stări: D → C → T → X; <strong>K</strong> = eroare (citești DIAGI, repari, START); <strong>H</strong> = oprit voit.</li>
+<li><strong>ACK</strong> = dovada că fișierul a fost și procesat; <strong>Sentinel</strong> = urmărire și alerte.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Mergi la laborator ↓</button></p>`,
+ en:`<ul><li>An <strong>XFB flow</strong> = partner + IDF + direction; the app just runs <code>SEND PART= IDF= FNAME=</code>.</li>
+<li>Between CFTs: <strong>PeSIT over TLS</strong>, with partner authentication.</li>
+<li><strong>Checkpoints</strong> allow restarting from the last point, not from zero; retries are automatic.</li>
+<li>The file keeps a <strong>temporary name</strong> until complete; then the <strong>end procedure</strong> runs.</li>
+<li>States: D → C → T → X; <strong>K</strong> = error (read DIAGI, fix, START); <strong>H</strong> = stopped on purpose.</li>
+<li><strong>ACK</strong> = proof the file was also processed; <strong>Sentinel</strong> = tracking and alerts.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Go to the lab ↓</button></p>`}}
+],
+
+reference:(T,lang)=>{
+  const ro=lang==="ro";
+  return `<div class="ref-grid"><section class="card refcard"><h2>${ro?"Pe CFT APP (emițător)":"On CFT APP (sender)"}</h2>
+<pre class="yaml"><span class="c"># ${ro?"partenerul și adresa lui":"the partner and its address"}</span>
+CFTPART  ID=CORE, PROT=PESITSSL, SAP=1761,
+         NSPART=APP, NRPART=CORE
+CFTTCP   ID=CORE, HOST=core-cft.example.com,
+         RETRYM=12, RETRYW=5
+<span class="c"># ${ro?"fluxul PAYOUT, sensul trimitere":"the PAYOUT flow, send side"}</span>
+CFTSEND  ID=PAYOUT, FCODE=ASCII, FTYPE=T
+
+<span class="c"># ${ro?"trimitere, listare, repornire":"send, list, restart"}</span>
+CFTUTIL SEND PART=CORE, IDF=PAYOUT,
+        FNAME=/data/out/PAY_20261112.xml
+CFTUTIL LISTCAT PART=CORE, IDF=PAYOUT
+CFTUTIL LISTCAT STATE=K
+CFTUTIL START PART=CORE, IDF=PAYOUT, IDT=K1112093</pre></section>
+<section class="card refcard"><h2>${ro?"Pe CFT CORE (receptor)":"On CFT CORE (receiver)"}</h2>
+<pre class="yaml">CFTPART  ID=APP, PROT=PESITSSL, NSPART=CORE, NRPART=APP
+<span class="c"># ${ro?"unde ajunge fișierul și ce rulează apoi":"where the file lands and what runs next"}</span>
+CFTRECV  ID=PAYOUT,
+         WFNAME=/data/in/tmp/&amp;IDTU,
+         FNAME=/data/in/&amp;NFNAME,
+         EXEC=/opt/cft/exec/import_payments.sh</pre>
+<h3>${ro?"Stări":"States"}</h3>
+<pre class="yaml">D → C → T → X       ${ro?"drumul normal":"the normal path"}
+H                   ${ro?"oprit voit (KEEP)":"held on purpose (KEEP)"}
+K                   ${ro?"oprit cu eroare → DIAGI → START":"stopped on error → DIAGI → START"}</pre></section></div>`;
+},
+
+gloss:[
+ ["XFB",null,{ro:"Familia de produse Axway pentru transfer de fișiere (Transfer CFT, Gateway, Sentinel).",en:"Axway's file transfer product family (Transfer CFT, Gateway, Sentinel)."}],
+ ["Transfer CFT","Cross File Transfer",{ro:"Monitorul de transfer Axway care rulează pe fiecare server și gestionează transferurile.",en:"Axway's transfer monitor that runs on each server and manages the transfers."}],
+ ["MFT","Managed File Transfer",{ro:"Transfer de fișiere cu reluare, confirmări, audit și monitorizare centrală.",en:"File transfer with restart, acknowledgements, audit and central monitoring."}],
+ ["IDF",{ro:"identificator de fișier",en:"file identifier"},{ro:"Numele unui flux (de ex. PAYOUT), folosit de ambele CFT-uri.",en:"A flow's name (e.g. PAYOUT), used by both CFTs."}],
+ ["IDT",{ro:"identificator de transfer",en:"transfer identifier"},{ro:"ID-ul unic al unui transfer anume din catalog.",en:"The unique ID of one particular transfer in the catalog."}],
+ [{ro:"Partener",en:"Partner"},"CFTPART",{ro:"Celălalt capăt al unui transfer: nume, protocol, adresă, identități.",en:"The other end of a transfer: name, protocol, address, identities."}],
+ ["PeSIT",null,{ro:"Protocolul de transfer folosit între CFT-uri, cu checkpoint-uri și reluare.",en:"The transfer protocol used between CFTs, with checkpoints and restart."}],
+ ["Checkpoint",{ro:"punct de sincronizare",en:"sync point"},{ro:"Loc din fișier confirmat de ambele părți; de aici se poate relua.",en:"A point in the file confirmed by both sides; transfers can resume from there."}],
+ [{ro:"Catalog",en:"Catalog"},"CFTCAT",{ro:"Lista tuturor transferurilor unui CFT, cu starea fiecăruia.",en:"The list of all of a CFT's transfers, each with its state."}],
+ [{ro:"Procedură de final",en:"End procedure"},"EXEC",{ro:"Script rulat automat după ce fișierul a ajuns.",en:"A script run automatically once the file has arrived."}],
+ ["ACK","acknowledgement",{ro:"Confirmare trimisă înapoi că fișierul a fost și procesat.",en:"A confirmation sent back that the file was also processed."}],
+ ["DIAGI",null,{ro:"Codul de diagnostic al unui transfer oprit cu eroare.",en:"The diagnostic code of a transfer stopped on error."}],
+ ["Sentinel","Axway Sentinel",{ro:"Monitorizare centrală: urmărește fiecare transfer (XFBTransfer) și trimite alerte.",en:"Central monitoring: tracks every transfer (XFBTransfer) and raises alerts."}]
+],
+glossEx:{
+ "IDF":{ro:"PAYOUT = fluxul de plăți dintre APP și CORE.",en:"PAYOUT = the payments flow between APP and CORE."},
+ "Checkpoint":{ro:"la fiecare 1 MB; după o cădere la 29 MB, se reia de la 29 MB.",en:"every 1 MB; after a drop at 29 MB, it resumes from 29 MB."}
+},
+
+quiz:[
+ {q:{ro:"Ce identifică un flux XFB între două CFT-uri?",en:"What identifies an XFB flow between two CFTs?"},o:[{ro:"Doar numele fișierului",en:"Just the file name"},{ro:"Partenerul + IDF-ul + sensul",en:"The partner + the IDF + the direction"},{ro:"Adresa IP a serverului",en:"The server's IP address"},{ro:"Portul 1761",en:"Port 1761"}],a:1,e:{ro:"De ex. PART=CORE, IDF=PAYOUT, SEND.",en:"E.g. PART=CORE, IDF=PAYOUT, SEND."}},
+ {q:{ro:"Rețeaua cade după 29 MB dintr-un fișier de 48 MB. Ce face Transfer CFT?",en:"The network drops after 29 MB of a 48 MB file. What does Transfer CFT do?"},o:[{ro:"Șterge fișierul",en:"Deletes the file"},{ro:"Așteaptă un operator",en:"Waits for an operator"},{ro:"Reîncearcă singur și reia de la ultimul checkpoint",en:"Retries on its own and resumes from the last checkpoint"},{ro:"Retrimite tot de la zero",en:"Resends everything from zero"}],a:2,e:{ro:"Checkpoint-uri + reîncercări automate.",en:"Checkpoints + automatic retries."}},
+ {q:{ro:"De ce primește fișierul un nume temporar pe receptor?",en:"Why does the file get a temporary name on the receiver?"},o:[{ro:"Ca nimeni să nu proceseze un fișier incomplet",en:"So nobody processes an incomplete file"},{ro:"Ca să fie mai mic",en:"To make it smaller"},{ro:"Pentru criptare",en:"For encryption"},{ro:"Din cauza PeSIT",en:"Because of PeSIT"}],a:0,e:{ro:"Redenumirea în FNAME vine doar când e complet.",en:"Renaming to FNAME only happens once it's complete."}},
+ {q:{ro:"Ce declanșează importul în core-banking?",en:"What triggers the import in core-banking?"},o:[{ro:"Un cron la ora 3",en:"A cron job at 3 am"},{ro:"Un operator",en:"An operator"},{ro:"Emițătorul, prin SSH",en:"The sender, over SSH"},{ro:"Procedura de final (EXEC) din CFTRECV, după starea T",en:"The end procedure (EXEC) in CFTRECV, after state T"}],a:3,e:{ro:"Sosirea fișierului pornește procesarea.",en:"The file's arrival starts the processing."}},
+ {q:{ro:"Un transfer e în starea K. Ce înseamnă?",en:"A transfer is in state K. What does it mean?"},o:[{ro:"S-a terminat cu succes",en:"It finished successfully"},{ro:"S-a oprit cu eroare și așteaptă o intervenție",en:"It stopped on error and waits for someone to step in"},{ro:"E în curs",en:"It's in progress"},{ro:"A fost șters",en:"It was deleted"}],a:1,e:{ro:"Citești DIAGI, repari cauza, apoi START.",en:"Read DIAGI, fix the cause, then START."}},
+ {q:{ro:"Care e drumul normal al stărilor?",en:"What's the normal path of states?"},o:[{ro:"K → H → X",en:"K → H → X"},{ro:"X → T → C → D",en:"X → T → C → D"},{ro:"D → C → T → X",en:"D → C → T → X"},{ro:"C → K → D",en:"C → K → D"}],a:2,e:{ro:"Disponibil → în curs → terminat → executat.",en:"Disposed → current → terminated → executed."}},
+ {q:{ro:"Ce dovedește un ACK de aplicație, în plus față de starea T?",en:"What does an application ACK prove, beyond state T?"},o:[{ro:"Că fișierul a fost și procesat de aplicația receptoare",en:"That the file was also processed by the receiving app"},{ro:"Că rețeaua e rapidă",en:"That the network is fast"},{ro:"Că certificatul e valid",en:"That the certificate is valid"},{ro:"Nimic în plus",en:"Nothing more"}],a:0,e:{ro:"T = a ajuns; ACK = a fost și procesat.",en:"T = it arrived; ACK = it was also processed."}},
+ {q:{ro:"Unde vede echipa de suport toate fluxurile și primește alerte?",en:"Where does the support team see every flow and get alerts?"},o:[{ro:"În jobul de noapte",en:"In the nightly job"},{ro:"În fișierul de plăți",en:"In the payments file"},{ro:"În CFTTCP",en:"In CFTTCP"},{ro:"În Sentinel (obiectele XFBTransfer)",en:"In Sentinel (XFBTransfer objects)"}],a:3,e:{ro:"Ambele CFT-uri trimit evenimente către Sentinel.",en:"Both CFTs send events to Sentinel."}}
+]
+};
+})();
+</script>
+<script src="../assets/engine.js?v=2"></script>
+<script src="../assets/labs-data.js?v=3"></script>
+<script src="../assets/lab.js?v=1"></script>
+<script type="module" src="../assets/auth.js?v=8"></script>
+</body>
+</html>

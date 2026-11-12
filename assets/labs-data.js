@@ -257,6 +257,30 @@ mq: { title: "IBM MQ / ActiveMQ", tasks: [
  { type: "order", name: B("Drumul plății", "The payment's path"), q: B("Ordonează drumul mesajului de plată prin IBM MQ.", "Order the payment message's path through IBM MQ."),
    items: [B("payments-api face put pe coada PAYMENTS (JMS)", "payments-api puts to the PAYMENTS queue (JMS)"), B("QM_APP îl pune în coada de transmisie QM_CORE.XMITQ", "QM_APP places it on the QM_CORE.XMITQ transmission queue"), B("Canalul sender îl duce la QM_CORE", "The sender channel carries it to QM_CORE"), B("Ajunge în coada locală PAYMENTS.IN", "It lands in the local queue PAYMENTS.IN"), B("core-banking îl citește în tranzacție și dă COMMIT", "core-banking reads it in a transaction and COMMITs"), B("Răspunsul cu CorrelationId ajunge în PAYMENTS.REPLY", "The reply with the CorrelationId arrives in PAYMENTS.REPLY")],
    hint: B("Coadă remote → XMITQ → canal → coadă locală.", "Remote queue → XMITQ → channel → local queue.") }
+]},
+
+xfb: { title: "XFB / Transfer CFT", tasks: [
+ { type: "term", name: B("Transferurile în eroare", "Transfers in error"), q: B("Pe CFT CORE, listează toate transferurile oprite cu eroare (starea K).", "On CFT CORE, list every transfer stopped on error (state K)."),
+   prompt: "cft@core:~$", need: ["cftutil", "listcat", "state=k"], sol: "CFTUTIL LISTCAT STATE=K",
+   out: "PART=APP  IDF=PAYOUT  IDT=K1113021  STATE=K  DIAGI=ENOSPC\n1 record(s) selected",
+   hint: B("CFTUTIL LISTCAT cu un filtru pe stare.", "CFTUTIL LISTCAT with a state filter."), why: B("Diagnosticul arată cauza: aici disc plin. Repari, apoi START.", "The diagnostic shows the cause: disk full here. Fix it, then START.") },
+ { type: "input", name: B("Reluarea", "The restart"), q: B("Fișierul are 48 MB, checkpoint la fiecare 1 MB. Rețeaua cade după 29,4 MB. De la câți MB se reia transferul? (doar numărul)", "The file is 48 MB, a checkpoint every 1 MB. The network drops after 29.4 MB. From how many MB does the transfer resume? (just the number)"),
+   ans: ["29"], hint: B("Ultimul checkpoint confirmat de ambele părți.", "The last checkpoint both sides confirmed."), why: B("Se reia de la checkpoint-ul de 29 MB; se pierd doar 0,4 MB.", "It resumes from the 29 MB checkpoint; only 0.4 MB is lost.") },
+ { type: "order", name: B("Stările unui transfer", "A transfer's states"), q: B("Ordonează drumul normal al fluxului PAYOUT.", "Order the PAYOUT flow's normal path."),
+   items: [B("Aplicația dă CFTUTIL SEND PART=CORE, IDF=PAYOUT", "The app runs CFTUTIL SEND PART=CORE, IDF=PAYOUT"), B("Transferul apare în catalog în starea D", "The transfer appears in the catalog in state D"), B("Sesiune PeSIT + TLS, starea C, checkpoint-uri", "PeSIT + TLS session, state C, checkpoints"), B("Fișierul complet e redenumit; starea T", "The complete file is renamed; state T"), B("Procedura de final pornește importul; starea X", "The end procedure starts the import; state X"), B("ACK-ul ajunge înapoi la CFT APP", "The ACK arrives back at CFT APP")],
+   hint: B("D → C → T → X, apoi confirmarea.", "D → C → T → X, then the acknowledgement.") }
+]},
+
+"xfb-gateway": { title: "XFB Gateway", tasks: [
+ { type: "term", name: B("Testul de conexiune", "The connection test"), q: B("Pe Gateway, conectează-te manual prin SFTP la BANCA-P cu cheia gw_banca_p (utilizator xfb, server sftp.banca-p.example).", "On the Gateway, connect manually over SFTP to BANCA-P with the gw_banca_p key (user xfb, server sftp.banca-p.example)."),
+   prompt: "gw$", need: ["sftp", "-i", "gw_banca_p", "xfb@sftp.banca-p.example"], sol: "sftp -i ~/.ssh/gw_banca_p xfb@sftp.banca-p.example",
+   out: "Connected to sftp.banca-p.example.\nsftp> ls\ninbox  outbox",
+   hint: B("sftp -i <cheie> utilizator@server", "sftp -i <key> user@server"), why: B("Dacă testul manual merge, problema nu e la rețea sau la cheie, ci în regulă.", "If the manual test works, the problem isn't the network or the key but the rule.") },
+ { type: "input", name: B("Cheia potrivită", "The right key"), q: B("Cu a cui cheie publică criptezi fișierul trimis la BANCA-P? (un cuvânt: noastra / banca-p)", "Whose public key do you encrypt the file for BANCA-P with? (one word: ours / banca-p)"),
+   ans: ["banca-p", "bancap", "banca p", "a bancii", "partener", "partner"], hint: B("Cine trebuie să-l poată deschide?", "Who must be able to open it?"), why: B("Doar BANCA-P are cheia privată pereche; semnătura o faci cu cheia ta privată.", "Only BANCA-P has the matching private key; you sign with your own private key.") },
+ { type: "order", name: B("Drumul extraselor", "The statements' path"), q: B("Ordonează drumul fișierului STMT spre BANCA-P.", "Order the STMT file's path to BANCA-P."),
+   items: [B("CFT CORE trimite STMT la Gateway prin PeSIT", "CFT CORE sends STMT to the Gateway via PeSIT"), B("Gateway-ul scrie fișierul pe disc (store)", "The Gateway writes the file to disk (store)"), B("Regula de rutare: PGP + redenumire", "The routing rule: PGP + rename"), B("SFTP spre BANCA-P: host key, cheie SSH, încărcare .part", "SFTP to BANCA-P: host key, SSH key, .part upload"), B("Redenumire la numele final în /inbox", "Rename to the final name in /inbox"), B("Gateway-ul ridică .ack din /outbox", "The Gateway picks up the .ack from /outbox")],
+   hint: B("Store, apoi transformări, apoi forward.", "Store, then transformations, then forward.") }
 ]}
 };
 })();
