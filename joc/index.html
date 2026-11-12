@@ -71,7 +71,7 @@ h1{font:700 clamp(1.5rem,4vw,2.2rem) var(--head);margin:0 0 6px}
     <p id="bestLine" class="lead" style="margin-top:12px"></p>
     <div class="row"><button type="button" class="btn" id="start" data-t="start"></button></div>
     <p class="kind" style="margin-top:18px" data-t="more"></p>
-    <div class="row" style="margin-top:6px"><a class="btn sec" href="../zar/index.html" data-t="dice"></a><a class="btn sec" href="../roata/index.html" data-t="wheel"></a></div>
+    <div class="row" style="margin-top:6px"><a class="btn sec" href="../zar/index.html" data-t="dice"></a><a class="btn sec" href="../roata/index.html" data-t="wheel"></a><a class="btn sec" href="../blackjack/index.html" data-t="bj"></a></div>
   </section>
 
   <section class="card" id="game" hidden>
@@ -106,7 +106,7 @@ const L=(ro,en)=>lang==="en"?en:ro;
 const UI={brand:["Rețea pas cu pas","Network step by step"],home:["← Lecții","← Lessons"],title:["🎮 Livrează pachetul","🎮 Deliver the packet"],
   lead:["Un mini-joc rapid: fiecare pachet trebuie trimis pe ieșirea corectă înainte să expire timpul.","A quick mini-game: send each packet out the right exit before time runs out."],
   howT:["Cum se joacă","How to play"],start:["▶ Start","▶ Start"],round:["Runda","Round"],score:["Scor","Score"],streak:["Serie","Streak"],next:["Următorul pachet →","Next packet →"],
-  over:["Joc terminat","Game over"],more:["Alte jocuri","More games"],dice:["🎲 Zarul pachetului","🎲 The packet die"],wheel:["🎡 Ce învăț azi?","🎡 What do I learn today?"],again:["↻ Joacă din nou","↻ Play again"],results:["★ Rezultatele mele","★ My results"],tests:["✎ Teste","✎ Quizzes"]};
+  over:["Joc terminat","Game over"],more:["Alte jocuri","More games"],dice:["🎲 Zarul pachetului","🎲 The packet die"],bj:["🃏 Blackjack","🃏 Blackjack"],wheel:["🎡 Ce învăț azi?","🎡 What do I learn today?"],again:["↻ Joacă din nou","↻ Play again"],results:["★ Rezultatele mele","★ My results"],tests:["✎ Teste","✎ Quizzes"]};
 const T=k=>UI[k][lang==="en"?1:0];
 const ROUNDS=15,TIME=15000;
 const R=n=>Math.floor(Math.random()*n),pick=a=>a[R(a.length)],shuf=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=R(i+1);[a[i],a[j]]=[a[j],a[i]]}return a};

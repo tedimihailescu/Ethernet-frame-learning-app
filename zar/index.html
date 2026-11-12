@@ -80,7 +80,7 @@ h1{font:700 clamp(1.5rem,4vw,2.2rem) var(--head);margin:0 0 6px}
 
   <section class="card" id="end" hidden>
     <p class="big" id="endT"></p><p id="endS"></p><p id="endB" class="lead"></p>
-    <div class="row"><button type="button" class="btn" id="again" data-t="again"></button><a class="btn sec" href="../roata/index.html" data-t="wheel"></a><a class="btn sec" href="../rezultate/index.html" data-t="results"></a></div>
+    <div class="row"><button type="button" class="btn" id="again" data-t="again"></button><a class="btn sec" href="../roata/index.html" data-t="wheel"></a><a class="btn sec" href="../blackjack/index.html" data-t="bj"></a><a class="btn sec" href="../rezultate/index.html" data-t="results"></a></div>
   </section>
 </main>
 
@@ -94,7 +94,7 @@ const L=(ro,en)=>lang==="en"?en:ro;
 const T=v=>Array.isArray(v)?v[lang==="en"?1:0]:v;
 const UI={brand:["Rețea pas cu pas","Network step by step"],home:["← Lecții","← Lessons"],games:["🎮 Jocuri","🎮 Games"],title:["🎲 Zarul pachetului","🎲 The packet die"],
   lead:["Du pachetul de la Host A la Host B. Dai cu zarul: numărul arată și câte căsuțe poți avansa, și tema întrebării. Răspunzi corect, avansezi; greșești, rămâi pe loc. Ai 15 aruncări.","Carry the packet from Host A to Host B. Roll the die: the number sets both how far you can move and the question's topic. Answer right and you move; answer wrong and you stay. You have 15 rolls."],
-  rolls:["Aruncări","Rolls"],square:["Căsuța","Square"],right:["Corecte","Correct"],roll:["🎲 Dă cu zarul","🎲 Roll the die"],again:["↻ Joacă din nou","↻ Play again"],wheel:["🎡 Ce învăț azi?","🎡 What do I learn today?"],results:["★ Rezultate","★ Results"]};
+  rolls:["Aruncări","Rolls"],square:["Căsuța","Square"],right:["Corecte","Correct"],roll:["🎲 Dă cu zarul","🎲 Roll the die"],again:["↻ Joacă din nou","↻ Play again"],wheel:["🎡 Ce învăț azi?","🎡 What do I learn today?"],results:["★ Rezultate","★ Results"],bj:["🃏 Blackjack","🃏 Blackjack"]};
 const MAX=15,GOAL=30,ROUTERS=[6,14,22],LOSS=[10,18,26];
 const CATS=[["Ethernet & ARP","Ethernet & ARP"],["IP & rutare","IP & routing"],["TCP, UDP & porturi","TCP, UDP & ports"],["DNS","DNS"],["Securitate","Security"],["Kubernetes & cloud","Kubernetes & cloud"]];
 // [question, [correct, wrong, wrong, wrong]]  (shuffled when shown)

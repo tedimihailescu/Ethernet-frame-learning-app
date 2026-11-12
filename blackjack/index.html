@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Blackjack la Router</title>
+<meta name="description" content="Blackjack cu jetoane de joacă și un dealer care face glume de rețelistică. / Blackjack with play chips and a dealer who tells networking jokes.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/theme.css">
+<style>
+.page{max-width:900px;margin:0 auto;padding-block:20px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1{font:700 clamp(1.5rem,4vw,2.2rem) var(--head);margin:0 0 6px}
+.lead{color:var(--muted);margin:0 0 16px}
+.card{background:var(--surface);border:2px solid var(--text);border-radius:14px;padding:16px;min-width:0;margin-bottom:14px}
+.dealer{display:grid;grid-template-columns:64px minmax(0,1fr);gap:12px;align-items:center}
+.face{width:64px;height:64px;border-radius:50%;background:var(--accent);border:2px solid var(--text);display:grid;place-items:center;font-size:2.1rem;line-height:1;transition:transform .2s}
+.face.bob{animation:bob .5s ease}
+@keyframes bob{30%{transform:rotate(-10deg) scale(1.08)}70%{transform:rotate(8deg)}}
+.bubble{position:relative;background:var(--surface2);border:2px solid var(--text);border-radius:12px;padding:10px 12px;font:500 .98rem var(--sans);min-height:2.8em;overflow-wrap:anywhere}
+.bubble::before{content:"";position:absolute;left:-9px;top:50%;width:14px;height:14px;background:inherit;border-left:2px solid var(--text);border-bottom:2px solid var(--text);transform:translateY(-50%) rotate(45deg)}
+.bubble .who{display:block;font:700 .75rem var(--mono);color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:.04em}
+.table{background:#1d6b45;border:2px solid var(--text);border-radius:16px;padding:14px;color:#fff;min-width:0}
+.lane{min-height:132px;margin:2px 0 8px}
+.lane h2{display:flex;justify-content:space-between;gap:8px;font:700 .9rem var(--mono);margin:0 0 8px;color:#e8f5ec;letter-spacing:.03em}
+.lane h2 b{background:rgba(0,0,0,.3);border-radius:999px;padding:1px 10px;font-variant-numeric:tabular-nums}
+.hand{display:flex;flex-wrap:wrap;gap:6px}
+.pc{width:66px;height:94px;border-radius:9px;background:#fff;color:#151515;border:1px solid #333;box-shadow:0 3px 0 rgba(0,0,0,.35);position:relative;font:700 1rem var(--head);animation:deal .3s ease both;flex:none}
+.pc.red{color:#c0281b}
+.pc .tl{position:absolute;top:5px;left:7px;line-height:1;text-align:center}
+.pc .br{position:absolute;bottom:5px;right:7px;line-height:1;text-align:center;transform:rotate(180deg)}
+.pc .mid{position:absolute;inset:0;display:grid;place-items:center;font-size:1.9rem}
+.pc.back{background:repeating-linear-gradient(45deg,#f5c400 0 6px,#151515 6px 12px)}
+.pc.back *{display:none}
+@keyframes deal{from{transform:translateY(-24px) rotate(-6deg);opacity:0}to{transform:none;opacity:1}}
+.mid-msg{text-align:center;font:700 1.1rem var(--head);min-height:1.5em;margin:4px 0;color:#ffe766}
+.hud{display:flex;flex-wrap:wrap;gap:6px 18px;justify-content:space-between;font:600 .95rem var(--sans);margin:0 0 12px}
+.hud b{font:700 1.2rem var(--head);font-variant-numeric:tabular-nums}
+.btn{border:2px solid var(--text);background:var(--accent);color:var(--accent-text);border-radius:10px;padding:11px 16px;font:700 1rem var(--sans);cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+.btn.sec{background:var(--surface);color:var(--text)}
+.btn:disabled{opacity:.45;cursor:default}
+.row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.chip{width:54px;height:54px;border-radius:50%;border:4px dashed #fff;outline:2px solid var(--text);font:700 .95rem var(--head);color:#fff;cursor:pointer;display:grid;place-items:center}
+.chip:disabled{opacity:.35;cursor:default}
+.c5{background:#c0281b}.c10{background:#2457c5}.c25{background:#1d6b45}.c50{background:#151515}
+.bet{font:700 1.05rem var(--sans);margin-left:4px}
+.note{font-size:.85rem;color:var(--muted);margin:10px 0 0}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;text-align:center}
+.stats div{background:var(--surface2);border-radius:10px;padding:8px 4px}
+.stats b{display:block;font:700 1.3rem var(--head)}
+.stats span{font-size:.78rem;color:var(--muted)}
+@media (max-width:520px){.pc{width:54px;height:78px;font-size:.9rem}.pc .mid{font-size:1.5rem}.lane{min-height:112px}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.dealer{grid-template-columns:52px minmax(0,1fr)}.face{width:52px;height:52px;font-size:1.7rem}}
+@media (prefers-reduced-motion:reduce){.pc,.face.bob{animation:none}}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<header class="topbar" id="top"><div class="topbar-in">
+  <a class="brand" href="../index.html"><svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="var(--accent)"/><path d="M7 16h18M19 11l6 5-6 5" fill="none" stroke="var(--accent-text)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="16" r="2.6" fill="var(--accent-text)"/></svg><span data-t="brand"></span></a>
+  <nav class="nav"><a href="../index.html" data-t="home"></a><a href="../joc/index.html" data-t="games"></a></nav>
+  <div class="tools"><div class="seg" role="group" aria-label="Limba / Language"><button type="button" data-lang="ro">RO</button><button type="button" data-lang="en">EN</button></div><button type="button" class="icon-btn" id="theme">◐</button></div>
+</div></header>
+
+<main class="page">
+  <h1 data-t="title"></h1>
+  <p class="lead" data-t="lead"></p>
+
+  <section class="card">
+    <div class="dealer">
+      <div class="face" id="face" aria-hidden="true">🤵</div>
+      <p class="bubble" id="say" aria-live="polite"><span class="who" data-t="who"></span><span id="line"></span></p>
+    </div>
+  </section>
+
+  <section class="table">
+    <div class="lane"><h2><span data-t="dealerHand"></span><b id="dv">–</b></h2><div class="hand" id="dh"></div></div>
+    <p class="mid-msg" id="msg"></p>
+    <div class="lane"><h2><span data-t="yourHand"></span><b id="pv">–</b></h2><div class="hand" id="ph"></div></div>
+  </section>
+
+  <section class="card" style="margin-top:14px">
+    <div class="hud"><span><span data-t="chipsL"></span> <b id="bank"></b></span><span><span data-t="betL"></span> <b id="betv">0</b></span><span><span data-t="handsL"></span> <b id="hn">0</b></span></div>
+
+    <div id="betting">
+      <div class="chips">
+        <button type="button" class="chip c5" data-c="5">5</button>
+        <button type="button" class="chip c10" data-c="10">10</button>
+        <button type="button" class="chip c25" data-c="25">25</button>
+        <button type="button" class="chip c50" data-c="50">50</button>
+        <button type="button" class="btn sec" id="clear" data-t="clear"></button>
+      </div>
+      <div class="row"><button type="button" class="btn" id="deal" data-t="deal"></button></div>
+    </div>
+
+    <div id="acting" hidden>
+      <div class="row" style="margin-top:0">
+        <button type="button" class="btn" id="hit" data-t="hit"></button>
+        <button type="button" class="btn" id="stand" data-t="stand"></button>
+        <button type="button" class="btn sec" id="dbl" data-t="dbl"></button>
+      </div>
+    </div>
+
+    <div id="broke" hidden>
+      <div class="row" style="margin-top:0"><button type="button" class="btn" id="refill" data-t="refill"></button></div>
+    </div>
+
+    <p class="note" data-t="rules"></p>
+  </section>
+
+  <section class="card">
+    <div class="stats">
+      <div><b id="sw">0</b><span data-t="sWon"></span></div>
+      <div><b id="sl">0</b><span data-t="sLost"></span></div>
+      <div><b id="sp">0</b><span data-t="sPush"></span></div>
+      <div><b id="sb">0</b><span data-t="sBest"></span></div>
+    </div>
+    <div class="row"><a class="btn sec" href="../joc/index.html" data-t="game"></a><a class="btn sec" href="../zar/index.html" data-t="dice"></a><a class="btn sec" href="../roata/index.html" data-t="wheel"></a></div>
+  </section>
+</main>
+
+<script type="module" src="../assets/auth.js?v=5"></script>
+<script>
+(function(){
+"use strict";
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+let lang=store.get("cadru-lang")==="en"?"en":"ro";
+const L=(ro,en)=>lang==="en"?en:ro;
+const T=v=>Array.isArray(v)?v[lang==="en"?1:0]:v;
+const UI={brand:["Rețea pas cu pas","Network step by step"],home:["← Lecții","← Lessons"],games:["🎮 Jocuri","🎮 Games"],
+  title:["🃏 Blackjack la Router","🃏 Blackjack at the Router"],
+  lead:["Ajungi cât mai aproape de 21 fără să treci. Joci cu jetoane de joacă, nu cu bani. Dealerul Bit are 17 ani de experiență în rețele și 0 ani în umor.","Get as close to 21 as you can without going over. Play chips only, no real money. Dealer Bit has 17 years in networking and 0 years in comedy."],
+  who:["Dealerul Bit","Dealer Bit"],dealerHand:["DEALER","DEALER"],yourHand:["TU","YOU"],
+  chipsL:["Jetoane","Chips"],betL:["Pariu","Bet"],handsL:["Mâini","Hands"],
+  clear:["✕ Șterge pariul","✕ Clear bet"],deal:["🃏 Împarte cărțile","🃏 Deal"],hit:["➕ Încă o carte","➕ Hit"],stand:["✋ Stau","✋ Stand"],dbl:["×2 Dublez","×2 Double"],
+  refill:["🔌 Repornește routerul (+100 jetoane)","🔌 Reboot the router (+100 chips)"],
+  rules:["Reguli: dealerul trage până la 17 și stă pe 17. Blackjack (As + 10 din primele două cărți) plătește 3:2. „Dublez” = dublezi pariul, primești exact o carte. Taste: H încă una, S stau, D dublez, Enter împarte.","Rules: the dealer draws to 17 and stands on 17. Blackjack (Ace + 10 on the first two cards) pays 3:2. \"Double\" = double your bet, get exactly one card. Keys: H hit, S stand, D double, Enter deal."],
+  sWon:["câștigate","won"],sLost:["pierdute","lost"],sPush:["egaluri","pushes"],sBest:["record jetoane","best chips"],
+  game:["🎮 Livrează pachetul","🎮 Deliver the packet"],dice:["🎲 Zarul pachetului","🎲 The packet die"],wheel:["🎡 Ce învăț azi?","🎡 What do I learn today?"]};
+
+// Dealer lines: [ro, en]. One is picked at random for each moment of the game.
+const LINES={
+ hello:[["Bun venit la masă! Eu sunt Bit. Fratele meu, Byte, e de opt ori mai mare, dar eu sunt mai simpatic.","Welcome to the table! I'm Bit. My brother Byte is eight times bigger, but I'm the charming one."],
+  ["Salut! Pune un pariu. Promit că nu-ți fac NAT la jetoane.","Hi! Place a bet. I promise not to NAT your chips."],
+  ["Masa e deschisă. Latență zero, umor discutabil.","Table's open. Zero latency, questionable humour."]],
+ bet:[["Pariu primit. ACK!","Bet received. ACK!"],["Hmm, curajos. Îmi place.","Hmm, brave. I like it."],["Încă un jeton? Pachetul tău crește, ai grijă la MTU.","Another chip? Your packet's growing, watch the MTU."],["Văd că ai venit cu bandă largă azi.","I see you brought broadband today."]],
+ bigbet:[["Tot? Ai fost pe la cursul de BGP? Anunți tot ce ai.","All of it? Did you take the BGP course? Announcing everything you've got."],["Pariu uriaș. Îmi transpiră switch-ul.","Huge bet. My switch is sweating."]],
+ deal:[["Împart cărțile… în ordine, nu ca UDP-ul.","Dealing the cards… in order, unlike UDP."],["SYN… SYN-ACK… ACK. Gata, avem conexiune. Cărțile!","SYN… SYN-ACK… ACK. Connected. Cards!"],["Una pentru tine, una pentru mine, una cu fața în jos. Ca un firewall: nu vezi tot.","One for you, one for me, one face down. Like a firewall: you don't get to see everything."],["Amestecat cu entropie de calitate. Am mișcat mouse-ul de două ori.","Shuffled with quality entropy. I wiggled the mouse twice."]],
+ hit:[["Încă una? Ping… pong, poftim.","Another? Ping… pong, here you go."],["Carte trimisă. Fără retransmisie, din păcate.","Card sent. No retransmission, sorry."],["Uite. Sper că TTL-ul tău mai rezistă.","There. Hope your TTL holds out."],["Mai cere, mai cere… am timp, nu am timeout.","Keep asking… I've got time, no timeout here."]],
+ hitHigh:[["Pe {v}? Îndrăzneț. Și eu am încercat odată să pun 9000 de octeți într-un cadru.","On {v}? Bold. I once tried to fit 9000 bytes in a frame too."],["La {v} mai ceri? Ești genul care face deploy vinerea, nu?","Hitting on {v}? You're the type who deploys on Fridays, aren't you?"]],
+ stand:[["Stai. Decizie stabilă, ca un IP static.","Standing. Stable decision, like a static IP."],["Ok, e rândul meu. Nu te uita, sunt timid.","Ok, my turn. Don't look, I'm shy."],["Ai dat FIN. Închidem conexiunea ta frumos.","You sent FIN. Closing your connection gracefully."]],
+ dbl:[["Dublezi? Jumbo frame! Respect.","Doubling? Jumbo frame! Respect."],["Dublu sau nimic. Exact cum fac eu cu cafeaua.","Double or nothing. Same way I do coffee."]],
+ bust:[["{v}! Pachetul tău a depășit MTU-ul. Fragmentare… adică pierdere.","{v}! Your packet exceeded the MTU. Fragmentation… I mean loss."],["Bust! TTL 0. Îți trimit un ICMP de condoleanțe.","Bust! TTL 0. Sending you an ICMP of condolences."],["Ai trecut de 21. Nici eu nu trec de 21 de tab-uri deschise fără să crăp.","Over 21. I can't handle more than 21 open tabs either."],["Prea mult! Ca un /8 pentru o rețea de acasă.","Too much! Like a /8 for a home network."]],
+ dealerBust:[["Am făcut {v}. Am trimis broadcast la toată lumea că am pierdut. 😩","I hit {v}. Broadcast to everyone that I lost. 😩"],["Bust! Cine a pus cablul ăsta în buclă?! Ah, eu.","Bust! Who looped this cable?! Oh, it was me."],["{v}… Pică rețeaua. Adică eu. Felicitări!","{v}… The network's down. That's me. Congrats!"]],
+ win:[["Ai câștigat. Rețin asta în log-uri, nu în suflet.","You win. I'll keep that in the logs, not in my heart."],["Bravo! Paging-ul de la trei noaptea nu e așa de dureros ca asta.","Well played! A 3 a.m. page hurts less than this."],["Bine jucat. Îți dau jetoanele, dar nu și parola de Wi-Fi.","Nicely done. You get the chips, not the Wi-Fi password."]],
+ lose:[["Casa câștigă. Casa e și gateway-ul implicit, deci tot prin mine treci.","The house wins. The house is also the default gateway, so you go through me anyway."],["Îmi pare rău… de fapt nu, am primit ACK pe jetoanele tale.","Sorry… actually no, I got an ACK on your chips."],["Am câștigat. Nu e personal, e protocol.","I win. It's not personal, it's protocol."],["Jetoanele tale au fost rutate spre 0.0.0.0/0. Adică la mine.","Your chips were routed to 0.0.0.0/0. Meaning me."]],
+ push:[["Egalitate. Load balancing perfect, 50/50.","Push. Perfect load balancing, 50/50."],["Egal. Ca două rute cu același cost: nimeni nu e fericit.","Tie. Like two equal-cost routes: nobody's happy."]],
+ bj:[["BLACKJACK! Asta e mai rar decât un printer care merge din prima.","BLACKJACK! Rarer than a printer that works on the first try."],["21 din prima! Handshake perfect. Plătesc 3:2, cu lacrimi.","21 straight away! Perfect handshake. Paying 3:2, in tears."]],
+ dealerBj:[["Blackjack pentru casă. Scuze, am avut cache cald.","Blackjack for the house. Sorry, my cache was warm."],["As și un zece. Nici n-am apucat să mă prefac că mă gândesc.","Ace and a ten. Didn't even get to pretend I was thinking."]],
+ broke:[["Zero jetoane. Ai rămas fără DHCP lease. Hai că-ți repornesc routerul.","Zero chips. Your DHCP lease expired. Let me reboot the router for you."],["Ai rămas fără jetoane. Ai încercat să-l oprești și să-l pornești la loc?","Out of chips. Have you tried turning it off and on again?"]],
+ refill:[["Router repornit! Ai 100 de jetoane și o adresă IP nouă.","Router rebooted! You've got 100 chips and a fresh IP."]],
+ noBet:[["Fără pariu, fără cărți. Nici eu nu lucrez fără pachet.","No bet, no cards. I don't work without a packet either."],["Pune măcar un jeton. Pachetele goale le arunc.","At least one chip. I drop empty packets."]],
+ idle:[["…Știi de ce adminii nu se ceartă? Au aceeași rută spre pace.","…Know why admins never fight? Same route to peace."],["Am o glumă despre UDP, dar nu știu dacă o primești.","I have a UDP joke, but I'm not sure you'll get it."],["Am o glumă despre TCP. Ți-o spun până o confirmi.","I have a TCP joke. I'll keep telling it until you acknowledge it."],["Pot să-ți spun o glumă despre DNS, dar o să-ți ia 48 de ore să se propage.","I could tell you a DNS joke, but it'd take 48 hours to propagate."]]
+};
+const last={};
+function say(key,vars){
+  const arr=LINES[key];let i=Math.floor(Math.random()*arr.length);
+  if(arr.length>1&&i===last[key])i=(i+1)%arr.length;last[key]=i;
+  cur={key,i,vars};showLine();
+  const f=$("#face");f.classList.remove("bob");void f.offsetWidth;f.classList.add("bob");
+  f.textContent={win:"😩",dealerBust:"😵",lose:"😎",dealerBj:"😎",bj:"😱",bust:"😬",push:"🤝",broke:"🫠",bigbet:"😳"}[key]||"🤵";
+  clearTimeout(idleT);idleT=setTimeout(()=>{if(state==="bet")say("idle")},25000);
+}
+let cur=null,idleT=0;
+function showLine(){if(!cur)return;let s=T(LINES[cur.key][cur.i]);if(cur.vars)for(const k in cur.vars)s=s.split("{"+k+"}").join(cur.vars[k]);$("#line").textContent=s}
+
+const $=s=>document.querySelector(s);
+const SUITS=[["♠",0],["♥",1],["♦",1],["♣",0]],RANKS=["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+let shoe=[],dealer=[],player=[],bet=0,state="bet",bank=+(store.get("bj-bank")||100),hidden=true;
+let st={w:0,l:0,p:0,best:100,hands:0};
+try{const s=JSON.parse(store.get("bj-stats")||"null");if(s)st=Object.assign(st,s)}catch(e){}
+if(!(bank>=0))bank=100;
+
+function newShoe(){shoe=[];for(let d=0;d<4;d++)for(const s of SUITS)for(const r of RANKS)shoe.push({r,s:s[0],red:s[1]});
+  for(let i=shoe.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[shoe[i],shoe[j]]=[shoe[j],shoe[i]]}}
+function draw(){if(shoe.length<15)newShoe();return shoe.pop()}
+function value(h){let v=0,a=0;for(const c of h){if(c.r==="A"){v+=11;a++}else if("JQK".includes(c.r)||c.r==="10")v+=10;else v+=+c.r}
+  while(v>21&&a){v-=10;a--}return{v,soft:a>0}}
+const isBJ=h=>h.length===2&&value(h).v===21;
+function cardHTML(c,down){if(down)return'<div class="pc back" aria-label="carte cu fața în jos"></div>';
+  return`<div class="pc${c.red?" red":""}" aria-label="${c.r}${c.s}"><span class="tl">${c.r}<br>${c.s}</span><span class="mid">${c.s}</span><span class="br">${c.r}<br>${c.s}</span></div>`}
+
+function paint(){
+  $("#dh").innerHTML=dealer.map((c,i)=>cardHTML(c,i===1&&hidden)).join("");
+  $("#ph").innerHTML=player.map(c=>cardHTML(c)).join("");
+  const pv=value(player);$("#pv").textContent=player.length?(pv.soft&&pv.v<21?`${pv.v-10}/${pv.v}`:pv.v):"–";
+  $("#dv").textContent=dealer.length?(hidden?value([dealer[0]]).v+" + ?":value(dealer).v):"–";
+  $("#bank").textContent=bank;$("#betv").textContent=bet;$("#hn").textContent=st.hands;
+  $("#sw").textContent=st.w;$("#sl").textContent=st.l;$("#sp").textContent=st.p;$("#sb").textContent=st.best;
+  $("#betting").hidden=state!=="bet"||(bank+bet<5&&state==="bet");
+  $("#acting").hidden=state!=="play";
+  $("#broke").hidden=!(state==="bet"&&bank+bet<5);
+  document.querySelectorAll(".chip").forEach(b=>b.disabled=+b.dataset.c>bank);
+  $("#deal").disabled=bet<=0;$("#clear").disabled=bet<=0;
+  $("#dbl").disabled=!(state==="play"&&player.length===2&&bank>=bet);
+}
+function save(){store.set("bj-bank",String(bank));store.set("bj-stats",JSON.stringify(st))}
+
+function addChip(c){if(state!=="bet"||c>bank)return;
+  if(dealer.length){dealer=[];player=[];$("#msg").textContent=""}
+  bank-=c;bet+=c;paint();say(bank===0||bet>=100?"bigbet":"bet")}
+function clearBet(){bank+=bet;bet=0;paint()}
+function deal(){
+  if(state!=="bet")return;if(bet<=0){say("noBet");return}
+  state="play";hidden=true;dealer=[];player=[];$("#msg").textContent="";
+  player.push(draw());dealer.push(draw());player.push(draw());dealer.push(draw());paint();
+  if(isBJ(player)||isBJ(dealer)){hidden=false;paint();return setTimeout(finish,500)}
+  say("deal");$("#hit").focus({preventScroll:true});
+}
+function hit(){if(state!=="play")return;player.push(draw());const v=value(player).v;paint();
+  if(v>21){state="wait";paint();say("bust",{v});setTimeout(()=>finish(),700)}
+  else if(v===21)stand();
+  else say(v>=16?"hitHigh":"hit",{v})}
+function stand(){if(state!=="play")return;state="wait";hidden=false;paint();say("stand");setTimeout(dealerPlay,700)}
+function dbl(){if(state!=="play"||player.length!==2||bank<bet)return;bank-=bet;bet*=2;player.push(draw());paint();say("dbl");
+  const v=value(player).v;state="wait";paint();
+  setTimeout(()=>{if(v>21){say("bust",{v});setTimeout(finish,700)}else{hidden=false;paint();setTimeout(dealerPlay,600)}},700)}
+function dealerPlay(){if(value(player).v>21)return finish();
+  if(value(dealer).v<17){dealer.push(draw());paint();setTimeout(dealerPlay,650)}else finish()}
+function finish(){
+  hidden=false;const p=value(player).v,d=value(dealer).v,pbj=isBJ(player),dbj=isBJ(dealer);let out,key,msg;
+  if(pbj&&!dbj){out="w";key="bj";bank+=bet+Math.floor(bet*1.5);msg=L(`Blackjack! +${Math.floor(bet*1.5)}`,`Blackjack! +${Math.floor(bet*1.5)}`)}
+  else if(dbj&&!pbj){out="l";key="dealerBj";msg=L(`Dealerul are blackjack. −${bet}`,`Dealer has blackjack. −${bet}`)}
+  else if(p>21){out="l";key=null;msg=L(`Ai trecut de 21. −${bet}`,`Bust. −${bet}`)}
+  else if(d>21){out="w";key="dealerBust";bank+=bet*2;msg=L(`Dealerul a trecut de 21! +${bet}`,`Dealer busts! +${bet}`)}
+  else if(p>d){out="w";key="win";bank+=bet*2;msg=L(`${p} bate ${d}. +${bet}`,`${p} beats ${d}. +${bet}`)}
+  else if(p<d){out="l";key="lose";msg=L(`${d} bate ${p}. −${bet}`,`${d} beats ${p}. −${bet}`)}
+  else{out="p";key="push";bank+=bet;msg=L(`Egal la ${p}. Îți primești pariul înapoi.`,`Push at ${p}. Bet returned.`)}
+  st[out]++;st.hands++;st.rw=(st.rw||0)+(out==="w"?1:0);if(bank>st.best)st.best=bank;bet=0;state="bet";
+  $("#msg").textContent=msg;paint();
+  if(key)say(key,{v:d});
+  if(bank<5)setTimeout(()=>say("broke"),1600);
+  // Every 10 hands, save "hands won out of 10" to the results page.
+  if(st.hands%10===0){window.dispatchEvent(new CustomEvent("quiz:complete",{detail:{lesson:"blackjack",title:"Mini-joc: Blackjack la Router",score:Math.min(10,st.rw),total:10,answers:[]}}));st.rw=0}
+  save();
+}
+function refill(){bank+=100;save();paint();say("refill")}
+
+function render(){
+  document.documentElement.lang=lang;document.title=L("Blackjack la Router","Blackjack at the Router");
+  document.querySelectorAll("[data-t]").forEach(e=>{if(UI[e.dataset.t])e.textContent=T(UI[e.dataset.t])});
+  document.querySelectorAll("[data-lang]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.lang===lang?"true":"false"));
+  showLine();
+}
+document.querySelectorAll(".chip").forEach(b=>b.onclick=()=>addChip(+b.dataset.c));
+$("#clear").onclick=clearBet;$("#deal").onclick=deal;$("#hit").onclick=hit;$("#stand").onclick=stand;$("#dbl").onclick=dbl;$("#refill").onclick=refill;
+document.addEventListener("keydown",e=>{if(e.ctrlKey||e.metaKey||e.altKey||/INPUT|TEXTAREA/.test(document.activeElement.tagName))return;const k=e.key.toLowerCase();
+  if(state==="play"){if(k==="h")hit();else if(k==="s")stand();else if(k==="d")dbl()}
+  else if(state==="bet"&&k==="enter"&&bet>0&&document.activeElement.tagName!=="BUTTON"&&document.activeElement.tagName!=="A"){e.preventDefault();deal()}});
+document.querySelectorAll("[data-lang]").forEach(b=>b.onclick=()=>{lang=b.dataset.lang;store.set("cadru-lang",lang);render();paint()});
+const saved=store.get("cadru-theme");if(saved==="light"||saved==="dark")document.documentElement.dataset.theme=saved;
+$("#theme").onclick=()=>{const r=document.documentElement,d=r.dataset.theme?r.dataset.theme==="dark":matchMedia("(prefers-color-scheme: dark)").matches;const nt=d?"light":"dark";r.dataset.theme=nt;store.set("cadru-theme",nt)};
+newShoe();render();paint();say(bank<5?"broke":"hello");
+})();
+</script>
+</body>
+</html>
