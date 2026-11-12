@@ -81,12 +81,12 @@ td.n{font-variant-numeric:tabular-nums;white-space:nowrap}
   </section>
 </main>
 
-<script type="module" src="../assets/auth.js?v=6"></script>
+<script type="module" src="../assets/auth.js?v=7"></script>
 <script type="module">
 import { app, auth, db } from "../assets/firebase.js?v=5";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import { collection, query, where, getDocs, getDoc, doc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { qualifies, PER_TEST } from "../assets/points.js?v=2";
+import { qualifies, PER_TEST, START } from "../assets/points.js?v=3";
 let rouletteNet=0;
 
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
@@ -130,8 +130,8 @@ function render(){
 }
 function renderMine(){
   if(!me)return;
-  const nOk=mine.filter(qualifies).length,earned=nOk*PER_TEST,tot=Math.max(0,earned+rouletteNet),en=lang==="en";
-  const ptsBox=`<p class="pts">🪙 <b>${tot}</b> ${en?"points":"puncte"} · ${en?`${nOk} quizzes over 80% × ${PER_TEST} = ${earned}`:`${nOk} teste peste 80% × ${PER_TEST} = ${earned}`}${rouletteNet?` · ${en?"roulette":"ruletă"} ${rouletteNet>0?"+":""}${rouletteNet}`:""} · <a href="../ruleta/index.html">${en?"🎰 Play roulette →":"🎰 Joacă la ruletă →"}</a></p>`;
+  const nOk=mine.filter(qualifies).length,earned=nOk*PER_TEST,tot=Math.max(0,START+earned+rouletteNet),en=lang==="en";
+  const ptsBox=`<p class="pts">🪙 <b>${tot}</b> ${en?"points":"puncte"} · ${en?`${START} to start`:`${START} de start`} + ${en?`${nOk} quizzes over 80% × ${PER_TEST} = ${earned}`:`${nOk} teste peste 80% × ${PER_TEST} = ${earned}`}${rouletteNet?` · ${en?"roulette":"ruletă"} ${rouletteNet>0?"+":""}${rouletteNet}`:""} · <a href="../ruleta/index.html">${en?"🎰 Play roulette →":"🎰 Joacă la ruletă →"}</a></p>`;
   if(!mine.length){$("#mineBody").innerHTML=ptsBox+`<p class="empty">${T("noMine")}</p>`;return}
   const by={};mine.forEach(r=>{(by[r.lesson]=by[r.lesson]||[]).push(r)});
   let h=`<div class="scroll"><table><thead><tr><th>${T("lesson")}</th><th>${T("best")}</th><th>${T("attempts")}</th><th>${T("last")}</th></tr></thead><tbody>`;

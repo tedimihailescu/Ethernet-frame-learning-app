@@ -97,7 +97,7 @@ h1{font:700 clamp(1.5rem,4vw,2.2rem) var(--head);margin:0 0 6px}
   </section>
 </main>
 
-<script type="module" src="../assets/auth.js?v=6"></script>
+<script type="module" src="../assets/auth.js?v=7"></script>
 <script type="module">
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
 let lang=store.get("cadru-lang")==="en"?"en":"ro";
@@ -106,8 +106,8 @@ const T=v=>Array.isArray(v)?v[lang==="en"?1:0]:v;
 const $=s=>document.querySelector(s);
 const UI={brand:["Rețea pas cu pas","Network step by step"],home:["← Lecții","← Lessons"],games:["🎮 Jocuri","🎮 Games"],
   title:["🎰 Ruleta punctelor","🎰 Points roulette"],
-  lead:["Ruletă europeană adevărată (0–36), jucată cu punctele tale. Fiecare test terminat cu peste 80% îți dă 🪙 5 puncte. Alegi un jeton, pui pe masă, apeși „Învârte”.","Real European roulette (0–36), played with your points. Every quiz finished with over 80% gives you 🪙 5 points. Pick a chip, place it on the table, press \"Spin\"."],
-  noPts:["N-ai încă puncte. Termină un test cu peste 80% și primești 🪙 5 puncte.","You don't have any points yet. Finish a quiz with over 80% and you get 🪙 5 points."],toTests:["✎ Mergi la teste →","✎ Go to the quizzes →"],
+  lead:["Ruletă europeană adevărată (0–36), jucată cu punctele tale. Primești 🪙 15 puncte din start, iar fiecare test terminat cu peste 80% îți mai dă 🪙 5. Alegi un jeton, pui pe masă, apeși „Învârte”.","Real European roulette (0–36), played with your points. You get 🪙 15 points to start, and every quiz finished with over 80% adds 🪙 5 more. Pick a chip, place it on the table, press \"Spin\"."],
+  noPts:["Ai rămas fără puncte. Termină un test cu peste 80% și primești 🪙 5 puncte.","You are out of points. Finish a quiz with over 80% and you get 🪙 5 points."],toTests:["✎ Mergi la teste →","✎ Go to the quizzes →"],
   who:["Crupierul Pachet","Croupier Packet"],ptsL:["🪙 Puncte","🪙 Points"],betL:["Pe masă","On the table"],lastWin:["Ultimul câștig","Last win"],
   spin:["🎰 Învârte","🎰 Spin"],undo:["↶ Anulează","↶ Undo"],clear:["✕ Golește masa","✕ Clear table"],rebet:["↻ Același pariu","↻ Same bet"],
   rules:["Plăți: număr exact 35:1 · tuzină sau coloană 2:1 · roșu/negru, par/impar, 1–18/19–36 1:1. Pe 0 pierd toate pariurile în afară de cel pe 0. Câștigul se adaugă la punctele tale.","Payouts: single number 35:1 · dozen or column 2:1 · red/black, even/odd, 1–18/19–36 1:1. On 0 every bet loses except a bet on 0. Winnings are added to your points."],
@@ -247,9 +247,9 @@ const saved=store.get("cadru-theme");if(saved==="light"||saved==="dark")document
 $("#theme").onclick=()=>{const r=document.documentElement,d=r.dataset.theme?r.dataset.theme==="dark":matchMedia("(prefers-color-scheme: dark)").matches;const nt=d?"light":"dark";r.dataset.theme=nt;store.set("cadru-theme",nt)};
 
 // Points come from Firestore when signed in; opened as a local file it runs in demo mode with 50 points.
-if(location.protocol==="file:"||window.RULETA_DEMO){bal=+(store.get("ruleta-demo")||50);paint()}
+if(location.protocol==="file:"||window.RULETA_DEMO){bal=+(store.get("ruleta-demo")||15);paint()}
 else{
-  const [{auth,db},{onAuthStateChanged},fs,pts]=await Promise.all([import("../assets/firebase.js?v=5"),import("https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js"),import("https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js"),import("../assets/points.js?v=2")]);
+  const [{auth,db},{onAuthStateChanged},fs,pts]=await Promise.all([import("../assets/firebase.js?v=5"),import("https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js"),import("https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js"),import("../assets/points.js?v=3")]);
   onAuthStateChanged(auth,async user=>{if(!user)return;
     ctx={db,uid:user.uid,doc:fs.doc,setDoc:fs.setDoc,increment:fs.increment};
     try{bal=(await pts.balance(db,user.uid,fs)).total}catch(e){console.error(e);bal=0}

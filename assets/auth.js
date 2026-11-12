@@ -10,7 +10,7 @@ async function boot() {
     import("./firebase.js?v=5"),
     import("https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js"),
     import("https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js"),
-    import("./points.js?v=2")
+    import("./points.js?v=3")
   ]);
   // firebase.js is already forwarding .web.app visitors to firebaseapp.com; don't race it.
   if (location.hostname.endsWith(".web.app")) return;
