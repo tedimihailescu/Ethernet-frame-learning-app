@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Certificate: de la cheie la lacăt</title>
+<meta name="description" content="Lecție interactivă: viața unui certificat TLS, de la cheia privată și CSR la CA, lanțul de încredere, expirare și revocare. / Interactive lesson: the life of a TLS certificate.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<script>
+(function(){
+const KEY={doc:{ro:"Pereche de chei",en:"Key pair"},priv:{ro:"/etc/ssl/private/shop.key · rămâne pe server, secretă",en:"/etc/ssl/private/shop.key · stays on the server, secret"},pub:"ECDSA P-256 · 04:a3:5f:…:9c"};
+const CSR={doc:"CSR (PKCS#10)",subject:"CN=shop.example.com",san:"shop.example.com, www.shop.example.com",pub:"ECDSA P-256 · 04:a3:5f:…:9c",sig:{ro:"semnat cu cheia privată a serverului (dovada că o are)",en:"signed with the server's private key (proof it holds it)"}};
+const CHAL={doc:{ro:"Provocarea ACME",en:"ACME challenge"},chal:{ro:"http-01: pune fișierul /.well-known/acme-challenge/Xy9… pe site",en:"http-01: put the file /.well-known/acme-challenge/Xy9… on the site"},result:{ro:"CA-ul citește fișierul → domeniul e controlat de cerător ✓",en:"the CA reads the file → the requester controls the domain ✓"}};
+const CERT={doc:{ro:"Certificat X.509",en:"X.509 certificate"},subject:"CN=shop.example.com",san:"shop.example.com, www.shop.example.com",pub:"ECDSA P-256 · 04:a3:5f:…:9c",issuer:"CN=Example Issuing CA R2",serial:"04:1f:9a:…:e2",valid:{ro:"12 nov 2026 → 10 feb 2027 (90 de zile)",en:"12 Nov 2026 → 10 Feb 2027 (90 days)"},ku:"digitalSignature · serverAuth",sig:{ro:"semnat de CA-ul intermediar (ecdsa-with-SHA256)",en:"signed by the intermediate CA (ecdsa-with-SHA256)"}};
+const CHAIN={doc:{ro:"Lanțul trimis în TLS",en:"Chain sent in TLS"},subject:"CN=shop.example.com",issuer:"CN=Example Issuing CA R2",chain:{ro:"1. shop.example.com → 2. Example Issuing CA R2 (rădăcina NU se trimite)",en:"1. shop.example.com → 2. Example Issuing CA R2 (the root is NOT sent)"},valid:{ro:"12 nov 2026 → 10 feb 2027",en:"12 Nov 2026 → 10 Feb 2027"},result:{ro:"browserul: lanț valid până la Example Root CA ✓",en:"browser: chain valid up to Example Root CA ✓"}};
+const REV={doc:{ro:"Cerere de revocare",en:"Revocation"},serial:"04:1f:9a:…:e2",result:{ro:"OCSP: „revoked”, motiv keyCompromise",en:"OCSP: \"revoked\", reason keyCompromise"}};
+
+window.LESSON={
+docTitle:{ro:"Certificate: de la cheie la lacăt",en:"Certificates: from key to padlock"},
+eyebrow:{ro:"Lecție interactivă · Internet și web",en:"Interactive lesson · Internet and web"},
+title:{ro:"Certificate: de la cheia privată la lacătul din browser",en:"Certificates: from the private key to the browser padlock"},
+sub:{ro:"Echipa magazinului shop.example.com are nevoie de un certificat. Îl urmărim de la naștere la moarte: cheia privată, cererea (CSR), verificarea făcută de CA, lanțul de încredere, instalarea, verificarea din browser, revocarea, formatele și reînnoirea automată.",en:"The shop.example.com team needs a certificate. We follow it from birth to death: the private key, the request (CSR), the CA's check, the chain of trust, installation, the browser's verification, revocation, file formats and automatic renewal."},
+meta:[{ro:"≈ 25 minute",en:"≈ 25 minutes"},{ro:"11 pași",en:"11 steps"},{ro:"8 întrebări",en:"8 questions"},{ro:"Intermediar",en:"Intermediate"}],
+goals:[{ro:"Ce conține un certificat și de ce cheia privată nu pleacă de pe server",en:"What a certificate contains and why the private key never leaves the server"},{ro:"Cum se cere și cum se emite un certificat (CSR, CA, ACME)",en:"How a certificate is requested and issued (CSR, CA, ACME)"},{ro:"Ce verifică browserul: lanț, nume, date, revocare",en:"What the browser checks: chain, name, dates, revocation"},{ro:"Formate (PEM, PFX), keystore vs. truststore, mTLS și reînnoire",en:"Formats (PEM, PFX), keystore vs truststore, mTLS and renewal"}],
+foot:{ro:"Nume de CA și serii fictive. Lecția continuă lecția HTTPS / TLS.",en:"Fictional CA names and serials. This lesson follows on from the HTTPS / TLS lesson."},
+ui:{frameT:{ro:"Documentul (live)",en:"The document (live)"},refT:{ro:"Comenzi openssl și formate",en:"openssl commands and formats"},refLead:{ro:"Comenzile pe care le folosești cel mai des și cum recunoști fiecare tip de fișier.",en:"The commands you'll use most and how to recognise each kind of file."}},
+tryT:{ro:"Încearcă (cu openssl)",en:"Try it (with openssl)"},
+legend:[["lg-arp","CSR / CERT",{ro:"documente semnate",en:"signed documents"}],["lg-tcp","TLS",{ro:"conexiunea browserului",en:"the browser's connection"}]],
+
+nodes:{
+  ops:{type:"user",name:{ro:"Echipa ops",en:"Ops team"},lines:[{ro:"cere certificatul",en:"requests the cert"}]},
+  srv:{type:"server",name:"shop.example.com",lines:[{ro:"nginx · cheia privată",en:"nginx · private key"}]},
+  ca:{type:"box",name:{ro:"CA intermediar",en:"Intermediate CA"},lines:["Example Issuing CA R2",{ro:"online, semnează",en:"online, signs"}]},
+  root:{type:"box",virt:true,name:"Root CA",lines:["Example Root CA",{ro:"offline, în seif",en:"offline, in a vault"}]},
+  br:{type:"host",name:"Browser",lines:[{ro:"magazinul de rădăcini",en:"root store"}]}
+},
+links:[["ops","srv"],["srv","ca"],["ca","root","virt"],["srv","br"]],
+layouts:{
+  wide:{vb:[0,0,1000,470],n:{ops:[90,110],srv:[330,270],ca:[640,110],root:[900,110],br:[760,390]}},
+  narrow:{vb:[0,0,360,740],n:{ops:[90,70],srv:[180,250],ca:[90,450],root:[270,450],br:[180,640]}}
+},
+groups:[
+  {id:"doc",color:"l2",fields:["doc"],name:{ro:"Ce e",en:"What it is"},short:{ro:"Tip",en:"Type"},grow:1},
+  {id:"who",color:"l3",fields:["subject","san"],name:{ro:"Pentru cine (subiect)",en:"Who it's for (subject)"},short:{ro:"Nume",en:"Name"},grow:2},
+  {id:"key",color:"l4",fields:["priv","pub"],name:{ro:"Cheile",en:"The keys"},short:{ro:"Chei",en:"Keys"},grow:2},
+  {id:"ca",color:"arp",fields:["issuer","serial","valid","ku","chain"],name:{ro:"Emitent, valabilitate, lanț",en:"Issuer, validity, chain"},short:"CA",grow:3},
+  {id:"sig",color:"l7",fields:["sig","chal","result"],name:{ro:"Semnătură și verificări",en:"Signature and checks"},short:{ro:"Verif.",en:"Check"},grow:2}
+],
+fieldLabels:{doc:{ro:"Document",en:"Document"},subject:{ro:"Subiect",en:"Subject"},san:"SAN (subjectAltName)",priv:{ro:"Cheia privată",en:"Private key"},pub:{ro:"Cheia publică",en:"Public key"},issuer:{ro:"Emitent",en:"Issuer"},serial:{ro:"Număr de serie",en:"Serial number"},valid:{ro:"Valabil",en:"Valid"},ku:{ro:"Utilizare",en:"Key usage"},chain:{ro:"Lanț",en:"Chain"},sig:{ro:"Semnătură",en:"Signature"},chal:{ro:"Provocare",en:"Challenge"},result:{ro:"Rezultat",en:"Result"}},
+pdu:f=>{const d=typeof f.doc==="object"?f.doc.en:f.doc;const t=d.startsWith("CSR")?"CSR":d.startsWith("X.509")?"CERT":d.startsWith("Chain")?"CHAIN":d.startsWith("ACME")?"ACME":d.startsWith("Key")?"KEY":d.startsWith("Files")?"PEM":"OCSP";return {badge:f.doc,tok:[t,t==="CHAIN"?"k-tcp":"k-arp"]}},
+
+init:{},
+tables:{
+  chain:{title:{ro:"Lanțul de încredere",en:"The chain of trust"},cols:[{ro:"Nivel",en:"Level"},{ro:"Cine",en:"Who"},{ro:"Semnat de",en:"Signed by"},{ro:"Unde stă",en:"Where it lives"}],plain:[3],
+    rows:()=>[["root","Example Root CA",{ro:"el însuși",en:"itself"},{ro:"în browsere și sisteme de operare",en:"in browsers and operating systems"}],["intermediate","Example Issuing CA R2","Example Root CA",{ro:"trimis de server în TLS",en:"sent by the server in TLS"}],["leaf","shop.example.com","Example Issuing CA R2",{ro:"pe server, cu cheia privată",en:"on the server, with the private key"}]]},
+  checks:{title:{ro:"Ce verifică browserul",en:"What the browser checks"},cols:[{ro:"Verificare",en:"Check"},{ro:"Rezultat",en:"Result"}],plain:[0,1],
+    rows:()=>[[{ro:"Fiecare semnătură din lanț e validă",en:"Every signature in the chain is valid"},"✓"],[{ro:"Lanțul se termină la o rădăcină de încredere",en:"The chain ends at a trusted root"},"✓"],[{ro:"Numele site-ului e în SAN",en:"The site's name is in the SAN"},"✓ shop.example.com"],[{ro:"Data de azi e în intervalul de valabilitate",en:"Today is inside the validity period"},"✓"],[{ro:"Utilizarea permite serverAuth",en:"Key usage allows serverAuth"},"✓"],[{ro:"Nu e revocat (OCSP / CRL)",en:"Not revoked (OCSP / CRL)"},"✓"]]},
+  formats:{title:{ro:"Formate de fișiere",en:"File formats"},cols:[{ro:"Format",en:"Format"},{ro:"Cum arată",en:"What it looks like"},{ro:"Folosit de",en:"Used by"}],plain:[1,2],
+    rows:()=>[["PEM (.pem .crt .key)","-----BEGIN CERTIFICATE-----",{ro:"nginx, Apache, Linux",en:"nginx, Apache, Linux"}],["DER (.der .cer)",{ro:"binar",en:"binary"},{ro:"Windows, Java",en:"Windows, Java"}],["PKCS#12 (.p12 .pfx)",{ro:"binar, cheie + cert + lanț, cu parolă",en:"binary, key + cert + chain, password-protected"},{ro:"Windows/IIS, Java, import",en:"Windows/IIS, Java, import"}],["JKS (.jks)",{ro:"keystore Java vechi",en:"legacy Java keystore"},{ro:"aplicații Java mai vechi",en:"older Java apps"}]]}
+},
+log:{title:{ro:"Jurnalul certificatului",en:"Certificate log"},lead:{ro:"Cheia privată apare o singură dată, pe server, și nu mai pleacă de acolo.",en:"The private key appears once, on the server, and never leaves."},first:{ro:"Pas",en:"Step"},minWidth:540,
+  cols:[{h:{ro:"Document",en:"Document"},v:f=>f.doc,cls:"mac"},{h:{ro:"Subiect / emitent",en:"Subject / issuer"},v:f=>f.issuer||f.subject||f.serial||"",cls:"ip"},{h:{ro:"Rezultat",en:"Result"},v:f=>f.result||"",cls:""}]},
+
+steps:[
+{at:["srv","br"],frame:null,kind:"none",tables:["chain"],who:{ro:"Ideea",en:"The idea"},
+ title:{ro:"Ce e un certificat, într-o propoziție",en:"What a certificate is, in one sentence"},
+ body:{ro:`<p>Un <strong>certificat</strong> e o carte de identitate digitală: „cheia publică asta aparține lui <code>shop.example.com</code>”, <strong>semnată</strong> de o autoritate în care browserul are încredere (o <strong>CA</strong>).</p>
+<p>În <a href="../https/index.html">lecția HTTPS</a> ai văzut că browserul verifică certificatul în timpul negocierii TLS. Aici vedem de unde vine certificatul, cum ajunge pe server și ce poate merge prost.</p>
+<p>Încrederea e un <strong>lanț</strong>: browserul are încredere într-o rădăcină, rădăcina garantează pentru un CA intermediar, intermediarul garantează pentru site.</p>`,
+ en:`<p>A <strong>certificate</strong> is a digital ID card: "this public key belongs to <code>shop.example.com</code>", <strong>signed</strong> by an authority the browser trusts (a <strong>CA</strong>).</p>
+<p>In the <a href="../https/index.html">HTTPS lesson</a> you saw the browser check the certificate during the TLS handshake. Here we see where the certificate comes from, how it gets onto the server and what can go wrong.</p>
+<p>Trust is a <strong>chain</strong>: the browser trusts a root, the root vouches for an intermediate CA, the intermediate vouches for the site.</p>`}},
+
+{at:"srv",frame:KEY,kind:"c",log:{ro:"cheile, pe server",en:"keys, on the server"},who:"shop.example.com",
+ title:{ro:"Totul începe cu o pereche de chei",en:"Everything starts with a key pair"},
+ body:{ro:`<p>Pe server, echipa generează o <strong>pereche de chei</strong>: o cheie <strong>privată</strong> și una <strong>publică</strong>, legate matematic.</p>
+<ul><li>Ce e criptat sau <strong>semnat</strong> cu cheia privată se poate verifica cu cea publică.</li>
+<li>Din cheia publică nu se poate afla cea privată.</li></ul>
+<p class="key">Cheia privată <strong>nu pleacă niciodată</strong> de pe server. Nu se trimite prin e-mail, nu se pune în Git, nu o vede CA-ul. Cine o are se poate da drept site-ul.</p>`,
+ en:`<p>On the server, the team generates a <strong>key pair</strong>: a <strong>private</strong> key and a <strong>public</strong> one, mathematically linked.</p>
+<ul><li>Whatever is encrypted or <strong>signed</strong> with the private key can be checked with the public one.</li>
+<li>The private key can't be worked out from the public key.</li></ul>
+<p class="key">The private key <strong>never leaves</strong> the server. It isn't emailed, isn't put in Git, isn't seen by the CA. Whoever holds it can impersonate the site.</p>`},
+ more:{ro:`<p>Tipuri de chei: <strong>RSA</strong> 2048 sau 3072 de biți (compatibil cu orice) sau <strong>ECDSA</strong> P-256 (mai mică și mai rapidă). La bănci și în cloud, cheile stau adesea într-un <strong>HSM</strong> sau KMS, un dispozitiv din care nu pot fi copiate deloc.</p>`,
+  en:`<p>Key types: <strong>RSA</strong> 2048 or 3072 bits (works everywhere) or <strong>ECDSA</strong> P-256 (smaller and faster). At banks and in the cloud, keys often live in an <strong>HSM</strong> or KMS, a device they can't be copied out of at all.</p>`},
+ try:[{cmd:"openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out shop.key",d:{ro:"Generează o cheie privată ECDSA.",en:"Generates an ECDSA private key."}}]},
+
+{at:"srv",frame:CSR,kind:"c",move:[[["srv","ca"]]],log:{ro:"CSR → CA",en:"CSR → CA"},who:"shop.example.com",
+ title:{ro:"CSR: cererea de certificat",en:"The CSR: the certificate request"},
+ body:{ro:`<p>Echipa creează un <strong>CSR</strong> (Certificate Signing Request): un document mic cu <strong>numele</strong> dorite și <strong>cheia publică</strong>, semnat cu cheia privată.</p>
+<p>Semnătura dovedește că cel care cere certificatul chiar are cheia privată. CSR-ul nu conține nimic secret, deci poate fi trimis liniștit la CA.</p>
+<p>Numele importante sunt în <strong>SAN</strong> (subjectAltName): <code>shop.example.com</code> și <code>www.shop.example.com</code>. Browserele moderne se uită doar în SAN, nu în CN.</p>`,
+ en:`<p>The team creates a <strong>CSR</strong> (Certificate Signing Request): a small document with the desired <strong>names</strong> and the <strong>public key</strong>, signed with the private key.</p>
+<p>The signature proves whoever asks for the certificate actually holds the private key. The CSR contains nothing secret, so it can safely be sent to the CA.</p>
+<p>The important names are in the <strong>SAN</strong> (subjectAltName): <code>shop.example.com</code> and <code>www.shop.example.com</code>. Modern browsers only look at the SAN, not the CN.</p>`},
+ try:[{cmd:"openssl req -new -key shop.key -subj \"/CN=shop.example.com\" -addext \"subjectAltName=DNS:shop.example.com,DNS:www.shop.example.com\" -out shop.csr",d:{ro:"Creează CSR-ul cu două nume în SAN.",en:"Creates the CSR with two names in the SAN."}},{cmd:"openssl req -in shop.csr -noout -text",d:{ro:"Citește ce e în CSR.",en:"Reads what's inside the CSR."}}]},
+
+{at:"ca",frame:CHAL,kind:"c",move:[[["ca","srv"]]],log:{ro:"CA verifică domeniul",en:"CA checks the domain"},who:{ro:"CA intermediar",en:"Intermediate CA"},
+ title:{ro:"CA-ul verifică: chiar controlezi domeniul?",en:"The CA checks: do you really control the domain?"},
+ body:{ro:`<p>Înainte să semneze, CA-ul trebuie să se convingă că cererea vine de la cine controlează <code>shop.example.com</code>. Cu <strong>ACME</strong> (protocolul folosit de Let's Encrypt), e automat:</p>
+<ul><li><strong>http-01</strong>: „pune acest fișier la <code>/.well-known/acme-challenge/…</code>”; CA-ul îl descarcă de pe site.</li>
+<li><strong>dns-01</strong>: „pune această valoare într-o înregistrare TXT <code>_acme-challenge</code>”; merge și pentru <code>*.example.com</code>.</li></ul>
+<p>Asta e validare <strong>DV</strong> (domain validated). Pentru certificate interne, CA-ul firmei verifică de obicei printr-un tichet aprobat sau automat, prin cert-manager.</p>`,
+ en:`<p>Before signing, the CA must be convinced the request comes from whoever controls <code>shop.example.com</code>. With <strong>ACME</strong> (the protocol Let's Encrypt uses), it's automatic:</p>
+<ul><li><strong>http-01</strong>: "put this file at <code>/.well-known/acme-challenge/…</code>"; the CA downloads it from the site.</li>
+<li><strong>dns-01</strong>: "put this value in a <code>_acme-challenge</code> TXT record"; this also works for <code>*.example.com</code>.</li></ul>
+<p>That's <strong>DV</strong> (domain validated) validation. For internal certificates, the company CA usually checks via an approved ticket, or automatically through cert-manager.</p>`},
+ more:{ro:`<p>Există și <strong>OV</strong> și <strong>EV</strong>, unde CA-ul verifică și firma. Browserele de azi nu le mai afișează diferit, așa că majoritatea site-urilor folosesc DV.</p>`,
+  en:`<p>There are also <strong>OV</strong> and <strong>EV</strong>, where the CA checks the company too. Today's browsers no longer display them differently, so most sites use DV.</p>`}},
+
+{at:"ca",frame:CERT,kind:"c",move:[[["ca","srv"]]],log:{ro:"certificatul emis",en:"certificate issued"},who:{ro:"CA intermediar",en:"Intermediate CA"},
+ title:{ro:"CA-ul emite certificatul",en:"The CA issues the certificate"},
+ body:{ro:`<p>CA-ul ia cheia publică și numele din CSR, adaugă câmpurile lui și <strong>semnează totul</strong> cu cheia lui privată:</p>
+<ul><li><strong>Emitent</strong>: cine a semnat (<code>Example Issuing CA R2</code>);</li>
+<li><strong>Număr de serie</strong>: unic, folosit la revocare;</li>
+<li><strong>Valabilitate</strong>: de când până când (azi, maximum 398 de zile; Let's Encrypt dă 90);</li>
+<li><strong>Utilizare</strong>: pentru ce e voie să fie folosit (aici, server TLS).</li></ul>
+<p>Certificatul e <strong>public</strong>: orice browser îl primește la fiecare conexiune. Nu e nimic secret în el.</p>`,
+ en:`<p>The CA takes the public key and names from the CSR, adds its own fields and <strong>signs it all</strong> with its private key:</p>
+<ul><li><strong>Issuer</strong>: who signed it (<code>Example Issuing CA R2</code>);</li>
+<li><strong>Serial number</strong>: unique, used for revocation;</li>
+<li><strong>Validity</strong>: from when to when (today at most 398 days; Let's Encrypt gives 90);</li>
+<li><strong>Key usage</strong>: what it may be used for (here, a TLS server).</li></ul>
+<p>The certificate is <strong>public</strong>: every browser receives it on every connection. Nothing in it is secret.</p>`},
+ try:[{cmd:"openssl x509 -in shop.crt -noout -subject -issuer -dates -ext subjectAltName",d:{ro:"Vezi pe scurt cine e, cine l-a emis și când expiră.",en:"See briefly who it's for, who issued it and when it expires."}}]},
+
+{at:["ca","root"],frame:null,kind:"none",tables:["chain"],hl:{chain:"intermediate"},who:{ro:"Lanțul",en:"The chain"},
+ title:{ro:"De ce un CA intermediar și o rădăcină offline",en:"Why an intermediate CA and an offline root"},
+ body:{ro:`<p>Cheia privată a <strong>rădăcinii</strong> e cea mai valoroasă: dacă e furată, orice certificat semnat cu ea pare valid oriunde. De aceea rădăcina stă <strong>offline</strong>, într-un seif, și e folosită rar, doar ca să semneze CA-uri intermediare.</p>
+<p><strong>Intermediarul</strong> e online și semnează certificatele zilnice. Dacă e compromis, rădăcina îl revocă și creează altul, fără ca browserele să-și schimbe lista de rădăcini.</p>
+<p>Rădăcinile sunt preinstalate în browsere și sisteme de operare: magazinul de rădăcini (<em>root store</em>).</p>`,
+ en:`<p>The <strong>root's</strong> private key is the most valuable: if stolen, any certificate signed with it looks valid everywhere. That's why the root stays <strong>offline</strong>, in a vault, and is used rarely, only to sign intermediate CAs.</p>
+<p>The <strong>intermediate</strong> is online and signs the everyday certificates. If it's compromised, the root revokes it and creates another, without browsers changing their root list.</p>
+<p>Roots come preinstalled in browsers and operating systems: the <em>root store</em>.</p>`}},
+
+{at:"ops",frame:{doc:{ro:"Fișierele pe server",en:"Files on the server"},priv:"shop.key",chain:"fullchain.pem = shop.crt + Example Issuing CA R2",result:{ro:"nginx: ssl_certificate fullchain.pem; ssl_certificate_key shop.key;",en:"nginx: ssl_certificate fullchain.pem; ssl_certificate_key shop.key;"}},kind:"c",move:[[["ops","srv"]]],log:{ro:"instalare",en:"install"},who:{ro:"Echipa ops",en:"Ops team"},
+ title:{ro:"Instalarea: certificatul + intermediarul + cheia",en:"Installing: the certificate + the intermediate + the key"},
+ body:{ro:`<p>Pe server, nginx are nevoie de două lucruri: <strong>cheia privată</strong> și <strong>lanțul</strong>, adică certificatul site-ului <strong>urmat de</strong> certificatul intermediar, în același fișier (<code>fullchain.pem</code>).</p>
+<p class="key">Greșeala clasică: pui doar certificatul site-ului, fără intermediar. Chrome merge (își descarcă singur intermediarul), dar <code>curl</code>, aplicațiile Java și telefoanele mai vechi dau eroare: „unable to get local issuer certificate”.</p>`,
+ en:`<p>On the server, nginx needs two things: the <strong>private key</strong> and the <strong>chain</strong>, that is the site certificate <strong>followed by</strong> the intermediate certificate, in the same file (<code>fullchain.pem</code>).</p>
+<p class="key">The classic mistake: installing only the site certificate, without the intermediate. Chrome works (it fetches the intermediate itself), but <code>curl</code>, Java apps and older phones fail: "unable to get local issuer certificate".</p>`},
+ try:[{cmd:"openssl s_client -connect shop.example.com:443 -servername shop.example.com -showcerts",d:{ro:"Vezi ce lanț trimite serverul (trebuie să apară 2 certificate).",en:"See which chain the server sends (2 certificates should appear)."}}]},
+
+{at:"br",frame:CHAIN,kind:"t",move:[[["srv","br"]]],tables:["checks"],log:{ro:"browserul verifică",en:"browser verifies"},who:"Browser",
+ title:{ro:"Browserul verifică lanțul",en:"The browser verifies the chain"},
+ body:{ro:`<p>La negocierea TLS, serverul trimite lanțul. Browserul verifică, în ordine:</p>
+<ol><li>semnătura certificatului site-ului, cu cheia publică a intermediarului;</li>
+<li>semnătura intermediarului, cu cheia publică a rădăcinii din <strong>root store</strong>;</li>
+<li>că <code>shop.example.com</code> e în <strong>SAN</strong>, că e în perioada de valabilitate, că e pentru server TLS și că nu e revocat.</li></ol>
+<p>Dacă orice pas eșuează, apare pagina roșie: <code>NET::ERR_CERT_DATE_INVALID</code>, <code>ERR_CERT_COMMON_NAME_INVALID</code> sau <code>ERR_CERT_AUTHORITY_INVALID</code>.</p>`,
+ en:`<p>During the TLS handshake the server sends the chain. The browser checks, in order:</p>
+<ol><li>the site certificate's signature, with the intermediate's public key;</li>
+<li>the intermediate's signature, with the public key of the root in the <strong>root store</strong>;</li>
+<li>that <code>shop.example.com</code> is in the <strong>SAN</strong>, that it's within the validity period, that it's for a TLS server and that it isn't revoked.</li></ol>
+<p>If any step fails, the red page appears: <code>NET::ERR_CERT_DATE_INVALID</code>, <code>ERR_CERT_COMMON_NAME_INVALID</code> or <code>ERR_CERT_AUTHORITY_INVALID</code>.</p>`}},
+
+{at:"ca",frame:REV,kind:"c",move:[[["ops","srv"]],[["srv","ca"]]],log:{ro:"revocare",en:"revocation"},who:{ro:"Incident",en:"Incident"},
+ title:{ro:"Cheia s-a scurs: revocarea",en:"The key leaked: revocation"},
+ body:{ro:`<p>Cineva a pus din greșeală <code>shop.key</code> într-un repository public. Certificatul e încă valabil 80 de zile, deci un atacator l-ar putea folosi. Echipa cere <strong>revocarea</strong>, cu motivul <code>keyCompromise</code>, apoi face o cheie și un certificat nou.</p>
+<p>Cum află browserele? Prin <strong>CRL</strong> (listă de serii revocate, descărcată periodic) sau <strong>OCSP</strong> (întrebare „e valid seria X?”). Cu <strong>OCSP stapling</strong>, serverul atașează el răspunsul OCSP semnat, ca browserul să nu mai întrebe.</p>
+<p>Revocarea merge prost în practică, de aceea industria trece la certificate <strong>de viață scurtă</strong>: un certificat furat expiră repede oricum.</p>`,
+ en:`<p>Someone accidentally pushed <code>shop.key</code> to a public repository. The certificate is still valid for 80 days, so an attacker could use it. The team asks for <strong>revocation</strong>, with the reason <code>keyCompromise</code>, then makes a new key and certificate.</p>
+<p>How do browsers find out? Through a <strong>CRL</strong> (a list of revoked serials, downloaded periodically) or <strong>OCSP</strong> (asking "is serial X valid?"). With <strong>OCSP stapling</strong>, the server attaches the signed OCSP answer itself, so the browser needn't ask.</p>
+<p>Revocation works poorly in practice, which is why the industry is moving to <strong>short-lived</strong> certificates: a stolen certificate expires soon anyway.</p>`}},
+
+{at:["srv"],frame:null,kind:"none",tables:["formats"],who:{ro:"Formate",en:"Formats"},
+ title:{ro:"Formate, keystore, truststore și mTLS",en:"Formats, keystores, truststores and mTLS"},
+ body:{ro:`<p>Același certificat poate fi în fișiere diferite (tabelul). Două cuvinte se confundă des, mai ales în Java:</p>
+<ul><li><strong>Keystore</strong>: <em>identitatea mea</em>: cheia mea privată + certificatul meu. Îl folosește serverul.</li>
+<li><strong>Truststore</strong>: <em>în cine am încredere</em>: certificatele CA-urilor acceptate. Îl folosește clientul (de ex. portalul din <a href="../ldap/index.html">lecția LDAP</a> are CA-ul intern în truststore).</li></ul>
+<p>În <strong>mTLS</strong> (mutual TLS), și clientul arată un certificat, deci ambele părți au și keystore, și truststore. Așa se autentifică serviciile între ele (vezi <a href="../service-mesh/index.html">lecția service mesh</a>).</p>`,
+ en:`<p>The same certificate can live in different files (the table). Two words are often confused, especially in Java:</p>
+<ul><li><strong>Keystore</strong>: <em>my identity</em>: my private key + my certificate. The server uses it.</li>
+<li><strong>Truststore</strong>: <em>whom I trust</em>: the certificates of accepted CAs. The client uses it (e.g. the portal in the <a href="../ldap/index.html">LDAP lesson</a> has the internal CA in its truststore).</li></ul>
+<p>In <strong>mTLS</strong> (mutual TLS), the client presents a certificate too, so both sides have a keystore and a truststore. That's how services authenticate each other (see the <a href="../service-mesh/index.html">service mesh lesson</a>).</p>`},
+ try:[{cmd:"openssl pkcs12 -export -inkey shop.key -in fullchain.pem -out shop.p12",d:{ro:"Pune cheia și lanțul într-un fișier PKCS#12 (îți cere o parolă).",en:"Packs the key and chain into a PKCS#12 file (asks for a password)."}},{cmd:"keytool -list -keystore truststore.p12",d:{ro:"Vezi CA-urile dintr-un truststore Java.",en:"Lists the CAs in a Java truststore."}}]},
+
+{at:["ops","srv","ca"],frame:null,kind:"none",summary:true,
+ title:{ro:"Reînnoire automată și recapitulare",en:"Automatic renewal and recap"},
+ body:{ro:`<p>Cea mai frecventă pană cu certificate nu e un atac, ci <strong>expirarea</strong>: cineva a uitat să-l reînnoiască. Soluția: automatizare (<code>certbot</code>, <code>cert-manager</code> în Kubernetes) care reînnoiește cu ~30 de zile înainte, plus o alertă dacă un certificat expiră în mai puțin de 14 zile.</p>
+<ul><li>Cheia <strong>privată</strong> stă pe server; certificatul e <strong>public</strong>.</li>
+<li>Drumul: cheie → <strong>CSR</strong> → CA verifică (ACME) → CA <strong>semnează</strong> → instalezi <strong>certificat + intermediar</strong>.</li>
+<li>Browserul verifică lanțul până la o <strong>rădăcină</strong> din root store, numele din <strong>SAN</strong>, datele și revocarea.</li>
+<li>PEM = text, PFX/P12 = cheie + certificat cu parolă; keystore = cine sunt, truststore = în cine am încredere.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Mergi la laborator ↓</button></p>`,
+ en:`<p>The most common certificate outage isn't an attack but <strong>expiry</strong>: someone forgot to renew it. The fix: automation (<code>certbot</code>, <code>cert-manager</code> in Kubernetes) renewing ~30 days ahead, plus an alert when a certificate expires in under 14 days.</p>
+<ul><li>The <strong>private</strong> key stays on the server; the certificate is <strong>public</strong>.</li>
+<li>The path: key → <strong>CSR</strong> → the CA checks (ACME) → the CA <strong>signs</strong> → you install the <strong>certificate + intermediate</strong>.</li>
+<li>The browser checks the chain up to a <strong>root</strong> in the root store, the name in the <strong>SAN</strong>, the dates and revocation.</li>
+<li>PEM = text, PFX/P12 = key + certificate with a password; keystore = who I am, truststore = whom I trust.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Go to the lab ↓</button></p>`}}
+],
+
+reference:(T,lang)=>{
+  const ro=lang==="ro";
+  return `<div class="ref-grid"><section class="card refcard"><h2>${ro?"openssl: rețete":"openssl: recipes"}</h2>
+<pre class="yaml"><span class="c"># ${ro?"când expiră certificatul unui site?":"when does a site's certificate expire?"}</span>
+echo | openssl s_client -connect shop.example.com:443 \\
+  -servername shop.example.com 2>/dev/null | openssl x509 -noout -dates
+
+<span class="c"># ${ro?"cheia se potrivește cu certificatul? (hash-urile trebuie să fie egale)":"does the key match the certificate? (hashes must be equal)"}</span>
+openssl pkey -in shop.key -pubout | openssl sha256
+openssl x509 -in shop.crt -pubkey -noout | openssl sha256
+
+<span class="c"># ${ro?"verifică lanțul local":"verify the chain locally"}</span>
+openssl verify -CAfile root.pem -untrusted intermediate.pem shop.crt
+
+<span class="c"># PFX → PEM</span>
+openssl pkcs12 -in shop.p12 -out shop.pem -nodes</pre></section>
+<section class="card refcard"><h2>cert-manager (Kubernetes)</h2>
+<pre class="yaml">apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: shop
+spec:
+  secretName: shop-tls
+  dnsNames: [shop.example.com, www.shop.example.com]
+  issuerRef: { name: letsencrypt, kind: ClusterIssuer }
+  renewBefore: 720h   <span class="c"># 30 ${ro?"de zile":"days"}</span></pre>
+<h3>${ro?"Cum arată un PEM":"What a PEM looks like"}</h3>
+<pre class="yaml">-----BEGIN CERTIFICATE-----
+MIIB9TCCAZugAwIBAgIUBB+a…
+-----END CERTIFICATE-----</pre></section></div>`;
+},
+
+gloss:[
+ [{ro:"Certificat",en:"Certificate"},"X.509",{ro:"Document semnat care leagă o cheie publică de un nume.",en:"A signed document binding a public key to a name."}],
+ ["CA","Certificate Authority",{ro:"Autoritatea care verifică și semnează certificate.",en:"The authority that checks and signs certificates."}],
+ [{ro:"Cheie privată",en:"Private key"},null,{ro:"Jumătatea secretă a perechii; semnează și nu pleacă de pe server.",en:"The secret half of the pair; it signs and never leaves the server."}],
+ [{ro:"Cheie publică",en:"Public key"},null,{ro:"Jumătatea publică; verifică semnăturile făcute cu cheia privată.",en:"The public half; it verifies signatures made with the private key."}],
+ ["CSR","Certificate Signing Request",{ro:"Cererea trimisă la CA: nume + cheie publică, semnată cu cheia privată.",en:"The request sent to the CA: names + public key, signed with the private key."}],
+ ["SAN","Subject Alternative Name",{ro:"Lista numelor pentru care e valabil certificatul.",en:"The list of names the certificate is valid for."}],
+ [{ro:"CA intermediar",en:"Intermediate CA"},null,{ro:"CA semnat de rădăcină, care semnează certificatele obișnuite.",en:"A CA signed by the root, which signs everyday certificates."}],
+ ["Root store",{ro:"magazinul de rădăcini",en:"trust store"},{ro:"Lista de rădăcini de încredere din browser sau sistem.",en:"The list of trusted roots in a browser or OS."}],
+ ["ACME",null,{ro:"Protocol pentru obținerea automată a certificatelor (Let's Encrypt).",en:"A protocol for obtaining certificates automatically (Let's Encrypt)."}],
+ ["OCSP","Online Certificate Status Protocol",{ro:"Întrebare către CA: „certificatul cu seria X e revocat?”.",en:"A question to the CA: \"is serial X revoked?\"."}],
+ ["CRL","Certificate Revocation List",{ro:"Lista semnată a certificatelor revocate.",en:"The signed list of revoked certificates."}],
+ ["PEM",null,{ro:"Format text, între liniile -----BEGIN … -----END.",en:"A text format between -----BEGIN … -----END lines."}],
+ ["PKCS#12",{ro:".p12 / .pfx",en:".p12 / .pfx"},{ro:"Fișier binar cu cheie + certificat + lanț, protejat cu parolă.",en:"A binary file with key + certificate + chain, password-protected."}],
+ ["Keystore",null,{ro:"Locul cu identitatea ta: cheia privată și certificatul.",en:"Where your identity lives: the private key and certificate."}],
+ ["Truststore",null,{ro:"Locul cu CA-urile în care ai încredere.",en:"Where the CAs you trust live."}],
+ ["mTLS","mutual TLS",{ro:"TLS în care și clientul prezintă un certificat.",en:"TLS where the client presents a certificate too."}]
+],
+glossEx:{
+ "SAN":{ro:"DNS:shop.example.com, DNS:www.shop.example.com",en:"DNS:shop.example.com, DNS:www.shop.example.com"},
+ "Truststore":{ro:"portalul Java are CA-ul intern al firmei în truststore, ca să accepte certificatul serverului LDAP.",en:"the Java portal has the company's internal CA in its truststore so it accepts the LDAP server's certificate."}
+},
+
+quiz:[
+ {q:{ro:"Ce trimiți la CA când ceri un certificat?",en:"What do you send to the CA when requesting a certificate?"},o:[{ro:"Cheia privată",en:"The private key"},{ro:"Un CSR: numele și cheia publică, semnate cu cheia privată",en:"A CSR: the names and public key, signed with the private key"},{ro:"Parola serverului",en:"The server's password"},{ro:"Certificatul rădăcină",en:"The root certificate"}],a:1,e:{ro:"Cheia privată nu pleacă niciodată de pe server.",en:"The private key never leaves the server."}},
+ {q:{ro:"Unde se uită browserul după numele site-ului?",en:"Where does the browser look for the site's name?"},o:[{ro:"În emitent",en:"In the issuer"},{ro:"În numărul de serie",en:"In the serial number"},{ro:"În SAN (subjectAltName)",en:"In the SAN (subjectAltName)"},{ro:"În data de expirare",en:"In the expiry date"}],a:2,e:{ro:"CN-ul e ignorat de browserele moderne.",en:"Modern browsers ignore the CN."}},
+ {q:{ro:"De ce stă rădăcina offline?",en:"Why is the root kept offline?"},o:[{ro:"Ca să consume mai puțin curent",en:"To use less power"},{ro:"Pentru că expiră repede",en:"Because it expires quickly"},{ro:"Pentru că browserele n-o folosesc",en:"Because browsers don't use it"},{ro:"Cheia ei e cea mai valoroasă; semnează doar intermediarii, rar",en:"Its key is the most valuable; it only signs intermediates, rarely"}],a:3,e:{ro:"Intermediarul face munca zilnică.",en:"The intermediate does the daily work."}},
+ {q:{ro:"Site-ul merge în Chrome, dar curl spune „unable to get local issuer certificate”. Ce lipsește probabil?",en:"The site works in Chrome but curl says \"unable to get local issuer certificate\". What's probably missing?"},o:[{ro:"Certificatul intermediar din lanțul serverului",en:"The intermediate certificate in the server's chain"},{ro:"Cheia privată",en:"The private key"},{ro:"Înregistrarea DNS",en:"The DNS record"},{ro:"Portul 80",en:"Port 80"}],a:0,e:{ro:"Pune fullchain.pem (site + intermediar) în server.",en:"Configure fullchain.pem (site + intermediate) on the server."}},
+ {q:{ro:"Ce dovedește provocarea ACME http-01?",en:"What does the ACME http-01 challenge prove?"},o:[{ro:"Că firma există",en:"That the company exists"},{ro:"Că cel care cere controlează site-ul de la acel domeniu",en:"That the requester controls the site at that domain"},{ro:"Că parola e puternică",en:"That the password is strong"},{ro:"Că serverul e rapid",en:"That the server is fast"}],a:1,e:{ro:"CA-ul descarcă fișierul de pe domeniu.",en:"The CA downloads the file from the domain."}},
+ {q:{ro:"Ce e un truststore?",en:"What is a truststore?"},o:[{ro:"Locul cu cheia ta privată",en:"Where your private key lives"},{ro:"Un tip de CSR",en:"A kind of CSR"},{ro:"Lista CA-urilor în care ai încredere",en:"The list of CAs you trust"},{ro:"Un log de erori",en:"An error log"}],a:2,e:{ro:"Keystore = cine sunt; truststore = în cine am încredere.",en:"Keystore = who I am; truststore = whom I trust."}},
+ {q:{ro:"Cheia privată a ajuns într-un repository public. Ce faci?",en:"The private key ended up in a public repository. What do you do?"},o:[{ro:"Ștergi commit-ul și gata",en:"Delete the commit and that's it"},{ro:"Aștepți să expire",en:"Wait for it to expire"},{ro:"Schimbi parola serverului",en:"Change the server password"},{ro:"Revoci certificatul și faci cheie + certificat nou",en:"Revoke the certificate and make a new key + certificate"}],a:3,e:{ro:"Cheia trebuie considerată compromisă.",en:"The key must be treated as compromised."}},
+ {q:{ro:"Care e cea mai frecventă pană legată de certificate?",en:"What's the most common certificate-related outage?"},o:[{ro:"Expirarea, din cauza reînnoirii uitate",en:"Expiry, from a forgotten renewal"},{ro:"Atacurile asupra rădăcinii",en:"Attacks on the root"},{ro:"Cheile prea lungi",en:"Keys that are too long"},{ro:"Prea multe nume în SAN",en:"Too many SAN names"}],a:0,e:{ro:"De aceea: certbot / cert-manager și alerte.",en:"Hence certbot / cert-manager and alerts."}}
+]
+};
+})();
+</script>
+<script src="../assets/engine.js?v=2"></script>
+<script src="../assets/labs-data.js?v=2"></script>
+<script src="../assets/lab.js?v=1"></script>
+<script type="module" src="../assets/auth.js?v=6"></script>
+</body>
+</html>

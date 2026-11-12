@@ -4,224 +4,100 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Rețea pas cu pas</title>
-<meta name="description" content="Lecții interactive despre rețele: Ethernet, DNS, Kubernetes. / Interactive networking lessons: Ethernet, DNS, Kubernetes.">
+<meta name="description" content="Lecții interactive despre rețele, web, Kubernetes, identitate și mesagerie. / Interactive lessons on networking, the web, Kubernetes, identity and messaging.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
 <link rel="stylesheet" href="assets/site.css">
-<style>
-.home-hero .hero-in{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);padding-block:40px 34px}
-.home-hero h1{font-size:clamp(1.9rem,4.4vw,3rem)}
-.how{display:grid;gap:10px;margin:0;padding:0;list-style:none}
-.how li{display:grid;grid-template-columns:34px minmax(0,1fr);gap:10px;align-items:start;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
-.how b{display:block;font-family:var(--head)}
-.how span{font-size:.9rem;color:var(--muted)}
-.how i{width:34px;height:34px;border-radius:8px;background:var(--surface2);display:grid;place-items:center;font-style:normal;font-size:1.05rem}
-.path{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
-.lesson{display:flex;flex-direction:column;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;color:var(--text);text-decoration:none;min-width:0;transition:border-color .15s,transform .15s}
-.lesson:hover{border-color:var(--accent);transform:translateY(-2px)}
-.lesson:focus-visible{outline:2px solid var(--focus);outline-offset:3px}
-@media (prefers-reduced-motion: reduce){.lesson{transition:none}.lesson:hover{transform:none}}
-.lesson .top{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.lesson .num{font:600 .74rem var(--mono);color:var(--accent);letter-spacing:.08em}
-.lesson .lvl{font:500 .74rem var(--mono);padding:2px 8px;border-radius:999px;border:1px solid var(--border);color:var(--muted)}
-.lesson svg{width:100%;height:auto;max-height:110px;background:var(--surface2);border-radius:8px}
-.lesson h3{font:700 1.25rem var(--head);margin:0}
-.lesson p{margin:0;color:var(--muted);font-size:.93rem}
-.lesson ul{margin:0;padding-left:1.1em;font-size:.88rem}
-.lesson li{margin:2px 0}
-.lesson .go{margin-top:auto;font-weight:600;color:var(--accent);font-size:.92rem}
-.lesson .stats{font:500 .78rem var(--mono);color:var(--muted)}
-.soon{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
-.soon div{border:1px dashed var(--border);border-radius:10px;padding:12px 14px;min-width:0}
-.soon b{font-family:var(--head)}
-.soon p{margin:4px 0 0;font-size:.86rem;color:var(--muted)}
-.ill-line{stroke:var(--link);stroke-width:2.5}
-.ill-dev{fill:var(--surface);stroke:var(--text);stroke-width:1.6}
-.ill-acc{fill:var(--accent)}
-.ill-tok{fill:var(--l2bg);stroke:var(--l2);stroke-width:1.4}
-.ill-dns{fill:var(--arpbg);stroke:var(--arp);stroke-width:1.4}
-.ill-txt{font:700 9px var(--sans)}
-.path.two{grid-template-columns:repeat(2,minmax(0,1fr))}
-@media (max-width:900px){.path,.path.two{grid-template-columns:minmax(0,1fr)}.soon{grid-template-columns:repeat(2,minmax(0,1fr))}.home-hero .hero-in{grid-template-columns:minmax(0,1fr)}}
-@media (max-width:420px){.soon{grid-template-columns:minmax(0,1fr)}}
-</style>
 <link rel="stylesheet" href="assets/theme.css">
+<style>
+.home{max-width:1080px;margin:0 auto;padding:34px max(16px,env(safe-area-inset-right,0px)) 40px max(16px,env(safe-area-inset-left,0px))}
+.intro{max-width:640px}
+.intro h1{font:700 clamp(1.9rem,5vw,3rem)/1.08 var(--head);margin:6px 0 10px}
+.intro p{font-size:1.08rem;color:var(--muted);margin:0 0 18px}
+.ctas{display:flex;flex-wrap:wrap;gap:10px}
+.cta{display:inline-flex;align-items:center;gap:6px;border:2px solid var(--text);border-radius:10px;padding:11px 16px;font:700 1rem var(--sans);text-decoration:none;color:var(--text);background:var(--surface)}
+.cta.main{background:var(--accent);color:var(--accent-text)}
+.cta:hover{transform:translateY(-1px)}
+.resume{display:none;margin:20px 0 0;align-items:center;gap:10px;flex-wrap:wrap;border:2px dashed var(--text);border-radius:12px;padding:10px 14px;background:var(--surface2);max-width:640px}
+.resume.on{display:flex}
+.resume a{font-weight:700;color:var(--text)}
+h2.sh{font:700 1.25rem var(--head);margin:36px 0 12px}
+.topics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
+.topic{position:relative;min-width:0}
+.tile{display:flex;flex-direction:column;gap:6px;height:100%;box-sizing:border-box;border:2px solid var(--text);border-radius:14px;padding:16px;background:var(--surface);color:var(--text);text-decoration:none;transition:transform .15s,box-shadow .15s}
+.tile .ic{font-size:1.9rem;line-height:1}
+.tile b{font:700 1.05rem var(--head)}
+.tile span.d{font-size:.86rem;color:var(--muted)}
+.tile small{margin-top:auto;font:600 .76rem var(--mono);color:var(--muted)}
+.pop{display:none;position:absolute;left:-2px;right:-2px;top:calc(100% - 8px);z-index:20;background:var(--surface);border:2px solid var(--text);border-top:0;border-radius:0 0 14px 14px;padding:8px}
+.pop a{display:block;padding:6px 8px;border-radius:6px;color:var(--text);text-decoration:none;font-size:.86rem;line-height:1.3}
+.pop a:hover,.pop a:focus-visible{background:var(--accent);color:var(--accent-text)}
+@media (hover:hover){.topic:hover .tile,.topic:focus-within .tile{box-shadow:0 6px 0 var(--text);transform:translateY(-3px);border-bottom-left-radius:0;border-bottom-right-radius:0}
+  .topic:hover .pop,.topic:focus-within .pop{display:block}}
+.games{display:flex;flex-wrap:wrap;gap:8px}
+.games a{border:1px solid var(--border);border-radius:999px;padding:8px 14px;text-decoration:none;color:var(--text);font-weight:600;font-size:.92rem;background:var(--surface)}
+.games a:hover{border-color:var(--text);background:var(--accent);color:var(--accent-text)}
+@media (max-width:980px){.topics{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:640px){.topics{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.tile span.d{display:none}}
+@media (prefers-reduced-motion:reduce){.tile,.cta{transition:none}.topic:hover .tile{transform:none}.cta:hover{transform:none}}
+</style>
 </head>
 <body>
 <header class="topbar" id="top"><div class="topbar-in">
   <a class="brand" href="index.html"><svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="var(--accent)"/><path d="M7 16h18M19 11l6 5-6 5" fill="none" stroke="var(--accent-text)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="16" r="2.6" fill="var(--accent-text)"/></svg><span data-t="brand"></span></a>
-  <nav class="nav" aria-label="Secțiuni / Sections"><a href="#lectii" data-t="navLessons"></a><a href="#web" data-t="navWeb"></a><a href="#k8s" data-t="navK8s"></a><a href="#productie" data-t="navProd"></a><a href="#curand" data-t="navSoon"></a></nav>
+  <nav class="nav" data-menu data-root="" aria-label="Meniu / Menu"></nav>
   <div class="tools"><div class="seg" role="group" aria-label="Limba / Language"><button type="button" data-lang="ro">RO</button><button type="button" data-lang="en">EN</button></div><button type="button" class="icon-btn" id="theme">◐</button></div>
 </div></header>
 
-<section class="hero home-hero"><div class="hero-in">
-  <div class="hero-text">
+<main class="home">
+  <section class="intro">
     <p class="eyebrow" data-t="eyebrow"></p>
     <h1 data-t="h1"></h1>
-    <p class="sub" data-t="sub"></p>
-    <ul class="meta" id="meta"></ul>
-    <p class="hero-cta"><a class="btn primary" href="teste/index.html" data-t="ctaTests"></a> <a class="btn" href="roata/index.html" data-t="ctaWheel"></a> <a class="btn" href="joc/index.html" data-t="ctaGame"></a> <a class="btn" href="zar/index.html" data-t="ctaDice"></a> <a class="btn" href="blackjack/index.html" data-t="ctaBJ"></a> <a class="btn" href="ruleta/index.html" data-t="ctaRul"></a> <a class="btn" href="rezultate/index.html" data-t="ctaResults"></a></p>
-  </div>
-  <ul class="how" id="how"></ul>
-</div></section>
+    <p data-t="sub"></p>
+    <div class="ctas"><a class="cta main" href="ethernet/index.html" data-t="start"></a><a class="cta" href="lectii/index.html" data-t="all"></a><a class="cta" href="teste/index.html" data-t="tests"></a></div>
+    <p class="resume" id="resume"></p>
+  </section>
 
-<div class="wrap">
-  <div class="sec-head" id="lectii"><p class="eyebrow" data-t="pathEyebrow"></p><h2 data-t="pathT"></h2><p class="lead" data-t="pathLead"></p></div>
-  <div class="path" id="path"></div>
+  <h2 class="sh" data-t="topicsT"></h2>
+  <div class="topics" id="topics"></div>
 
-  <div class="sec-head" id="web"><p class="eyebrow" data-t="webEyebrow"></p><h2 data-t="webT"></h2><p class="lead" data-t="webLead"></p></div>
-  <div class="path two" id="pathW"></div>
-
-  <div class="sec-head" id="k8s"><p class="eyebrow" data-t="k8sEyebrow"></p><h2 data-t="k8sT"></h2><p class="lead" data-t="k8sLead"></p></div>
-  <div class="path two" id="pathK"></div>
-
-  <div class="sec-head" id="productie"><p class="eyebrow" data-t="prodEyebrow"></p><h2 data-t="prodT"></h2><p class="lead" data-t="prodLead"></p></div>
-  <div class="path" id="path2"></div>
-
-  <div class="sec-head" id="curand"><p class="eyebrow" data-t="soonEyebrow"></p><h2 data-t="soonT"></h2></div>
-  <div class="soon" id="soon"></div>
-</div>
+  <h2 class="sh" data-t="gamesT"></h2>
+  <div class="games" id="games"></div>
+</main>
 <footer class="foot"><div class="foot-in"><p data-t="foot"></p><p><a href="https://github.com/tedimihailescu/Ethernet-frame-learning-app" data-t="src"></a></p></div></footer>
 
+<script src="assets/catalog.js?v=1"></script>
+<script src="assets/menu.js?v=1"></script>
 <script>
 (function(){
 "use strict";
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
 let lang=store.get("cadru-lang")==="en"?"en":"ro";
 const T=v=>(v&&typeof v==="object"&&!Array.isArray(v))?v[lang]:v;
-const UI={
-  ctaTests:{ro:"✎ Testează-ți cunoștințele",en:"✎ Test your knowledge"},ctaResults:{ro:"★ Rezultatele mele",en:"★ My results"},ctaGame:{ro:"🎮 Livrează pachetul",en:"🎮 Deliver the packet"},ctaDice:{ro:"🎲 Zarul pachetului",en:"🎲 The packet die"},ctaBJ:{ro:"🃏 Blackjack",en:"🃏 Blackjack"},ctaRul:{ro:"🎰 Ruleta punctelor",en:"🎰 Points roulette"},ctaWheel:{ro:"🎡 Ce învăț azi?",en:"🎡 What do I learn today?"},
-  brand:{ro:"Rețea pas cu pas",en:"Network step by step"},navLessons:{ro:"Lecții",en:"Lessons"},navSoon:{ro:"În curând",en:"Coming soon"},
-  eyebrow:{ro:"Lecții interactive · gratuite · RO / EN",en:"Interactive lessons · free · RO / EN"},
-  h1:{ro:"Înțelege rețelele urmărind pachetele, pas cu pas",en:"Understand networks by following the packets, step by step"},
-  sub:{ro:"Fiecare lecție e o simulare animată: vezi ce face fiecare dispozitiv și ce câmpuri se schimbă la fiecare hop. Pornești de la cadrul Ethernet, treci prin IPv6 și BGP și ajungi la Kubernetes, service mesh, observabilitate și aplicații în producție.",en:"Each lesson is an animated simulation: see what every device does and which fields change at every hop. You start with the Ethernet frame, go through IPv6 and BGP, and end with Kubernetes, service mesh, observability and production apps."},
-  prodEyebrow:{ro:"Aplicații în producție",en:"Production apps"},prodT:{ro:"Cum funcționează o aplicație reală",en:"How a real application works"},
-  prodLead:{ro:"De la rețea la aplicație: ce se întâmplă cu o cerere în interiorul serverului Java și cum colaborează microserviciile.",en:"From the network to the app: what happens to a request inside the Java server, and how microservices work together."},
-  navProd:{ro:"Producție",en:"Production"},
-  meta:[{ro:"16 lecții",en:"16 lessons"},{ro:"229 de pași",en:"229 steps"},{ro:"158 de întrebări",en:"158 questions"},{ro:"scorurile tale, salvate",en:"your scores, saved"}],
-  how:[["▶",{ro:"Simulare pas cu pas",en:"Step-by-step simulation"},{ro:"Înainte, înapoi sau redare automată, cu animația pachetului pe diagramă.",en:"Forward, back or auto-play, with the packet animated on the diagram."}],
-       ["≡",{ro:"Pachetul „live”",en:"The \"live\" packet"},{ro:"Câmpurile noi, schimbate sau eliminate sunt colorate la fiecare pas.",en:"New, changed or removed fields are coloured at every step."}],
-       [">_",{ro:"Laborator după fiecare lecție",en:"A lab after every lesson"},{ro:"Un terminal simulat, un calcul și pașii în ordine, cu indicii; plus comenzi reale de încercat.",en:"A simulated terminal, a calculation and steps in order, with hints; plus real commands to try."}]],
-  pathEyebrow:{ro:"1 · Bazele rețelelor",en:"1 · Networking basics"},pathT:{ro:"Rețele",en:"Networking"},
-  k8sEyebrow:{ro:"3 · Kubernetes",en:"3 · Kubernetes"},k8sT:{ro:"Kubernetes: rețea, mesh și observabilitate",en:"Kubernetes: networking, mesh and observability"},
-  k8sLead:{ro:"Service-uri și DNS în cluster, Ingress, rețeaua pod-urilor în cloud, drumul unui pachet prin kernel, apoi service mesh-ul și cum vezi ce se întâmplă în producție.",en:"Services and cluster DNS, Ingress, pod networking in the cloud, a packet's path through the kernel, then the service mesh and how you see what's happening in production."},
-  navK8s:{ro:"Kubernetes",en:"Kubernetes"},navWeb:{ro:"Web",en:"Web"},
-  webEyebrow:{ro:"2 · Internet și web",en:"2 · Internet and web"},webT:{ro:"Nume, adrese, drumuri și conexiuni sigure",en:"Names, addresses, routes and secure connections"},
-  webLead:{ro:"Cum află calculatorul adresa unui site, cum devine conexiunea criptată, cum arată adresele IPv6 și cum găsesc rețelele lumii drumul între ele cu BGP.",en:"How your computer finds a site's address, how the connection becomes encrypted, what IPv6 addresses look like, and how the world's networks find routes to each other with BGP."},
-  pathLead:{ro:"Le poți parcurge în orice ordine, dar fiecare se sprijină pe cea dinainte.",en:"You can take them in any order, but each one builds on the one before."},
-  start:{ro:"Începe lecția →",en:"Start the lesson →"},
-  soonEyebrow:{ro:"Planificate",en:"Planned"},soonT:{ro:"În curând",en:"Coming soon"},
+const C=window.CATALOG;
+const UI={brand:{ro:"Rețea pas cu pas",en:"Network step by step"},
+  eyebrow:{ro:`${C.ALL.length} lecții interactive · RO / EN`,en:`${C.ALL.length} interactive lessons · RO / EN`},
+  h1:{ro:"Învață rețelele urmărind pachetele",en:"Learn networking by following the packets"},
+  sub:{ro:"Fiecare lecție e o poveste animată, pas cu pas, urmată de un laborator și un test scurt.",en:"Each lesson is an animated story, step by step, followed by a lab and a short quiz."},
+  start:{ro:"▶ Începe cu prima lecție",en:"▶ Start with the first lesson"},all:{ro:"📚 Toate lecțiile",en:"📚 All lessons"},tests:{ro:"✎ Teste",en:"✎ Quizzes"},
+  topicsT:{ro:"Alege un subiect",en:"Pick a topic"},gamesT:{ro:"Pauză de joacă",en:"Play break"},
+  n:{ro:"lecții",en:"lessons"},one:{ro:"lecție",en:"lesson"},
+  resume:{ro:"Continuă de unde ai rămas:",en:"Pick up where you left off:"},step:{ro:"pasul",en:"step"},
   foot:{ro:"Proiect educațional. Adresele și numele din lecții sunt exemple.",en:"An educational project. Addresses and names in the lessons are examples."},
-  src:{ro:"Codul sursă pe GitHub ↗",en:"Source code on GitHub ↗"},theme:{ro:"Comută tema luminoasă / întunecată",en:"Toggle light / dark theme"}
-};
-const ILL={
- eth:`<svg viewBox="0 0 300 100" aria-hidden="true"><line class="ill-line" x1="40" y1="55" x2="260" y2="55"/><rect class="ill-dev" x="22" y="42" width="36" height="24" rx="3"/><rect class="ill-dev" x="92" y="45" width="44" height="20" rx="4"/><circle class="ill-dev" cx="180" cy="55" r="15"/><rect class="ill-dev" x="242" y="42" width="36" height="24" rx="3"/><rect class="ill-tok" x="118" y="18" width="40" height="17" rx="4"/><text class="ill-txt" x="138" y="30" text-anchor="middle" fill="var(--l2)">ETH</text></svg>`,
- dns:`<svg viewBox="0 0 300 100" aria-hidden="true"><line class="ill-line" x1="45" y1="62" x2="120" y2="62"/><line class="ill-line" x1="120" y1="62" x2="210" y2="22"/><line class="ill-line" x1="120" y1="62" x2="250" y2="62"/><line class="ill-line" x1="120" y1="62" x2="210" y2="88"/><rect class="ill-dev" x="27" y="50" width="36" height="24" rx="3"/><rect class="ill-dev" x="106" y="44" width="28" height="36" rx="3"/><circle class="ill-dev" cx="210" cy="22" r="12"/><circle class="ill-dev" cx="250" cy="62" r="12"/><rect class="ill-dev" x="198" y="76" width="24" height="22" rx="3"/><rect class="ill-dns" x="58" y="22" width="40" height="17" rx="4"/><text class="ill-txt" x="78" y="34" text-anchor="middle" fill="var(--arp)">DNS</text></svg>`,
- k8s:`<svg viewBox="0 0 300 100" aria-hidden="true"><rect x="10" y="10" width="110" height="80" rx="8" fill="none" stroke="var(--border)" stroke-dasharray="4 3"/><rect x="180" y="10" width="110" height="80" rx="8" fill="none" stroke="var(--border)" stroke-dasharray="4 3"/><line class="ill-line" x1="65" y1="38" x2="150" y2="50" stroke-dasharray="5 4"/><line class="ill-line" x1="150" y1="50" x2="235" y2="38" stroke-dasharray="5 4"/><line class="ill-line" x1="150" y1="50" x2="65" y2="72" stroke-dasharray="5 4"/><polygon class="ill-dev" points="65,24 77,31 77,45 65,52 53,45 53,31"/><polygon class="ill-dev" points="65,60 75,66 75,78 65,84 55,78 55,66"/><polygon class="ill-dev" points="235,24 247,31 247,45 235,52 223,45 223,31"/><rect class="ill-dev" x="128" y="40" width="44" height="20" rx="10" stroke-dasharray="3 2"/><circle class="ill-acc" cx="137" cy="50" r="2.5"/></svg>`
-};
-const LESSONS=[
- {href:"ethernet/index.html",ill:"eth",lvl:{ro:"Începător",en:"Beginner"},stats:{ro:"22 de pași · ≈ 20 min",en:"22 steps · ≈ 20 min"},
-  t:{ro:"Drumul unui cadru Ethernet",en:"The journey of an Ethernet frame"},
-  d:{ro:"De la Host A la Host B prin switch-uri și routere: încapsulare, ARP, tabele MAC și de rutare.",en:"From Host A to Host B via switches and routers: encapsulation, ARP, MAC and routing tables."},
-  topics:[{ro:"De ce MAC-urile se schimbă și IP-urile nu",en:"Why MACs change and IPs don't"},{ro:"TTL, FCS, ARP",en:"TTL, FCS, ARP"},{ro:"Anatomia cadrului, octet cu octet",en:"Frame anatomy, byte by byte"}]},
- {href:"dns/index.html",ill:"dns",lvl:{ro:"Începător",en:"Beginner"},stats:{ro:"13 pași · ≈ 15 min",en:"13 steps · ≈ 15 min"},
-  t:{ro:"Cum funcționează DNS",en:"How DNS works"},
-  d:{ro:"Cum devine www.example.com o adresă IP: resolver, server rădăcină, .com, server autoritar și cache.",en:"How www.example.com becomes an IP address: resolver, root server, .com, authoritative server and caching."},
-  topics:[{ro:"Recursiv vs. iterativ",en:"Recursive vs. iterative"},{ro:"Înregistrări A, NS, CNAME, MX, TXT",en:"A, NS, CNAME, MX, TXT records"},{ro:"TTL și cache",en:"TTL and caching"}]},
- {href:"kubernetes/index.html",ill:"k8s",lvl:{ro:"Intermediar",en:"Intermediate"},stats:{ro:"18 pași · ≈ 25 min · simulator DNS",en:"18 steps · ≈ 25 min · DNS simulator"},
-  t:{ro:"Kubernetes: Service-uri și DNS în cluster",en:"Kubernetes: Services and cluster DNS"},
-  d:{ro:"Un pod cheamă „backend”: CoreDNS, ClusterIP, kube-proxy și DNAT, trecerea între noduri, NodePort și LoadBalancer.",en:"A pod calls \"backend\": CoreDNS, ClusterIP, kube-proxy and DNAT, crossing nodes, NodePort and LoadBalancer."},
-  topics:[{ro:"Cluster, noduri, pod-uri, etichete",en:"Cluster, nodes, pods, labels"},{ro:"ClusterIP în detaliu, NodePort, LoadBalancer, headless",en:"ClusterIP in depth, NodePort, LoadBalancer, headless"},{ro:"CoreDNS, lista search și ndots, Corefile, dnsPolicy",en:"CoreDNS, the search list and ndots, Corefile, dnsPolicy"},{ro:"Depanarea DNS-ului din cluster",en:"Troubleshooting cluster DNS"}]}
-];
-ILL.tc=`<svg viewBox="0 0 300 100" aria-hidden="true"><rect x="70" y="14" width="160" height="72" rx="8" fill="none" stroke="var(--border)" stroke-dasharray="4 3"/><line class="ill-line" x1="30" y1="50" x2="270" y2="50"/><rect class="ill-dev" x="14" y="38" width="30" height="24" rx="3"/><rect class="ill-dev" x="82" y="40" width="40" height="20" rx="4"/><rect class="ill-dev" x="130" y="40" width="40" height="20" rx="4"/><rect class="ill-dev" x="178" y="40" width="40" height="20" rx="4"/><path class="ill-dev" d="M252 38v24c0 4 28 4 28 0v-24"/><ellipse class="ill-dev" cx="266" cy="38" rx="14" ry="4"/><rect class="ill-tok" x="128" y="18" width="44" height="15" rx="4"/><text class="ill-txt" x="150" y="29" text-anchor="middle" fill="var(--l2)">thread</text></svg>`;
-ILL.ms=`<svg viewBox="0 0 300 100" aria-hidden="true"><line class="ill-line" x1="40" y1="50" x2="130" y2="50"/><line class="ill-line" x1="130" y1="50" x2="200" y2="20"/><line class="ill-line" x1="130" y1="50" x2="200" y2="50"/><line class="ill-line" x1="130" y1="50" x2="200" y2="82"/><line class="ill-line" x1="200" y1="82" x2="262" y2="82"/><rect class="ill-dev" x="20" y="38" width="40" height="24" rx="4"/><polygon class="ill-dev" points="130,36 142,43 142,57 130,64 118,57 118,43"/><polygon class="ill-dev" points="200,8 210,14 210,26 200,32 190,26 190,14"/><polygon class="ill-dev" points="200,38 210,44 210,56 200,62 190,56 190,44"/><rect class="ill-dev" x="182" y="72" width="36" height="20" rx="3"/><polygon class="ill-dev" points="262,70 272,76 272,88 262,94 252,88 252,76"/><rect class="ill-dns" x="222" y="54" width="42" height="15" rx="4"/><text class="ill-txt" x="243" y="65" text-anchor="middle" fill="var(--arp)">EVENT</text></svg>`;
-const PROD=[
- {href:"tomcat/index.html",ill:"tc",lvl:{ro:"Intermediar",en:"Intermediate"},stats:{ro:"15 pași · ≈ 25 min",en:"15 steps · ≈ 25 min"},
-  t:{ro:"Tomcat: viața unei cereri",en:"Tomcat: the life of a request"},
-  d:{ro:"O cerere printr-o aplicație Java pe Apache Tomcat: nginx, Connector, thread pool, Engine/Host/Context, filtre, servlet, pool de conexiuni, baza de date.",en:"A request through a Java app on Apache Tomcat: nginx, Connector, thread pool, Engine/Host/Context, filters, servlet, connection pool, database."},
-  topics:[{ro:"server.xml explicat, maxThreads, acceptCount",en:"server.xml explained, maxThreads, acceptCount"},{ro:"Sesiuni, filtre, DispatcherServlet, HikariCP",en:"Sessions, filters, DispatcherServlet, HikariCP"},{ro:"Blocarea sub încărcare și depanarea ei",en:"Lock-ups under load and how to debug them"}]},
- {href:"microservicii/index.html",ill:"ms",lvl:{ro:"Intermediar",en:"Intermediate"},stats:{ro:"17 pași · ≈ 25 min",en:"17 steps · ≈ 25 min"},
-  t:{ro:"Microservicii pe Tomcat în producție",en:"Microservices on Tomcat in production"},
-  d:{ro:"O comandă prin servicii Spring Boot cu Tomcat încorporat, în Kubernetes: gateway, REST, Kafka, și cum previi defecțiunile în cascadă.",en:"An order through Spring Boot services with embedded Tomcat, in Kubernetes: gateway, REST, Kafka, and how to prevent cascading failures."},
-  topics:[{ro:"Tomcat încorporat, API gateway, JWT",en:"Embedded Tomcat, API gateway, JWT"},{ro:"Sincron vs. asincron, outbox, idempotență",en:"Sync vs async, outbox, idempotency"},{ro:"Timeout, circuit breaker, bulkhead, tracing",en:"Timeouts, circuit breakers, bulkheads, tracing"}]},
- {href:"gke-retea/index.html",ill:"gke",lvl:{ro:"Intermediar",en:"Intermediate"},stats:{ro:"17 pași · ≈ 25 min · după un video Project Calico",en:"17 steps · ≈ 25 min · from a Project Calico video"},
-  t:{ro:"Rețeaua pod-urilor în Google Cloud (GKE)",en:"Pod networking on Google Cloud (GKE)"},
-  d:{ro:"Cum primesc pod-urile IP-uri și cum ajung pachetele între noduri: kubenet, VPC-native cu alias IP, Calico, network policy, overlay VXLAN și NAT.",en:"How pods get IPs and how packets travel between nodes: kubenet, VPC-native with alias IPs, Calico, network policy, VXLAN overlays and NAT."},
-  topics:[{ro:"IPAM, namespace, veth, bridge",en:"IPAM, namespaces, veth, bridges"},{ro:"VPC-native, alias IP, intranode visibility",en:"VPC-native, alias IPs, intranode visibility"},{ro:"Calico: policy, overlay VXLAN/IPIP, NAT",en:"Calico: policy, VXLAN/IPIP overlays, NAT"}]}
-];
-ILL.gke=`<svg viewBox="0 0 300 100" aria-hidden="true"><rect x="8" y="12" width="96" height="76" rx="8" fill="none" stroke="var(--border)" stroke-dasharray="4 3"/><rect x="196" y="12" width="96" height="76" rx="8" fill="none" stroke="var(--border)" stroke-dasharray="4 3"/><line class="ill-line" x1="40" y1="50" x2="260" y2="50"/><polygon class="ill-dev" points="38,36 48,42 48,58 38,64 28,58 28,42"/><circle class="ill-dev" cx="86" cy="50" r="11"/><circle class="ill-dev" cx="150" cy="50" r="16"/><path class="ill-line" d="M134 50h32M150 34c-7 8-7 24 0 32M150 34c7 8 7 24 0 32" fill="none" stroke-width="1.4"/><circle class="ill-dev" cx="214" cy="50" r="11"/><polygon class="ill-dev" points="262,36 272,42 272,58 262,64 252,58 252,42"/><rect class="ill-dns" x="104" y="16" width="44" height="15" rx="4"/><text class="ill-txt" x="126" y="27" text-anchor="middle" fill="var(--arp)">VXLAN</text></svg>`;
-const EXTRA=[
- {href:"k8s-intrare/index.html",ill:"pkt",lvl:{ro:"Avansat",en:"Advanced"},stats:{ro:"19 pași · ≈ 30 min",en:"19 steps · ≈ 30 min"},
-  t:{ro:"Viața unui pachet care intră în Kubernetes",en:"The life of a packet entering Kubernetes"},
-  d:{ro:"De la load balancer la socket-ul podului: placa de rețea, NAPI, PREROUTING, conntrack, lanțurile KUBE-*, DNAT, FORWARD, MASQUERADE, veth.",en:"From the load balancer to the pod's socket: the NIC, NAPI, PREROUTING, conntrack, the KUBE-* chains, DNAT, FORWARD, MASQUERADE, veth."},
-  topics:[{ro:"Ring buffer, DMA, sk_buff",en:"Ring buffer, DMA, sk_buff"},{ro:"Hook-uri netfilter și tabele iptables",en:"Netfilter hooks and iptables tables"},{ro:"KUBE-SERVICES → NODEPORTS → SVC → SEP",en:"KUBE-SERVICES → NODEPORTS → SVC → SEP"}]},
- {href:"monolit-cpp/index.html",ill:"mono",lvl:{ro:"Intermediar",en:"Intermediate"},stats:{ro:"15 pași · ≈ 25 min · nume fictive",en:"15 steps · ≈ 25 min · mock names"},
-  t:{ro:"Monolit C++ cu SOAP, nginx și Oracle",en:"C++ monolith with SOAP, nginx and Oracle"},
-  d:{ro:"O cerere SOAP prin load balancer-ul nginx, un monolit C++ pe servere Linux și baza Oracle: fire, module, pool OCI, erori, failover.",en:"A SOAP request through the nginx load balancer, a C++ monolith on Linux servers and the Oracle database: threads, modules, the OCI pool, faults, failover."},
-  topics:[{ro:"Plic SOAP, WSDL, SOAP Fault",en:"SOAP envelope, WSDL, SOAP Fault"},{ro:"nginx upstream, retry și POST",en:"nginx upstreams, retries and POST"},{ro:"OCI, bind variables, Oracle lent",en:"OCI, bind variables, a slow Oracle"}]},
- {href:"vlan/index.html",ill:"vlan",lvl:{ro:"Începător+",en:"Beginner+"},stats:{ro:"11 pași · ≈ 20 min",en:"11 steps · ≈ 20 min"},
-  t:{ro:"VLAN: mai multe rețele pe un switch",en:"VLANs: several networks on one switch"},
-  d:{ro:"Porturi access și trunk, eticheta 802.1Q de 4 octeți, izolarea broadcast-urilor și rutarea între VLAN-uri.",en:"Access and trunk ports, the 4-byte 802.1Q tag, broadcast isolation and routing between VLANs."},
-  topics:[{ro:"Access vs. trunk",en:"Access vs trunk"},{ro:"TPID, PCP, VID",en:"TPID, PCP, VID"},{ro:"Router on a stick, VLAN hopping",en:"Router on a stick, VLAN hopping"}]},
- {href:"nat/index.html",ill:"nat",lvl:{ro:"Începător+",en:"Beginner+"},stats:{ro:"12 pași · ≈ 20 min",en:"12 steps · ≈ 20 min"},
-  t:{ro:"NAT: un singur IP public",en:"NAT: one public IP"},
-  d:{ro:"Adrese private, SNAT/PAT și tabela NAT, răspunsurile, port forwarding, CGNAT și IPv6.",en:"Private addresses, SNAT/PAT and the NAT table, replies, port forwarding, CGNAT and IPv6."},
-  topics:[{ro:"PAT: porturile deosebesc conexiunile",en:"PAT: ports tell connections apart"},{ro:"Port forwarding (DNAT)",en:"Port forwarding (DNAT)"},{ro:"CGNAT, STUN/TURN, IPv6",en:"CGNAT, STUN/TURN, IPv6"}]},
- {href:"https/index.html",ill:"tls",lvl:{ro:"Intermediar",en:"Intermediate"},stats:{ro:"11 pași · ≈ 20 min",en:"11 steps · ≈ 20 min"},
-  t:{ro:"HTTPS / TLS: de ce e sigur lacătul",en:"HTTPS / TLS: why the padlock is safe"},
-  d:{ro:"Negocierea TLS 1.3, schimbul de chei, certificatul și lanțul de încredere, un atac man-in-the-middle oprit și Let's Encrypt.",en:"The TLS 1.3 handshake, the key exchange, the certificate and chain of trust, a stopped man-in-the-middle attack, and Let's Encrypt."},
-  topics:[{ro:"ClientHello, ServerHello, ECDHE",en:"ClientHello, ServerHello, ECDHE"},{ro:"Certificat, CA, verificări",en:"Certificate, CA, checks"},{ro:"Ce vede un atacator",en:"What an attacker sees"}]},
- {href:"ingress/index.html",ill:"ing",lvl:{ro:"Intermediar",en:"Intermediate"},stats:{ro:"12 pași · ≈ 20 min",en:"12 steps · ≈ 20 min"},
-  t:{ro:"Ingress: rutare HTTP în Kubernetes",en:"Ingress: HTTP routing in Kubernetes"},
-  d:{ro:"Un IP, multe aplicații: controller-ul, TLS din Secret-uri, host + cale, default backend, adnotări și Gateway API.",en:"One IP, many apps: the controller, TLS from Secrets, host + path, the default backend, annotations and Gateway API."},
-  topics:[{ro:"Ingress vs. controller",en:"Ingress vs controller"},{ro:"Prefix / Exact, cea mai lungă cale",en:"Prefix / Exact, longest path"},{ro:"cert-manager, canary, HTTPRoute",en:"cert-manager, canary, HTTPRoute"}]}
-];
-ILL.pkt=`<svg viewBox="0 0 300 100" aria-hidden="true"><line class="ill-line" x1="20" y1="50" x2="280" y2="50"/><rect class="ill-dev" x="10" y="38" width="34" height="24" rx="4"/><rect class="ill-dev" x="62" y="38" width="40" height="24" rx="4"/><rect class="ill-dev" x="118" y="38" width="40" height="24" rx="4"/><rect class="ill-dev" x="174" y="38" width="40" height="24" rx="4"/><polygon class="ill-dev" points="262,36 274,43 274,57 262,64 250,57 250,43"/><text class="ill-txt" x="82" y="54" text-anchor="middle" fill="var(--text)">NIC</text><text class="ill-txt" x="138" y="54" text-anchor="middle" fill="var(--text)">PRE</text><text class="ill-txt" x="194" y="54" text-anchor="middle" fill="var(--text)">DNAT</text><rect class="ill-tok" x="104" y="14" width="34" height="15" rx="4"/><text class="ill-txt" x="121" y="25" text-anchor="middle" fill="var(--l2)">SYN</text></svg>`;
-ILL.mono=`<svg viewBox="0 0 300 100" aria-hidden="true"><rect x="96" y="14" width="140" height="72" rx="8" fill="none" stroke="var(--border)" stroke-dasharray="4 3"/><line class="ill-line" x1="30" y1="50" x2="270" y2="50"/><rect class="ill-dev" x="14" y="38" width="30" height="24" rx="3"/><rect class="ill-dev" x="56" y="36" width="26" height="28" rx="3"/><rect class="ill-dev" x="106" y="40" width="36" height="20" rx="4"/><rect class="ill-dev" x="148" y="40" width="36" height="20" rx="4"/><rect class="ill-dev" x="190" y="40" width="36" height="20" rx="4"/><path class="ill-dev" d="M252 38v24c0 4 28 4 28 0v-24"/><ellipse class="ill-dev" cx="266" cy="38" rx="14" ry="4"/><text class="ill-txt" x="166" y="30" text-anchor="middle" fill="var(--muted)">C++</text></svg>`;
-ILL.vlan=`<svg viewBox="0 0 300 100" aria-hidden="true"><line class="ill-line" x1="60" y1="50" x2="240" y2="50" stroke-width="4"/><line class="ill-line" x1="30" y1="25" x2="80" y2="50"/><line class="ill-line" x1="30" y1="75" x2="80" y2="50"/><line class="ill-line" x1="220" y1="50" x2="270" y2="25"/><line class="ill-line" x1="220" y1="50" x2="270" y2="75"/><rect class="ill-dev" x="10" y="15" width="28" height="20" rx="3"/><rect class="ill-dev" x="10" y="65" width="28" height="20" rx="3"/><rect class="ill-dev" x="62" y="40" width="40" height="20" rx="4"/><rect class="ill-dev" x="198" y="40" width="40" height="20" rx="4"/><rect class="ill-dev" x="262" y="15" width="28" height="20" rx="3"/><rect class="ill-dev" x="262" y="65" width="28" height="20" rx="3"/><rect class="ill-dns" x="122" y="22" width="56" height="15" rx="4"/><text class="ill-txt" x="150" y="33" text-anchor="middle" fill="var(--arp)">VLAN 10</text></svg>`;
-ILL.nat=`<svg viewBox="0 0 300 100" aria-hidden="true"><rect x="8" y="8" width="150" height="84" rx="8" fill="none" stroke="var(--border)" stroke-dasharray="4 3"/><line class="ill-line" x1="40" y1="25" x2="140" y2="50"/><line class="ill-line" x1="40" y1="50" x2="140" y2="50"/><line class="ill-line" x1="40" y1="75" x2="140" y2="50"/><line class="ill-line" x1="140" y1="50" x2="270" y2="50"/><rect class="ill-dev" x="20" y="16" width="26" height="18" rx="3"/><rect class="ill-dev" x="20" y="41" width="26" height="18" rx="3"/><rect class="ill-dev" x="20" y="66" width="26" height="18" rx="3"/><circle class="ill-dev" cx="150" cy="50" r="14"/><circle class="ill-dev" cx="262" cy="50" r="16"/><rect class="ill-dns" x="186" y="22" width="44" height="15" rx="4"/><text class="ill-txt" x="208" y="33" text-anchor="middle" fill="var(--arp)">1 IP</text></svg>`;
-ILL.tls=`<svg viewBox="0 0 300 100" aria-hidden="true"><line class="ill-line" x1="40" y1="58" x2="260" y2="58"/><rect class="ill-dev" x="16" y="45" width="40" height="26" rx="3"/><rect class="ill-dev" x="246" y="37" width="34" height="42" rx="4"/><rect class="ill-dev" x="132" y="48" width="36" height="28" rx="4"/><path class="ill-line" d="M140 48v-8a10 10 0 0 1 20 0v8" fill="none" stroke-width="3"/><rect class="ill-dns" x="66" y="18" width="52" height="15" rx="4"/><text class="ill-txt" x="92" y="29" text-anchor="middle" fill="var(--arp)">TLS 1.3</text></svg>`;
-ILL.ing=`<svg viewBox="0 0 300 100" aria-hidden="true"><rect x="90" y="8" width="202" height="84" rx="8" fill="none" stroke="var(--border)" stroke-dasharray="4 3"/><line class="ill-line" x1="30" y1="50" x2="130" y2="50"/><line class="ill-line" x1="130" y1="50" x2="200" y2="25" stroke-dasharray="5 4"/><line class="ill-line" x1="130" y1="50" x2="200" y2="75" stroke-dasharray="5 4"/><line class="ill-line" x1="200" y1="25" x2="262" y2="25" stroke-dasharray="5 4"/><line class="ill-line" x1="200" y1="75" x2="262" y2="75" stroke-dasharray="5 4"/><rect class="ill-dev" x="14" y="40" width="30" height="20" rx="3"/><polygon class="ill-dev" points="130,36 142,43 142,57 130,64 118,57 118,43"/><rect class="ill-dev" x="180" y="15" width="40" height="20" rx="10"/><rect class="ill-dev" x="180" y="65" width="40" height="20" rx="10"/><polygon class="ill-dev" points="262,15 272,20 272,30 262,35 252,30 252,20"/><polygon class="ill-dev" points="262,65 272,70 272,80 262,85 252,80 252,70"/><text class="ill-txt" x="166" y="54" text-anchor="middle" fill="var(--muted)">/api</text></svg>`;
-EXTRA.push(
- {href:"ipv6/index.html",ill:"v6",lvl:{ro:"Începător+",en:"Beginner+"},stats:{ro:"12 pași · ≈ 25 min",en:"12 steps · ≈ 25 min"},
-  t:{ro:"IPv6: un laptop își face singur adresa",en:"IPv6: a laptop builds its own address"},
-  d:{ro:"Adrese de 128 de biți, link-local și DAD, Router Advertisement și SLAAC, NDP în loc de ARP, Hop Limit și dual-stack.",en:"128-bit addresses, link-local and DAD, Router Advertisements and SLAAC, NDP instead of ARP, Hop Limit and dual stack."},
-  topics:[{ro:"Scrierea scurtă, tipuri de adrese",en:"Short notation, address types"},{ro:"RS / RA, SLAAC, adrese temporare",en:"RS / RA, SLAAC, temporary addresses"},{ro:"NDP, multicast, Packet Too Big",en:"NDP, multicast, Packet Too Big"}]},
- {href:"bgp/index.html",ill:"bgp",lvl:{ro:"Intermediar",en:"Intermediate"},stats:{ro:"12 pași · ≈ 25 min",en:"12 steps · ≈ 25 min"},
-  t:{ro:"BGP: cum găsește internetul drumul",en:"BGP: how the internet finds its way"},
-  d:{ro:"AS-uri, sesiuni pe TCP 179, UPDATE și AS_PATH, alegerea drumului după politică, bucle, route leak, convergență și RPKI.",en:"ASes, sessions over TCP 179, UPDATE and AS_PATH, policy-based path selection, loops, route leaks, convergence and RPKI."},
-  topics:[{ro:"Tranzit vs. peering",en:"Transit vs peering"},{ro:"LOCAL_PREF, AS_PATH, MED",en:"LOCAL_PREF, AS_PATH, MED"},{ro:"Hijack, ROA, validarea originii",en:"Hijacks, ROAs, origin validation"}]},
- {href:"service-mesh/index.html",ill:"mesh",lvl:{ro:"Avansat",en:"Advanced"},stats:{ro:"12 pași · ≈ 25 min",en:"12 steps · ≈ 25 min"},
-  t:{ro:"Service mesh: o cerere între două microservicii",en:"Service mesh: a request between two microservices"},
-  d:{ro:"Istio și Envoy: sidecar și iptables, xDS, mTLS cu identități SPIFFE, autorizare, canary, retry, outlier detection și telemetrie.",en:"Istio and Envoy: sidecars and iptables, xDS, mTLS with SPIFFE identities, authorization, canary, retries, outlier detection and telemetry."},
-  topics:[{ro:"Plan de date vs. plan de control",en:"Data plane vs control plane"},{ro:"PeerAuthentication, AuthorizationPolicy",en:"PeerAuthentication, AuthorizationPolicy"},{ro:"Ambient mode, Linkerd, costuri",en:"Ambient mode, Linkerd, costs"}]},
- {href:"observabilitate/index.html",ill:"obs",lvl:{ro:"Intermediar",en:"Intermediate"},stats:{ro:"11 pași · ≈ 25 min",en:"11 steps · ≈ 25 min"},
-  t:{ro:"Observabilitate: de ce e lent checkout-ul?",en:"Observability: why is checkout slow?"},
-  d:{ro:"Trace-uri, metrici și log-uri pentru o cerere lentă: OpenTelemetry, Prometheus, Loki, Tempo, SLO, burn rate și o investigație reală.",en:"Traces, metrics and logs for one slow request: OpenTelemetry, Prometheus, Loki, Tempo, SLOs, burn rate and a real investigation."},
-  topics:[{ro:"traceparent și waterfall",en:"traceparent and the waterfall"},{ro:"Histograme, p99, PromQL",en:"Histograms, p99, PromQL"},{ro:"SLO, buget de erori, alerte",en:"SLOs, error budgets, alerts"}]});
-ILL.v6=`<svg viewBox="0 0 300 100" aria-hidden="true"><line class="ill-line" x1="40" y1="60" x2="150" y2="60"/><line class="ill-line" x1="150" y1="60" x2="262" y2="60"/><rect class="ill-dev" x="22" y="48" width="36" height="24" rx="3"/><circle class="ill-dev" cx="150" cy="60" r="15"/><rect class="ill-dev" x="244" y="48" width="36" height="24" rx="3"/><rect class="ill-dns" x="66" y="16" width="168" height="17" rx="4"/><text class="ill-txt" x="150" y="28" text-anchor="middle" fill="var(--arp)">2001:db8:4:1::/64</text></svg>`;
-ILL.bgp=`<svg viewBox="0 0 300 100" aria-hidden="true"><line class="ill-line" x1="40" y1="50" x2="130" y2="22"/><line class="ill-line" x1="40" y1="50" x2="130" y2="78"/><line class="ill-line" x1="130" y1="22" x2="220" y2="50"/><line class="ill-line" x1="130" y1="78" x2="220" y2="50"/><line class="ill-line" x1="220" y1="50" x2="270" y2="50"/><circle class="ill-dev" cx="40" cy="50" r="13"/><circle class="ill-dev" cx="130" cy="22" r="12"/><circle class="ill-dev" cx="130" cy="78" r="12"/><circle class="ill-dev" cx="220" cy="50" r="13"/><rect class="ill-dev" x="258" y="40" width="30" height="20" rx="3"/><rect class="ill-tok" x="150" y="4" width="70" height="17" rx="4"/><text class="ill-txt" x="185" y="16" text-anchor="middle" fill="var(--l3)">64502 64501</text></svg>`;
-ILL.mesh=`<svg viewBox="0 0 300 100" aria-hidden="true"><rect x="20" y="30" width="80" height="44" rx="8" fill="none" stroke="var(--border)" stroke-dasharray="4 3"/><rect x="200" y="30" width="80" height="44" rx="8" fill="none" stroke="var(--border)" stroke-dasharray="4 3"/><rect class="ill-dev" x="30" y="40" width="30" height="24" rx="3"/><rect class="ill-acc" x="66" y="44" width="24" height="16" rx="3"/><rect class="ill-acc" x="210" y="44" width="24" height="16" rx="3"/><rect class="ill-dev" x="240" y="40" width="30" height="24" rx="3"/><line class="ill-line" x1="90" y1="52" x2="210" y2="52"/><rect class="ill-tok" x="128" y="12" width="44" height="17" rx="4"/><text class="ill-txt" x="150" y="24" text-anchor="middle" fill="var(--l3)">mTLS</text></svg>`;
-ILL.obs=`<svg viewBox="0 0 300 100" aria-hidden="true"><line class="ill-line" x1="20" y1="88" x2="280" y2="88"/><polyline class="ill-line" fill="none" points="20,78 60,74 100,76 140,70 170,30 200,26 230,72 280,70"/><rect class="ill-dev" x="40" y="12" width="70" height="10" rx="3"/><rect class="ill-dev" x="60" y="28" width="50" height="10" rx="3"/><rect class="ill-acc" x="80" y="44" width="30" height="10" rx="3"/><rect class="ill-dns" x="168" y="4" width="44" height="17" rx="4"/><text class="ill-txt" x="190" y="16" text-anchor="middle" fill="var(--arp)">p99</text></svg>`;
-const SOON=[["QUIC / HTTP/3",{ro:"Transport peste UDP, 0-RTT și de ce nu mai blochează un pachet pierdut tot.",en:"Transport over UDP, 0-RTT and why one lost packet no longer blocks everything."}],
- ["VPN / IPsec / WireGuard",{ro:"Tuneluri criptate între birouri și spre cloud.",en:"Encrypted tunnels between offices and to the cloud."}],
- [{ro:"Load balancing L4 / L7",en:"L4 / L7 load balancing"},{ro:"De la DNS round-robin la anycast și Maglev.",en:"From DNS round-robin to anycast and Maglev."}],
- ["Wi-Fi",{ro:"Asociere, WPA3, roaming și de ce e Wi-Fi-ul lent când sunt mulți.",en:"Association, WPA3, roaming and why Wi-Fi slows down in a crowd."}]];
+  src:{ro:"Codul sursă pe GitHub ↗",en:"Source code on GitHub ↗"},theme:{ro:"Comută tema luminoasă / întunecată",en:"Toggle light / dark theme"}};
 function render(){
   document.documentElement.lang=lang;document.title=lang==="ro"?"Rețea pas cu pas":"Network Step by Step";
   document.querySelectorAll("[data-t]").forEach(e=>{e.textContent=T(UI[e.dataset.t])});
-  document.getElementById("meta").innerHTML=UI.meta.map(m=>`<li>${T(m)}</li>`).join("");
-  document.getElementById("how").innerHTML=UI.how.map(([i,b,s])=>`<li><i aria-hidden="true">${i}</i><div><b>${T(b)}</b><span>${T(s)}</span></div></li>`).join("");
-  const card=(l,i)=>`<a class="lesson" href="${l.href}"><div class="top"><span class="num">${lang==="ro"?"LECȚIA":"LESSON"} ${String(i+1).padStart(2,"0")}</span><span class="lvl">${T(l.lvl)}</span></div>${ILL[l.ill]}<h3>${T(l.t)}</h3><p>${T(l.d)}</p><ul>${l.topics.map(t=>`<li>${T(t)}</li>`).join("")}</ul><span class="stats">${T(l.stats)}</span><span class="go">${T(UI.start)}</span></a>`;
-  const ALL=[...LESSONS,...PROD,...EXTRA],by=h=>ALL.find(l=>l.href===h+"/index.html");
-  const SECTIONS=[["path",["ethernet","vlan","nat"]],["pathW",["dns","https","ipv6","bgp"]],["pathK",["kubernetes","ingress","gke-retea","k8s-intrare","service-mesh","observabilitate"]],["path2",["tomcat","microservicii","monolit-cpp"]]];
-  let n=0;SECTIONS.forEach(([id,list])=>{document.getElementById(id).innerHTML=list.map(h=>card(by(h),n++)).join("")});
-  document.getElementById("soon").innerHTML=SOON.map(([b,p])=>`<div><b>${T(b)}</b><p>${T(p)}</p></div>`).join("");
+  document.getElementById("topics").innerHTML=C.CATS.map(c=>`<div class="topic"><a class="tile" href="lectii/index.html#${c.id}"><span class="ic" aria-hidden="true">${c.icon}</span><b>${T(c.t)}</b><span class="d">${T(c.d)}</span><small>${c.list.length} ${T(c.list.length===1?UI.one:UI.n)}</small></a><div class="pop">${c.list.map(id=>{const l=C.byId(id);return `<a href="${l.href}">${T(l.t)}</a>`}).join("")}</div></div>`).join("");
+  document.getElementById("games").innerHTML=C.GAMES.map(g=>`<a href="${g.href}">${g.icon} ${T(g.t)}</a>`).join("");
+  let last=null;try{last=JSON.parse(store.get("cadru-last")||"null")}catch(e){}
+  const r=document.getElementById("resume"),l=last&&C.byId(last.id);
+  if(l){r.innerHTML=`<span>${T(UI.resume)}</span><a href="${l.href}#step-${(last.step|0)+1}">${T(l.t)} · ${T(UI.step)} ${(last.step|0)+1}${last.n?" / "+last.n:""} →</a>`;r.classList.add("on")}else r.classList.remove("on");
   const th=document.getElementById("theme");th.setAttribute("aria-label",T(UI.theme));th.title=T(UI.theme);
   document.querySelectorAll("[data-lang]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.lang===lang?"true":"false"));
 }
-document.querySelectorAll("[data-lang]").forEach(b=>b.onclick=()=>{lang=b.dataset.lang;store.set("cadru-lang",lang);render()});
+document.querySelectorAll("[data-lang]").forEach(b=>b.onclick=()=>{lang=b.dataset.lang;store.set("cadru-lang",lang);render();window.dispatchEvent(new Event("cadru:lang"))});
 const saved=store.get("cadru-theme");if(saved==="light"||saved==="dark")document.documentElement.dataset.theme=saved;
 document.getElementById("theme").onclick=()=>{const r=document.documentElement,d=r.dataset.theme?r.dataset.theme==="dark":matchMedia("(prefers-color-scheme: dark)").matches;const nt=d?"light":"dark";r.dataset.theme=nt;store.set("cadru-theme",nt)};
 render();

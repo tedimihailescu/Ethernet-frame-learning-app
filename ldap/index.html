@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>LDAP: login în aplicație</title>
+<meta name="description" content="Lecție interactivă: cum verifică o aplicație parola unui utilizator în directorul LDAP / Active Directory. / Interactive lesson: how an app checks a password against LDAP / Active Directory.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<script>
+(function(){
+const BASE="dc=example,dc=com",ANA="uid=ana,ou=People,"+BASE,SVC="cn=svc-portal,ou=Services,"+BASE;
+const CONN="10.0.1.20:51514 → 10.0.2.10:636";
+const H1={method:"POST /login",host:"portal.example.com",body:{ro:"username=ana&password=•••••••• (în TLS)",en:"username=ana&password=•••••••• (inside TLS)"}};
+const T1={conn:CONN,tls:{ro:"TLS 1.3 · certificat ldap.example.com verificat",en:"TLS 1.3 · ldap.example.com certificate checked"}};
+const B1={...T1,msgId:"1",op:"BindRequest",dn:SVC,auth:{ro:"simple · parola contului de serviciu",en:"simple · the service account's password"}};
+const B1r={...T1,msgId:"1",op:"BindResponse",result:"0 success"};
+const S1={...T1,msgId:"2",op:"SearchRequest",base:"ou=People,"+BASE,scope:"sub",filter:"(&(objectClass=person)(uid=ana))",attrs:"cn, mail, memberOf"};
+const S1r={...T1,msgId:"2",op:"SearchResultEntry",dn:ANA,attrs:"cn=Ana Pop · mail=ana@example.com · memberOf=cn=portal-admins,ou=Groups",result:{ro:"+ SearchResultDone: 0 success (1 rezultat)",en:"+ SearchResultDone: 0 success (1 entry)"}};
+const B2={...T1,msgId:"3",op:"BindRequest",dn:ANA,auth:{ro:"simple · parola tastată de Ana",en:"simple · the password Ana typed"}};
+const B2r={...T1,msgId:"3",op:"BindResponse",result:"0 success"};
+const H2={method:"HTTP 302 → /home",host:"portal.example.com",body:{ro:"Set-Cookie: SESSION=7f3a… (HttpOnly, Secure)",en:"Set-Cookie: SESSION=7f3a… (HttpOnly, Secure)"},roles:"ROLE_USER, ROLE_ADMIN"};
+const B3={...T1,msgId:"5",op:"BindResponse",dn:ANA,result:"49 invalidCredentials",diag:{ro:"AD: „data 52e” = parolă greșită",en:"AD: \"data 52e\" = wrong password"}};
+
+window.LESSON={
+docTitle:{ro:"LDAP: login în aplicație",en:"LDAP: signing in to an app"},
+eyebrow:{ro:"Lecție interactivă · Identitate",en:"Interactive lesson · Identity"},
+title:{ro:"LDAP: cum se loghează un utilizator în aplicație",en:"LDAP: how a user signs in to an app"},
+sub:{ro:"Ana scrie numele și parola în portalul intern. Aplicația nu ține parolele: le verifică în directorul firmei (OpenLDAP sau Active Directory). Urmărim mesajele LDAP: conexiunea sigură, bind, căutare, verificarea parolei și grupurile care devin drepturi.",en:"Ana types her name and password into the internal portal. The app doesn't keep passwords: it checks them in the company directory (OpenLDAP or Active Directory). We follow the LDAP messages: the secure connection, bind, search, the password check and the groups that become permissions."},
+meta:[{ro:"≈ 25 minute",en:"≈ 25 minutes"},{ro:"11 pași",en:"11 steps"},{ro:"8 întrebări",en:"8 questions"},{ro:"Intermediar",en:"Intermediate"}],
+goals:[{ro:"Ce e un director LDAP și cum arată un DN",en:"What an LDAP directory is and what a DN looks like"},{ro:"De ce aplicația caută întâi utilizatorul, apoi face bind cu parola lui",en:"Why the app first searches for the user, then binds with their password"},{ro:"Cum devin grupurile drepturi în aplicație",en:"How groups become permissions in the app"},{ro:"Greșelile periculoase: parolă goală, injecție, LDAP necriptat",en:"The dangerous mistakes: empty passwords, injection, unencrypted LDAP"}],
+foot:{ro:"Nume, adrese și conturi fictive (example.com). Lecția se leagă de lecțiile HTTPS și Certificate.",en:"Fictional names, addresses and accounts (example.com). This lesson links to the HTTPS and Certificates lessons."},
+ui:{frameT:{ro:"Mesajul (live)",en:"The message (live)"},refT:{ro:"Configurare și comenzi",en:"Configuration and commands"},refLead:{ro:"Cum arată configurația LDAP într-o aplicație Spring, comenzile de test și codurile de eroare.",en:"What LDAP configuration looks like in a Spring app, test commands and error codes."}},
+tryT:{ro:"Încearcă (cu ldap-utils sau pe un server de test)",en:"Try it (with ldap-utils or on a test server)"},
+legend:[["lg-app","HTTP",{ro:"browser ↔ aplicație",en:"browser ↔ app"}],["lg-arp","LDAP",{ro:"aplicație ↔ director",en:"app ↔ directory"}]],
+
+nodes:{
+  ana:{type:"user",name:"Ana",lines:[{ro:"browser",en:"browser"}]},
+  app:{type:"server",name:{ro:"Portal intern",en:"Internal portal"},lines:["portal.example.com","Spring + Tomcat"]},
+  dir:{type:"db",name:{ro:"Director LDAP",en:"LDAP directory"},lines:["ldap.example.com",{ro:"port 636 (LDAPS)",en:"port 636 (LDAPS)"}]}
+},
+links:[["ana","app"],["app","dir"]],
+layouts:{
+  wide:{vb:[0,0,1000,380],n:{ana:[120,190],app:[500,190],dir:[880,190]},
+    texts:[{x:310,y:150,t:"HTTPS 443"},{x:690,y:150,t:"LDAPS 636"}]},
+  narrow:{vb:[0,0,360,600],n:{ana:[110,80],app:[110,300],dir:[110,520]},side:{ana:"right",app:"right",dir:"right"}}
+},
+groups:[
+  {id:"http",color:"l7",fields:["method","host","body","roles"],name:{ro:"Cerere / răspuns HTTP",en:"HTTP request / response"},short:"HTTP",grow:3},
+  {id:"tcp",color:"l4",fields:["conn","tls"],name:{ro:"Conexiunea TCP + TLS",en:"TCP + TLS connection"},short:"TLS",grow:2},
+  {id:"ldap",color:"arp",fields:["msgId","op","dn","auth","base","scope","filter","attrs","result","diag"],name:{ro:"Mesajul LDAP",en:"The LDAP message"},short:"LDAP",grow:4}
+],
+fieldLabels:{method:{ro:"Cerere",en:"Request"},host:"Host",body:{ro:"Conținut",en:"Body"},roles:{ro:"Roluri în sesiune",en:"Session roles"},conn:{ro:"Conexiune",en:"Connection"},tls:"TLS",msgId:"messageID",op:{ro:"Operație",en:"Operation"},dn:"DN",auth:{ro:"Autentificare",en:"Authentication"},base:{ro:"Unde caută (base DN)",en:"Where to look (base DN)"},scope:"Scope",filter:{ro:"Filtru",en:"Filter"},attrs:{ro:"Atribute",en:"Attributes"},result:{ro:"Rezultat",en:"Result"},diag:{ro:"Mesaj de diagnostic",en:"Diagnostic message"}},
+pdu:f=>f.op?{badge:{ro:"Mesaj LDAP (în TLS)",en:"LDAP message (in TLS)"},tok:[f.op.replace("Request","").replace("Response"," ✓").replace("SearchResultEntry","Entry"),"k-arp"]}:f.method?{badge:{ro:"HTTP prin HTTPS",en:"HTTP over HTTPS"},tok:["HTTP","k-app"]}:{badge:{ro:"Conexiune TLS",en:"TLS connection"},tok:["TLS","k-tcp"]},
+
+init:{},
+tables:{
+  dit:{title:{ro:"Directorul (o parte din arbore)",en:"The directory (part of the tree)"},cols:["DN","objectClass",{ro:"Atribute",en:"Attributes"}],
+    rows:()=>[[BASE,"domain","dc=example"],["ou=People,"+BASE,"organizationalUnit","ou=People"],[ANA,"inetOrgPerson","cn=Ana Pop, mail, userPassword (hash)"],["uid=dan,ou=People,"+BASE,"inetOrgPerson","cn=Dan Ionescu, mail"],["cn=portal-admins,ou=Groups,"+BASE,"groupOfNames","member="+ANA],[SVC,{ro:"cont de serviciu",en:"service account"},{ro:"doar drept de citire",en:"read-only rights"}]]},
+  roles:{title:{ro:"Grupuri → roluri în aplicație",en:"Groups → app roles"},cols:[{ro:"Grup LDAP",en:"LDAP group"},{ro:"Rol în portal",en:"Portal role"}],
+    rows:()=>[["cn=portal-users","ROLE_USER"],["cn=portal-admins","ROLE_ADMIN"],["cn=finance","ROLE_FINANCE"]]},
+  codes:{title:{ro:"Coduri de rezultat LDAP frecvente",en:"Common LDAP result codes"},cols:[{ro:"Cod",en:"Code"},{ro:"Nume",en:"Name"},{ro:"Ce înseamnă",en:"Meaning"}],plain:[2],
+    rows:()=>[["0","success",{ro:"a mers",en:"it worked"}],["32","noSuchObject",{ro:"base DN greșit",en:"wrong base DN"}],["49","invalidCredentials",{ro:"DN sau parolă greșită (sau cont blocat)",en:"wrong DN or password (or locked account)"}],["50","insufficientAccessRights",{ro:"contul nu are voie să citească",en:"the account may not read that"}],["81","serverDown",{ro:"nu se poate conecta",en:"can't connect"}]]}
+},
+log:{title:{ro:"Jurnalul conversației",en:"Conversation log"},lead:{ro:"Pe aceeași conexiune LDAP aplicația face două bind-uri: o dată ca ea însăși, o dată ca Ana.",en:"On the same LDAP connection the app binds twice: once as itself, once as Ana."},first:{ro:"Pas",en:"Step"},minWidth:560,
+  cols:[{h:{ro:"Operație",en:"Operation"},v:f=>f.op||f.method||"TLS",cls:"mac"},{h:"DN / filtru",v:f=>f.filter||f.dn||f.host||"",cls:"ip"},{h:{ro:"Rezultat",en:"Result"},v:f=>f.result||"",cls:""}]},
+
+steps:[
+{at:["dir"],frame:null,kind:"none",tables:["dit"],who:{ro:"Directorul",en:"The directory"},
+ title:{ro:"Directorul: un arbore cu oamenii firmei",en:"The directory: a tree of the company's people"},
+ body:{ro:`<p>O firmă are sute de aplicații, dar o singură listă de angajați. Lista stă într-un <strong>director</strong>: o bază de date specială, optimizată pentru citit repede, pe care o întrebi prin protocolul <strong>LDAP</strong>.</p>
+<p>Directorul e un <strong>arbore</strong>. Fiecare intrare are o adresă unică, <strong>DN</strong>-ul, citită de la frunză spre rădăcină:</p>
+<div class="flow"><span>uid=ana</span><i>→</i><span>ou=People</span><i>→</i><span>dc=example,dc=com</span></div>
+<p>Adică: „Ana, din unitatea People, din domeniul example.com”. Fiecare intrare are <strong>atribute</strong> (nume, mail, grupuri) și o hash a parolei, pe care aplicațiile <strong>nu</strong> o pot citi.</p>`,
+ en:`<p>A company has hundreds of apps but a single list of employees. The list lives in a <strong>directory</strong>: a special database optimised for fast reads, which you query using the <strong>LDAP</strong> protocol.</p>
+<p>The directory is a <strong>tree</strong>. Every entry has a unique address, its <strong>DN</strong>, read from the leaf to the root:</p>
+<div class="flow"><span>uid=ana</span><i>→</i><span>ou=People</span><i>→</i><span>dc=example,dc=com</span></div>
+<p>Meaning: "Ana, in the People unit, in the example.com domain". Each entry has <strong>attributes</strong> (name, mail, groups) and a hash of the password, which apps can <strong>not</strong> read.</p>`},
+ more:{ro:`<p><code>dc</code> = domain component, <code>ou</code> = organizational unit, <code>cn</code> = common name, <code>uid</code> = user id. În Active Directory, utilizatorii stau de obicei în <code>CN=Users</code> sau în OU-uri create de firmă, iar numele de login e în atributul <code>sAMAccountName</code>.</p>`,
+  en:`<p><code>dc</code> = domain component, <code>ou</code> = organizational unit, <code>cn</code> = common name, <code>uid</code> = user id. In Active Directory users usually sit in <code>CN=Users</code> or in company-made OUs, and the login name is in the <code>sAMAccountName</code> attribute.</p>`}},
+
+{at:"ana",frame:H1,kind:"h",move:[[["ana","app"]]],log:{ro:"Ana → portal",en:"Ana → portal"},who:"Ana",
+ title:{ro:"Ana trimite numele și parola portalului",en:"Ana sends her name and password to the portal"},
+ body:{ro:`<p>Ana deschide <code>portal.example.com</code>, scrie <code>ana</code> și parola, apasă „Intră”. Browserul trimite un <strong>POST</strong> prin <strong>HTTPS</strong>, deci parola călătorește criptat (vezi <a href="../https/index.html">lecția HTTPS</a>).</p>
+<p class="key">Important: portalul <strong>nu are</strong> o tabelă cu parole. Nu le salvează și nu le compară singur. Le trimite la director să fie verificate.</p>`,
+ en:`<p>Ana opens <code>portal.example.com</code>, types <code>ana</code> and her password and clicks "Sign in". The browser sends a <strong>POST</strong> over <strong>HTTPS</strong>, so the password travels encrypted (see the <a href="../https/index.html">HTTPS lesson</a>).</p>
+<p class="key">Important: the portal does <strong>not</strong> have a password table. It doesn't store passwords or compare them itself. It sends them to the directory to be checked.</p>`}},
+
+{at:"app",frame:T1,kind:"t",move:[[["app","dir"]]],log:{ro:"portal → director: TLS",en:"portal → directory: TLS"},who:{ro:"Portal",en:"Portal"},
+ title:{ro:"Portalul deschide o conexiune sigură spre director",en:"The portal opens a secure connection to the directory"},
+ body:{ro:`<p>Portalul deschide o conexiune TCP spre <code>ldap.example.com</code> pe portul <strong>636</strong> (<strong>LDAPS</strong> = LDAP în TLS) și face negocierea TLS.</p>
+<p>Portalul <strong>verifică certificatul</strong> directorului: e emis de CA-ul intern al firmei, în care portalul are încredere (în truststore-ul Java). Dacă n-ar verifica, un atacator din rețea s-ar putea da drept director și ar primi parolele tuturor.</p>`,
+ en:`<p>The portal opens a TCP connection to <code>ldap.example.com</code> on port <strong>636</strong> (<strong>LDAPS</strong> = LDAP inside TLS) and does the TLS handshake.</p>
+<p>The portal <strong>checks the directory's certificate</strong>: it's issued by the company's internal CA, which the portal trusts (in the Java truststore). If it didn't check, an attacker on the network could pose as the directory and collect everyone's passwords.</p>`},
+ more:{ro:`<p>Alternativa e portul <strong>389</strong> cu <strong>StartTLS</strong>: conexiunea începe necriptată, apoi clientul cere trecerea la TLS. Pe 389 <em>fără</em> StartTLS, parolele trec în clar. Despre truststore și CA intern, vezi <a href="../certificate/index.html">lecția Certificate</a>.</p>`,
+  en:`<p>The alternative is port <strong>389</strong> with <strong>StartTLS</strong>: the connection starts unencrypted, then the client asks to upgrade to TLS. On 389 <em>without</em> StartTLS, passwords travel in the clear. For truststores and internal CAs, see the <a href="../certificate/index.html">Certificates lesson</a>.</p>`},
+ try:[{cmd:"openssl s_client -connect ldap.example.com:636 -showcerts",d:{ro:"Vezi certificatul directorului și cine l-a emis.",en:"See the directory's certificate and who issued it."}}]},
+
+{at:"app",frame:B1,kind:"l",move:[[["app","dir"]],[["dir","app"]]],log:{ro:"bind cont de serviciu",en:"service-account bind"},who:{ro:"Portal",en:"Portal"},
+ title:{ro:"Bind 1: portalul se prezintă cu contul lui de serviciu",en:"Bind 1: the portal identifies itself with its service account"},
+ body:{ro:`<p>În LDAP, a te autentifica se numește <strong>bind</strong>. Ca să aibă voie să caute în director, portalul face bind cu <strong>contul lui de serviciu</strong>, <code>cn=svc-portal</code>, și parola lui (ținută într-un seif de secrete, nu în cod).</p>
+<p>Directorul răspunde <code>BindResponse: 0 success</code>. Contul de serviciu are doar drept de <strong>citire</strong> și doar în zonele de care are nevoie: principiul celui mai mic privilegiu.</p>`,
+ en:`<p>In LDAP, authenticating is called a <strong>bind</strong>. To be allowed to search the directory, the portal binds with its <strong>service account</strong>, <code>cn=svc-portal</code>, and its password (kept in a secrets vault, not in the code).</p>
+<p>The directory answers <code>BindResponse: 0 success</code>. The service account only has <strong>read</strong> rights, and only where it needs them: the principle of least privilege.</p>`}},
+
+{at:"app",frame:S1,kind:"l",move:[[["app","dir"]]],log:{ro:"caută utilizatorul",en:"search for the user"},tables:["dit"],hl:{dit:"ou=People,"+BASE},who:{ro:"Portal",en:"Portal"},
+ title:{ro:"Căutare: „care e DN-ul lui ana?”",en:"Search: \"what is ana's DN?\""},
+ body:{ro:`<p>Ana a scris doar <code>ana</code>, dar ca să-i verifice parola, directorul are nevoie de <strong>DN-ul complet</strong>. Portalul trimite un <strong>SearchRequest</strong>:</p>
+<ul><li><strong>base</strong>: de unde începe căutarea, <code>ou=People,dc=example,dc=com</code>;</li>
+<li><strong>scope</strong> <code>sub</code>: în tot subarborele;</li>
+<li><strong>filtru</strong> <code>(&amp;(objectClass=person)(uid=ana))</code>: „o persoană cu uid ana” (<code>&amp;</code> = și);</li>
+<li><strong>atribute</strong>: doar ce-i trebuie: nume, mail, grupuri.</li></ul>`,
+ en:`<p>Ana only typed <code>ana</code>, but to check her password the directory needs her <strong>full DN</strong>. The portal sends a <strong>SearchRequest</strong>:</p>
+<ul><li><strong>base</strong>: where the search starts, <code>ou=People,dc=example,dc=com</code>;</li>
+<li><strong>scope</strong> <code>sub</code>: the whole subtree;</li>
+<li><strong>filter</strong> <code>(&amp;(objectClass=person)(uid=ana))</code>: "a person with uid ana" (<code>&amp;</code> = and);</li>
+<li><strong>attributes</strong>: only what it needs: name, mail, groups.</li></ul>`},
+ try:[{cmd:"ldapsearch -x -H ldaps://ldap.example.com -D \"cn=svc-portal,ou=Services,dc=example,dc=com\" -W -b \"ou=People,dc=example,dc=com\" \"(uid=ana)\" cn mail memberOf",d:{ro:"Aceeași căutare din terminal.",en:"The same search from a terminal."}}]},
+
+{at:"dir",frame:S1r,kind:"l",move:[[["dir","app"]]],log:{ro:"rezultatul căutării",en:"search result"},tables:["dit"],hl:{dit:ANA},who:{ro:"Director",en:"Directory"},
+ title:{ro:"Directorul o găsește pe Ana",en:"The directory finds Ana"},
+ body:{ro:`<p>Răspunsul vine în două mesaje: un <strong>SearchResultEntry</strong> cu DN-ul și atributele cerute, apoi <strong>SearchResultDone</strong> cu codul <code>0</code>.</p>
+<p>Portalul știe acum: DN = <code>uid=ana,ou=People,dc=example,dc=com</code>, numele „Ana Pop” și că e în grupul <code>portal-admins</code>.</p>
+<p>Dacă nu găsea nimic (0 rezultate), portalul ar fi răspuns „utilizator sau parolă greșită”, fără să spună <em>care</em> din ele, ca să nu ajute un atacator să ghicească nume.</p>`,
+ en:`<p>The answer comes in two messages: a <strong>SearchResultEntry</strong> with the DN and the requested attributes, then <strong>SearchResultDone</strong> with code <code>0</code>.</p>
+<p>The portal now knows: DN = <code>uid=ana,ou=People,dc=example,dc=com</code>, the name "Ana Pop", and that she's in the <code>portal-admins</code> group.</p>
+<p>Had it found nothing (0 entries), the portal would answer "wrong username or password", without saying <em>which</em>, so as not to help an attacker guess names.</p>`}},
+
+{at:"app",frame:B2,kind:"l",move:[[["app","dir"]],[["dir","app"]]],log:{ro:"bind ca Ana",en:"bind as Ana"},who:{ro:"Portal",en:"Portal"},
+ title:{ro:"Bind 2: chiar verificarea parolei",en:"Bind 2: the actual password check"},
+ body:{ro:`<p>Acum vine trucul: portalul face un al doilea <strong>bind</strong>, de data asta <strong>ca Ana</strong>: DN-ul ei plus parola pe care a tastat-o.</p>
+<p>Directorul calculează hash-ul parolei primite și îl compară cu cel salvat. Răspunsul <code>0 success</code> înseamnă: <strong>parola e corectă</strong>. Portalul n-a văzut niciodată hash-ul și n-a salvat parola nicăieri.</p>
+<p class="key">Modelul se numește <strong>search, then bind</strong>: caută cu contul de serviciu, verifică cu bind-ul utilizatorului.</p>`,
+ en:`<p>Now comes the trick: the portal does a second <strong>bind</strong>, this time <strong>as Ana</strong>: her DN plus the password she typed.</p>
+<p>The directory hashes the received password and compares it with the stored one. The answer <code>0 success</code> means: <strong>the password is correct</strong>. The portal never saw the hash and never stored the password anywhere.</p>
+<p class="key">The pattern is called <strong>search, then bind</strong>: search with the service account, verify with the user's bind.</p>`},
+ more:{ro:`<p>După verificare, portalul face din nou bind cu contul de serviciu (sau folosește altă conexiune din pool), ca următoarele căutări să nu ruleze cu drepturile Anei.</p>`,
+  en:`<p>After the check, the portal binds again as the service account (or uses another pooled connection), so later searches don't run with Ana's rights.</p>`}},
+
+{at:"app",frame:H2,kind:"h",move:[[["app","ana"]]],log:{ro:"portal → Ana: sesiune",en:"portal → Ana: session"},tables:["roles"],hl:{roles:"cn=portal-admins"},who:{ro:"Portal",en:"Portal"},
+ title:{ro:"Grupurile devin drepturi, Ana primește o sesiune",en:"Groups become permissions, Ana gets a session"},
+ body:{ro:`<p>Portalul transformă grupurile din director în <strong>roluri</strong> proprii: <code>portal-admins</code> → <code>ROLE_ADMIN</code>. Așa, adminii portalului se schimbă din director, fără deploy.</p>
+<p>Apoi creează o <strong>sesiune</strong> și îi trimite Anei un cookie <code>SESSION</code> (HttpOnly, Secure). La următoarele cereri, portalul nu mai întreabă directorul: îi ajunge cookie-ul, până expiră sesiunea.</p>`,
+ en:`<p>The portal turns the directory groups into its own <strong>roles</strong>: <code>portal-admins</code> → <code>ROLE_ADMIN</code>. That way the portal's admins are changed in the directory, without a deploy.</p>
+<p>Then it creates a <strong>session</strong> and sends Ana a <code>SESSION</code> cookie (HttpOnly, Secure). On later requests the portal no longer asks the directory: the cookie is enough, until the session expires.</p>`}},
+
+{at:["app","dir"],frame:B3,kind:"l",tables:["codes"],hl:{codes:"49"},log:{ro:"parolă greșită",en:"wrong password"},who:{ro:"Când nu merge",en:"When it fails"},
+ title:{ro:"Parolă greșită: cod 49",en:"Wrong password: code 49"},
+ body:{ro:`<p>A doua zi, Ana greșește parola. Bind-ul ca Ana primește <code>49 invalidCredentials</code>. Active Directory adaugă un mesaj de diagnostic cu detalii: <code>data 52e</code> = parolă greșită, <code>data 775</code> = cont blocat, <code>data 532</code> = parolă expirată.</p>
+<p>Portalul afișează doar „utilizator sau parolă greșită”, dar <strong>scrie în log</strong> codul exact, pentru suport. După câteva încercări greșite, directorul poate <strong>bloca</strong> contul, ca protecție contra ghicirii parolelor.</p>`,
+ en:`<p>The next day Ana mistypes her password. The bind as Ana gets <code>49 invalidCredentials</code>. Active Directory adds a diagnostic message with details: <code>data 52e</code> = wrong password, <code>data 775</code> = account locked, <code>data 532</code> = password expired.</p>
+<p>The portal only shows "wrong username or password", but <strong>logs</strong> the exact code for support. After a few wrong attempts the directory may <strong>lock</strong> the account, to protect against password guessing.</p>`}},
+
+{at:["app"],frame:null,kind:"none",who:{ro:"Securitate",en:"Security"},
+ title:{ro:"Trei greșeli care deschid ușa oricui",en:"Three mistakes that open the door to anyone"},
+ body:{ro:`<ul><li><strong>Parola goală</strong>: în LDAP, un bind cu DN dar <em>fără</em> parolă e un „unauthenticated bind” și multe servere răspund <code>0 success</code>! Portalul trebuie să refuze parolele goale <em>înainte</em> de bind.</li>
+<li><strong>Injecția LDAP</strong>: dacă numele tastat intră direct în filtru, cineva poate scrie <code>*)(uid=*</code> și schimba sensul căutării. Caracterele <code>* ( ) \\ NUL</code> trebuie escapate (bibliotecile o fac, dacă le folosești corect).</li>
+<li><strong>LDAP necriptat</strong>: pe portul 389 fără StartTLS, parolele trec în clar prin rețea.</li></ul>`,
+ en:`<ul><li><strong>Empty password</strong>: in LDAP a bind with a DN but <em>no</em> password is an "unauthenticated bind", and many servers answer <code>0 success</code>! The portal must reject empty passwords <em>before</em> binding.</li>
+<li><strong>LDAP injection</strong>: if the typed name goes straight into the filter, someone can type <code>*)(uid=*</code> and change what the search means. The characters <code>* ( ) \\ NUL</code> must be escaped (libraries do this if used correctly).</li>
+<li><strong>Unencrypted LDAP</strong>: on port 389 without StartTLS, passwords cross the network in the clear.</li></ul>`},
+ more:{ro:`<p>Alte bune practici: cont de serviciu doar cu citire, timeout-uri scurte la conexiune (dacă directorul e lent, login-ul nu trebuie să blocheze toate firele aplicației), pool de conexiuni și mai multe servere de director în configurație, pentru failover.</p>`,
+  en:`<p>Other good practice: a read-only service account, short connection timeouts (if the directory is slow, login mustn't block all of the app's threads), a connection pool and several directory servers in the configuration, for failover.</p>`}},
+
+{at:["ana","app","dir"],frame:null,kind:"none",summary:true,
+ title:{ro:"Recapitulare",en:"Recap"},
+ body:{ro:`<ul><li>Un <strong>director LDAP</strong> e un arbore de intrări; fiecare are un <strong>DN</strong> unic și atribute.</li>
+<li>Aplicația <strong>nu ține parole</strong>: le verifică în director.</li>
+<li>Fluxul: TLS → <strong>bind</strong> cont de serviciu → <strong>search</strong> după uid → <strong>bind</strong> ca utilizator (parola) → grupuri → roluri → sesiune.</li>
+<li>Cod <code>0</code> = succes, <code>49</code> = credențiale greșite.</li>
+<li>Folosește <strong>LDAPS (636)</strong> sau StartTLS, refuză parolele goale și escapează filtrele.</li>
+<li>În <strong>Active Directory</strong>: login în <code>sAMAccountName</code> sau <code>userPrincipalName</code>, grupuri în <code>memberOf</code>.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">${"Mergi la laborator ↓"}</button></p>`,
+ en:`<ul><li>An <strong>LDAP directory</strong> is a tree of entries; each has a unique <strong>DN</strong> and attributes.</li>
+<li>The app <strong>keeps no passwords</strong>: it checks them in the directory.</li>
+<li>The flow: TLS → <strong>bind</strong> as the service account → <strong>search</strong> by uid → <strong>bind</strong> as the user (password) → groups → roles → session.</li>
+<li>Code <code>0</code> = success, <code>49</code> = wrong credentials.</li>
+<li>Use <strong>LDAPS (636)</strong> or StartTLS, reject empty passwords and escape filters.</li>
+<li>In <strong>Active Directory</strong>: the login is in <code>sAMAccountName</code> or <code>userPrincipalName</code>, groups in <code>memberOf</code>.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Go to the lab ↓</button></p>`}}
+],
+
+reference:(T,lang)=>{
+  const ro=lang==="ro";
+  return `<div class="ref-grid"><section class="card refcard"><h2>${ro?"Spring Boot: login cu LDAP":"Spring Boot: LDAP login"}</h2>
+<pre class="yaml">spring:
+  ldap:
+    urls: ldaps://ldap1.example.com:636,ldaps://ldap2.example.com:636
+    base: dc=example,dc=com
+    username: cn=svc-portal,ou=Services,dc=example,dc=com
+    password: \${LDAP_SVC_PASSWORD}   <span class="c"># ${ro?"din seiful de secrete":"from the secrets vault"}</span>
+
+<span class="c"># ${ro?"căutarea utilizatorului":"user search"}</span>
+user-search-base: ou=People
+user-search-filter: (uid={0})
+group-search-base: ou=Groups
+group-search-filter: (member={0})</pre>
+<h3>${ro?"Active Directory":"Active Directory"}</h3>
+<pre class="yaml">user-search-filter: (sAMAccountName={0})
+<span class="c"># ${ro?"grupuri imbricate (și grupurile grupurilor)":"nested groups (groups of groups too)"}</span>
+(memberOf:1.2.840.113556.1.4.1941:=CN=portal-admins,OU=Groups,DC=example,DC=com)
+<span class="c"># ${ro?"porturi: 389/636 · global catalog 3268/3269":"ports: 389/636 · global catalog 3268/3269"}</span></pre></section>
+<section class="card refcard"><h2>${ro?"Filtre LDAP pe scurt":"LDAP filters in brief"}</h2>
+<div class="scroll"><table class="cmp"><tbody>
+<tr><td><code>(uid=ana)</code></td><td>${ro?"egalitate":"equality"}</td></tr>
+<tr><td><code>(cn=An*)</code></td><td>${ro?"începe cu „An”":"starts with \"An\""}</td></tr>
+<tr><td><code>(&amp;(a)(b))</code></td><td>${ro?"și":"and"}</td></tr>
+<tr><td><code>(|(a)(b))</code></td><td>${ro?"sau":"or"}</td></tr>
+<tr><td><code>(!(a))</code></td><td>${ro?"nu":"not"}</td></tr>
+<tr><td><code>(mail=*)</code></td><td>${ro?"atributul există":"attribute is present"}</td></tr>
+</tbody></table></div>
+<h3>${ro?"Test rapid":"Quick test"}</h3>
+<pre class="yaml">ldapwhoami -x -H ldaps://ldap.example.com \\
+  -D "uid=ana,ou=People,dc=example,dc=com" -W
+<span class="c"># → dn:uid=ana,ou=People,dc=example,dc=com</span></pre></section></div>`;
+},
+
+gloss:[
+ ["LDAP","Lightweight Directory Access Protocol",{ro:"Protocolul prin care aplicațiile citesc și caută în director.",en:"The protocol apps use to read and search the directory."}],
+ [{ro:"Director",en:"Directory"},null,{ro:"Bază de date în arbore cu utilizatori, grupuri și calculatoare, optimizată pentru citire.",en:"A tree-shaped database of users, groups and computers, optimised for reading."}],
+ ["DN","Distinguished Name",{ro:"Adresa unică a unei intrări în arbore, de la frunză la rădăcină.",en:"An entry's unique address in the tree, from leaf to root."}],
+ ["Bind",null,{ro:"Operația de autentificare în LDAP: DN + parolă.",en:"The LDAP authentication operation: DN + password."}],
+ [{ro:"Cont de serviciu",en:"Service account"},null,{ro:"Cont folosit de o aplicație, nu de un om, cu drepturi minime.",en:"An account used by an app, not a person, with minimal rights."}],
+ ["Base DN",null,{ro:"Ramura din arbore de unde începe o căutare.",en:"The branch of the tree where a search starts."}],
+ [{ro:"Filtru",en:"Filter"},null,{ro:"Condiția căutării, scrisă între paranteze, ex. (uid=ana).",en:"The search condition, written in parentheses, e.g. (uid=ana)."}],
+ ["memberOf",null,{ro:"Atribut cu grupurile din care face parte un utilizator.",en:"An attribute listing the groups a user belongs to."}],
+ ["LDAPS","LDAP over TLS",{ro:"LDAP criptat cu TLS, de obicei pe portul 636.",en:"LDAP encrypted with TLS, usually on port 636."}],
+ ["StartTLS",null,{ro:"Comandă care transformă o conexiune LDAP necriptată (389) într-una TLS.",en:"A command that upgrades an unencrypted LDAP connection (389) to TLS."}],
+ ["Active Directory","AD",{ro:"Directorul Microsoft, folosit în majoritatea firmelor; vorbește LDAP și Kerberos.",en:"Microsoft's directory, used by most companies; it speaks LDAP and Kerberos."}],
+ ["sAMAccountName",null,{ro:"Numele scurt de login în Active Directory (ex. ana.pop).",en:"The short login name in Active Directory (e.g. ana.pop)."}],
+ [{ro:"Injecție LDAP",en:"LDAP injection"},null,{ro:"Atac prin care textul tastat schimbă filtrul de căutare.",en:"An attack where typed text changes the search filter."}],
+ ["invalidCredentials","result code 49",{ro:"DN sau parolă greșită; AD dă detalii în mesajul de diagnostic.",en:"Wrong DN or password; AD gives details in the diagnostic message."}]
+],
+glossEx:{
+ "DN":{ro:"uid=ana,ou=People,dc=example,dc=com",en:"uid=ana,ou=People,dc=example,dc=com"},
+ "Bind":{ro:"portalul face bind ca cn=svc-portal ca să poată căuta.",en:"the portal binds as cn=svc-portal so it can search."},
+ "Filter":{ro:"(&(objectClass=person)(uid=ana))",en:"(&(objectClass=person)(uid=ana))"},
+ "LDAP injection":{ro:"numele „*)(uid=*” ar putea transforma filtrul într-unul care se potrivește cu oricine.",en:"the name \"*)(uid=*\" could turn the filter into one that matches anyone."}
+},
+
+quiz:[
+ {q:{ro:"De ce aplicația nu salvează parolele utilizatorilor?",en:"Why doesn't the app store users' passwords?"},o:[{ro:"Pentru că le verifică în director, printr-un bind LDAP",en:"Because it checks them in the directory, with an LDAP bind"},{ro:"Pentru că LDAP le criptează în cookie",en:"Because LDAP encrypts them in the cookie"},{ro:"Pentru că parolele nu sunt necesare",en:"Because passwords aren't needed"},{ro:"Le salvează, dar în altă bază",en:"It does, in another database"}],a:0,e:{ro:"O singură sursă de adevăr: directorul.",en:"One source of truth: the directory."}},
+ {q:{ro:"Ce e un DN?",en:"What is a DN?"},o:[{ro:"Un nume DNS",en:"A DNS name"},{ro:"Parola criptată",en:"The encrypted password"},{ro:"Adresa unică a unei intrări în arborele directorului",en:"An entry's unique address in the directory tree"},{ro:"Un tip de grup",en:"A kind of group"}],a:2,e:{ro:"Ex. uid=ana,ou=People,dc=example,dc=com.",en:"E.g. uid=ana,ou=People,dc=example,dc=com."}},
+ {q:{ro:"De ce caută aplicația utilizatorul înainte să-i verifice parola?",en:"Why does the app search for the user before checking the password?"},o:[{ro:"Ca să-i citească parola",en:"To read the password"},{ro:"Ca să afle DN-ul complet, de care e nevoie la bind",en:"To find the full DN, needed for the bind"},{ro:"Ca să-l blocheze",en:"To lock the account"},{ro:"Nu caută",en:"It doesn't"}],a:1,e:{ro:"Utilizatorul scrie doar „ana”; bind-ul are nevoie de DN.",en:"The user only types \"ana\"; the bind needs the DN."}},
+ {q:{ro:"Ce înseamnă codul de rezultat 49?",en:"What does result code 49 mean?"},o:[{ro:"Succes",en:"Success"},{ro:"Serverul e oprit",en:"Server down"},{ro:"Nu există intrarea",en:"No such object"},{ro:"Credențiale greșite",en:"Invalid credentials"}],a:3,e:{ro:"În AD, „data 52e” = parolă greșită, „data 775” = cont blocat.",en:"In AD, \"data 52e\" = wrong password, \"data 775\" = locked account."}},
+ {q:{ro:"Pe ce port merge de obicei LDAPS?",en:"Which port does LDAPS usually use?"},o:["389","443","636","3268"],a:2,e:{ro:"389 e LDAP simplu (cu StartTLS opțional); 3268 e global catalog AD.",en:"389 is plain LDAP (with optional StartTLS); 3268 is the AD global catalog."}},
+ {q:{ro:"De ce trebuie refuzată o parolă goală înainte de bind?",en:"Why must an empty password be rejected before the bind?"},o:[{ro:"Multe servere tratează bind-ul fără parolă ca „unauthenticated” și răspund succes",en:"Many servers treat a password-less bind as \"unauthenticated\" and answer success"},{ro:"Ca să economisească rețeaua",en:"To save bandwidth"},{ro:"Pentru că directorul se blochează",en:"Because the directory crashes"},{ro:"Nu trebuie",en:"It needn't be"}],a:0,e:{ro:"Altfel oricine intră cu orice nume și parolă goală.",en:"Otherwise anyone gets in with any name and an empty password."}},
+ {q:{ro:"Cum devine Ana administrator în portal?",en:"How does Ana become an admin in the portal?"},o:[{ro:"Se editează codul portalului",en:"The portal's code is edited"},{ro:"E adăugată în grupul portal-admins din director, care devine ROLE_ADMIN",en:"She's added to the portal-admins group in the directory, which maps to ROLE_ADMIN"},{ro:"Își schimbă parola",en:"She changes her password"},{ro:"Prin cookie",en:"Via the cookie"}],a:1,e:{ro:"Grupuri în director → roluri în aplicație.",en:"Directory groups → app roles."}},
+ {q:{ro:"Ce previne escaparea caracterelor * ( ) \\ în filtru?",en:"What does escaping * ( ) \\ in the filter prevent?"},o:[{ro:"Parolele expirate",en:"Expired passwords"},{ro:"Erorile TLS",en:"TLS errors"},{ro:"Conturile blocate",en:"Locked accounts"},{ro:"Injecția LDAP",en:"LDAP injection"}],a:3,e:{ro:"Textul tastat nu mai poate schimba structura filtrului.",en:"Typed text can no longer change the filter's structure."}}
+]
+};
+})();
+</script>
+<script src="../assets/engine.js?v=2"></script>
+<script src="../assets/labs-data.js?v=2"></script>
+<script src="../assets/lab.js?v=1"></script>
+<script type="module" src="../assets/auth.js?v=6"></script>
+</body>
+</html>

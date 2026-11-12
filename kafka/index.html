@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kafka: drumul unui mesaj</title>
+<meta name="description" content="Lecție interactivă: un eveniment prin Apache Kafka: topic, partiții, replici, acks, consumer groups, offset-uri și lag. / Interactive lesson: an event through Apache Kafka.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<script>
+(function(){
+const VAL='{"orderId":1042,"customer":"c-77","total":259.90}';
+const R0={key:"c-77",value:VAL,hdr:"traceparent: 00-4bf9…-01",topic:"orders",part:{ro:"hash(\"c-77\") % 3 = 1 → partiția 1",en:"hash(\"c-77\") % 3 = 1 → partition 1"}};
+const R1={...R0,part:"orders-1",leader:"broker-2",acks:"acks=all · enable.idempotence=true"};
+const R2={...R1,offset:"7",isr:"broker-2 (leader), broker-1, broker-3"};
+const R3={topic:"orders",part:"orders-1",offset:"7",isr:"broker-2, broker-1, broker-3",acks:{ro:"✓ scris pe toate replicile din ISR → confirmat producătorului",en:"✓ written to every ISR replica → acknowledged to the producer"}};
+const R4={key:"c-77",value:VAL,topic:"orders",part:"orders-1",offset:"7",group:"payment-service",member:{ro:"payment-1 (are partițiile 0 și 1)",en:"payment-1 (owns partitions 0 and 1)"}};
+const R5={topic:"orders",part:"orders-1",group:"payment-service",member:"payment-1",commit:{ro:"offset comis: 8 (următorul de citit)",en:"committed offset: 8 (the next one to read)"}};
+const R6={key:"c-77",value:VAL,topic:"orders",part:"orders-1",offset:"7",group:"email-service",member:{ro:"email-1 (toate cele 3 partiții)",en:"email-1 (all 3 partitions)"},commit:{ro:"offset-ul propriu al grupului email: 5 → încă în urmă",en:"the email group's own offset: 5 → still behind"}};
+
+window.LESSON={
+docTitle:{ro:"Kafka: drumul unui mesaj",en:"Kafka: the journey of a message"},
+eyebrow:{ro:"Lecție interactivă · Mesagerie",en:"Interactive lesson · Messaging"},
+title:{ro:"Kafka: drumul unui eveniment „comandă plasată”",en:"Kafka: the journey of an \"order placed\" event"},
+sub:{ro:"Serviciul de comenzi anunță: „clientul c-77 a plasat comanda 1042”. Urmărim evenimentul prin Apache Kafka: cum alege partiția, cum e replicat pe trei brokeri, cum îl citesc serviciile de plăți și de e-mail, ce sunt offset-urile și lag-ul și ce se întâmplă când pică un broker.",en:"The order service announces: \"customer c-77 placed order 1042\". We follow the event through Apache Kafka: how the partition is chosen, how it's replicated on three brokers, how the payment and email services read it, what offsets and lag are, and what happens when a broker fails."},
+meta:[{ro:"≈ 25 minute",en:"≈ 25 minutes"},{ro:"11 pași",en:"11 steps"},{ro:"8 întrebări",en:"8 questions"},{ro:"Intermediar",en:"Intermediate"}],
+goals:[{ro:"Topic, partiție, offset: cum e organizat Kafka",en:"Topic, partition, offset: how Kafka is organised"},{ro:"De ce cheia decide partiția și ordinea",en:"Why the key decides the partition and the order"},{ro:"Replicare, ISR și acks=all: de ce nu se pierd mesajele",en:"Replication, ISR and acks=all: why messages aren't lost"},{ro:"Consumer groups, commit, lag și rebalance",en:"Consumer groups, commits, lag and rebalancing"}],
+foot:{ro:"Nume de servicii fictive. Lecția se leagă de lecția Microservicii (outbox, idempotență) și de lecția IBM MQ / ActiveMQ.",en:"Fictional service names. This lesson links to the Microservices lesson (outbox, idempotency) and the IBM MQ / ActiveMQ lesson."},
+ui:{frameT:{ro:"Mesajul (live)",en:"The message (live)"},refT:{ro:"Comenzi și configurări",en:"Commands and settings"},refLead:{ro:"Comenzile CLI de bază și setările care contează în producție.",en:"The basic CLI commands and the settings that matter in production."}},
+tryT:{ro:"Încearcă (cu uneltele din distribuția Kafka)",en:"Try it (with the tools from the Kafka distribution)"},
+legend:[["lg-app","record",{ro:"mesajul",en:"the message"}],["lg-arp","replicare / ack",{ro:"între brokeri",en:"between brokers"}]],
+
+nodes:{
+  prod:{type:"pod",name:"order-service",lines:[{ro:"producător",en:"producer"}]},
+  b1:{type:"queue",name:"broker-1",lines:[{ro:"lider p0",en:"leader p0"}]},
+  b2:{type:"queue",name:"broker-2",lines:[{ro:"lider p1",en:"leader p1"}]},
+  b3:{type:"queue",name:"broker-3",lines:[{ro:"lider p2",en:"leader p2"}]},
+  pay1:{type:"pod",name:"payment-1",lines:["group payment"]},
+  pay2:{type:"pod",name:"payment-2",lines:["group payment"]},
+  mail:{type:"pod",name:"email-1",lines:["group email"]}
+},
+links:[["prod","b1"],["prod","b2"],["prod","b3"],["b1","b2"],["b2","b3"],["b2","pay1"],["b2","pay2"],["b2","mail"],["b1","pay1"],["b3","pay2"],["b3","mail"]],
+layouts:{
+  wide:{vb:[0,0,1000,520],n:{prod:[90,260],b1:[430,90],b2:[430,260],b3:[430,430],pay1:[820,90],pay2:[820,260],mail:[820,430]},
+    zones:[{x:330,y:30,w:200,h:470,top:true,l:{ro:"Cluster Kafka",en:"Kafka cluster"}}]},
+  narrow:{vb:[0,0,360,760],n:{prod:[180,60],b1:[70,300],b2:[180,250],b3:[290,300],pay1:[70,600],pay2:[180,670],mail:[290,600]},
+    zones:[{x:10,y:190,w:340,h:190,top:true,l:{ro:"Cluster Kafka",en:"Kafka cluster"}}]}
+},
+groups:[
+  {id:"rec",color:"l7",fields:["key","value","hdr"],name:{ro:"Record-ul (mesajul)",en:"The record (message)"},short:"Record",grow:3},
+  {id:"where",color:"l3",fields:["topic","part","offset"],name:{ro:"Unde stă",en:"Where it lives"},short:{ro:"Unde",en:"Where"},grow:2},
+  {id:"rep",color:"arp",fields:["leader","isr","acks"],name:{ro:"Replicare și confirmare",en:"Replication and acknowledgement"},short:{ro:"Replici",en:"Replicas"},grow:2},
+  {id:"cons",color:"l4",fields:["group","member","commit"],name:{ro:"Consumatorul",en:"The consumer"},short:{ro:"Consum",en:"Consumer"},grow:2}
+],
+fieldLabels:{key:{ro:"Cheie",en:"Key"},value:{ro:"Valoare",en:"Value"},hdr:"Headers",topic:"Topic",part:{ro:"Partiție",en:"Partition"},offset:"Offset",leader:{ro:"Lider",en:"Leader"},isr:"ISR",acks:"Acks",group:"Consumer group",member:{ro:"Membru",en:"Member"},commit:{ro:"Commit",en:"Commit"}},
+pdu:f=>f.commit&&!f.value?{badge:{ro:"Commit de offset",en:"Offset commit"},tok:["commit","k-tcp"]}:f.value?{badge:{ro:"Record Kafka",en:"Kafka record"},tok:["order 1042","k-app"]}:{badge:{ro:"Confirmare (ack)",en:"Acknowledgement (ack)"},tok:["ack","k-arp"]},
+
+init:{lag:[]},
+tables:{
+  topic:{title:{ro:"Topic-ul orders: 3 partiții, factor de replicare 3",en:"The orders topic: 3 partitions, replication factor 3"},cols:[{ro:"Partiție",en:"Partition"},{ro:"Lider",en:"Leader"},{ro:"Replici",en:"Replicas"},{ro:"Ultimul offset",en:"Last offset"}],
+    rows:()=>[["orders-0","broker-1","1, 2, 3","11"],["orders-1","broker-2","2, 1, 3","6 → 7"],["orders-2","broker-3","3, 1, 2","9"]]},
+  log1:{title:{ro:"Jurnalul partiției orders-1 (append-only)",en:"The orders-1 partition log (append-only)"},cols:["Offset",{ro:"Cheie",en:"Key"},{ro:"Valoare",en:"Value"}],idx:true,
+    rows:()=>[["4","c-12","order 1031"],["5","c-77","order 1036"],["6","c-40","order 1039"],["7","c-77","order 1042 ← nou"]]},
+  assign:{title:{ro:"Cine citește ce partiție",en:"Who reads which partition"},cols:["Group",{ro:"Membru",en:"Member"},{ro:"Partiții",en:"Partitions"}],
+    rows:()=>[["payment-service","payment-1","0, 1"],["payment-service","payment-2","2"],["email-service","email-1","0, 1, 2"]]},
+  lag:{title:{ro:"Lag pe grupul payment-service",en:"Lag for the payment-service group"},cols:[{ro:"Partiție",en:"Partition"},{ro:"Ultimul offset",en:"Log end"},{ro:"Comis",en:"Committed"},"Lag"],
+    rows:()=>[["orders-0","12","12","0"],["orders-1","8","8","0"],["orders-2","10","4","6 ⚠"]]}
+},
+log:{title:{ro:"Jurnalul evenimentului",en:"Event log"},lead:{ro:"Același record (offset 7) e citit de două grupuri diferite, fiecare cu offset-ul lui.",en:"The same record (offset 7) is read by two different groups, each with its own offset."},first:{ro:"Pas",en:"Step"},minWidth:560,
+  cols:[{h:{ro:"Partiție",en:"Partition"},v:f=>f.part||"",cls:"ip"},{h:"Offset",v:f=>f.offset||"",cls:"mac"},{h:{ro:"Cine",en:"Who"},v:f=>f.group||f.leader||"",cls:""}]},
+
+steps:[
+{at:["b1","b2","b3"],frame:null,kind:"none",tables:["topic"],who:{ro:"Ideea",en:"The idea"},
+ title:{ro:"Kafka: un jurnal în care toți scriu și din care toți citesc",en:"Kafka: a log everyone writes to and reads from"},
+ body:{ro:`<p>Când un client plasează o comandă, trebuie să afle mai multe servicii: plăți, e-mail, stoc, statistici. Dacă serviciul de comenzi le-ar chema pe toate pe rând, ar depinde de fiecare (vezi <a href="../microservicii/index.html">lecția Microservicii</a>).</p>
+<p>Cu <strong>Kafka</strong>, serviciul de comenzi scrie un singur <strong>eveniment</strong> într-un <strong>topic</strong>, <code>orders</code>, și atât. Cine e interesat citește din topic, în ritmul lui.</p>
+<p>Un topic e împărțit în <strong>partiții</strong>. Fiecare partiție e un <strong>jurnal</strong> în care mesajele se adaugă doar la coadă și primesc un număr crescător: <strong>offset</strong>-ul. Partițiile sunt împărțite între <strong>brokeri</strong> (serverele Kafka).</p>`,
+ en:`<p>When a customer places an order, several services need to know: payments, email, stock, analytics. If the order service called each in turn, it would depend on all of them (see the <a href="../microservicii/index.html">Microservices lesson</a>).</p>
+<p>With <strong>Kafka</strong>, the order service writes a single <strong>event</strong> to a <strong>topic</strong>, <code>orders</code>, and that's it. Whoever is interested reads from the topic, at its own pace.</p>
+<p>A topic is split into <strong>partitions</strong>. Each partition is a <strong>log</strong> where messages are only appended at the end and get an increasing number: the <strong>offset</strong>. Partitions are spread across <strong>brokers</strong> (the Kafka servers).</p>`}},
+
+{at:"prod",frame:R0,kind:"r",log:{ro:"producătorul alege partiția",en:"producer picks the partition"},who:"order-service",
+ title:{ro:"Producătorul: cheia alege partiția",en:"The producer: the key picks the partition"},
+ body:{ro:`<p>order-service creează un <strong>record</strong>: o <strong>cheie</strong> (<code>c-77</code>, clientul), o <strong>valoare</strong> (JSON-ul comenzii) și câteva <strong>headers</strong> (de ex. <code>traceparent</code> pentru tracing).</p>
+<p>Partiția se alege din cheie: <code>hash("c-77") % 3 = 1</code>. Toate comenzile clientului c-77 ajung mereu în <strong>aceeași partiție</strong>.</p>
+<p class="key">De ce contează: Kafka garantează ordinea <strong>doar în interiorul unei partiții</strong>. Cu aceeași cheie, comenzile lui c-77 vor fi citite exact în ordinea în care au fost scrise.</p>`,
+ en:`<p>order-service creates a <strong>record</strong>: a <strong>key</strong> (<code>c-77</code>, the customer), a <strong>value</strong> (the order JSON) and a few <strong>headers</strong> (e.g. <code>traceparent</code> for tracing).</p>
+<p>The partition comes from the key: <code>hash("c-77") % 3 = 1</code>. Every order from customer c-77 always lands in the <strong>same partition</strong>.</p>
+<p class="key">Why it matters: Kafka guarantees order <strong>only within a partition</strong>. With the same key, c-77's orders will be read in exactly the order they were written.</p>`},
+ more:{ro:`<p>Fără cheie, producătorul împarte mesajele între partiții ca să echilibreze încărcarea (sticky partitioner), dar pierzi ordinea între ele. O cheie prea „populară” (de ex. un client uriaș) face o partiție fierbinte.</p>`,
+  en:`<p>Without a key, the producer spreads messages across partitions to balance load (the sticky partitioner), but you lose ordering between them. An overly "popular" key (e.g. one huge customer) makes a hot partition.</p>`}},
+
+{at:"prod",frame:R1,kind:"r",move:[[["prod","b2"]]],tables:["topic"],hl:{topic:"orders-1"},log:{ro:"spre liderul p1",en:"to the p1 leader"},who:"order-service",
+ title:{ro:"Trimis direct liderului partiției",en:"Sent straight to the partition's leader"},
+ body:{ro:`<p>Fiecare partiție are un broker <strong>lider</strong>: doar el primește scrieri pentru partiția aceea. Producătorul a aflat din <strong>metadata</strong> clusterului că liderul pentru <code>orders-1</code> e <strong>broker-2</strong> și îi trimite record-ul direct.</p>
+<p>Producătorul cere <code>acks=all</code>: „confirmă-mi doar după ce mesajul e pe toate replicile sincronizate”. Cu <code>enable.idempotence=true</code>, dacă trimite de două ori din cauza unui timeout, brokerul păstrează o singură copie.</p>`,
+ en:`<p>Each partition has a <strong>leader</strong> broker: only it accepts writes for that partition. The producer learned from the cluster <strong>metadata</strong> that the leader for <code>orders-1</code> is <strong>broker-2</strong> and sends it the record directly.</p>
+<p>The producer asks for <code>acks=all</code>: "acknowledge only once the message is on every in-sync replica". With <code>enable.idempotence=true</code>, if it sends twice because of a timeout, the broker keeps a single copy.</p>`},
+ try:[{cmd:"kafka-console-producer.sh --bootstrap-server broker-1:9092 --topic orders --property parse.key=true --property key.separator=:",d:{ro:"Scrii „c-77:{...}” și apeși Enter: un record cu cheie.",en:"Type \"c-77:{...}\" and press Enter: a keyed record."}}]},
+
+{at:"b2",frame:R2,kind:"r",move:[[["b2","b1"],["b2","b3"]]],tables:["log1"],hl:{log1:3},log:{ro:"replicare pe b1, b3",en:"replicated to b1, b3"},who:"broker-2",
+ title:{ro:"Liderul scrie la offset 7, replicile copiază",en:"The leader writes at offset 7, the replicas copy"},
+ body:{ro:`<p>Broker-2 adaugă record-ul la coada jurnalului <code>orders-1</code>: primește <strong>offset-ul 7</strong>. Mesajul e scris pe disc, nu doar în memorie.</p>
+<p>Topic-ul are <strong>factor de replicare 3</strong>: broker-1 și broker-3 sunt <strong>urmăritori</strong> (followers) și își copiază continuu partiția de la lider. Replicile care sunt la zi formează <strong>ISR</strong>-ul (in-sync replicas).</p>`,
+ en:`<p>Broker-2 appends the record to the end of the <code>orders-1</code> log: it gets <strong>offset 7</strong>. The message is written to disk, not just kept in memory.</p>
+<p>The topic has <strong>replication factor 3</strong>: broker-1 and broker-3 are <strong>followers</strong> that continuously copy the partition from the leader. The replicas that are up to date form the <strong>ISR</strong> (in-sync replicas).</p>`}},
+
+{at:"b2",frame:R3,kind:"a",move:[[["b2","prod"]]],log:{ro:"ack → producător",en:"ack → producer"},who:"broker-2",
+ title:{ro:"acks=all: confirmarea vine după ce toate replicile îl au",en:"acks=all: the acknowledgement comes once every replica has it"},
+ body:{ro:`<p>Când broker-1 și broker-3 au confirmat copia, liderul răspunde producătorului: <strong>scris</strong>. Acum mesajul e pe trei servere; dacă pică unul, nu se pierde.</p>
+<p>Setarea pereche e <code>min.insync.replicas=2</code>: dacă rămân mai puțin de 2 replici la zi, brokerul <strong>refuză</strong> scrierile cu acks=all, în loc să riște pierderea datelor.</p>
+<ul><li><code>acks=0</code>: nu aștepți nimic (rapid, poți pierde).</li><li><code>acks=1</code>: doar liderul (pierzi dacă liderul pică imediat).</li><li><code>acks=all</code>: toate ISR (sigur).</li></ul>`,
+ en:`<p>Once broker-1 and broker-3 have confirmed their copy, the leader replies to the producer: <strong>written</strong>. The message now lives on three servers; if one fails, it isn't lost.</p>
+<p>The companion setting is <code>min.insync.replicas=2</code>: if fewer than 2 replicas are in sync, the broker <strong>rejects</strong> acks=all writes rather than risk losing data.</p>
+<ul><li><code>acks=0</code>: wait for nothing (fast, may lose data).</li><li><code>acks=1</code>: the leader only (lost if the leader dies right away).</li><li><code>acks=all</code>: every ISR replica (safe).</li></ul>`}},
+
+{at:"pay1",frame:R4,kind:"r",move:[[["b2","pay1"]]],tables:["assign"],hl:{assign:"payment-1"},log:{ro:"payment-1 citește",en:"payment-1 reads"},who:"payment-1",
+ title:{ro:"Consumer group: partițiile se împart între instanțe",en:"Consumer group: partitions are split between instances"},
+ body:{ro:`<p>Serviciul de plăți rulează în <strong>două instanțe</strong>, amândouă în <strong>consumer group</strong>-ul <code>payment-service</code>. Kafka împarte partițiile între ele: payment-1 are partițiile 0 și 1, payment-2 are partiția 2.</p>
+<p>Fiecare partiție e citită de <strong>un singur</strong> membru al grupului, deci comanda 1042 e procesată o singură dată, de payment-1. Consumatorul <strong>cere</strong> mesajele (poll); brokerul nu le împinge.</p>`,
+ en:`<p>The payment service runs as <strong>two instances</strong>, both in the <code>payment-service</code> <strong>consumer group</strong>. Kafka splits the partitions between them: payment-1 owns partitions 0 and 1, payment-2 owns partition 2.</p>
+<p>Each partition is read by <strong>exactly one</strong> member of the group, so order 1042 is processed once, by payment-1. The consumer <strong>pulls</strong> messages (poll); the broker doesn't push them.</p>`}},
+
+{at:"pay1",frame:R5,kind:"c",move:[[["pay1","b2"]]],log:{ro:"commit offset 8",en:"commit offset 8"},who:"payment-1",
+ title:{ro:"Procesează, apoi comite offset-ul",en:"Process, then commit the offset"},
+ body:{ro:`<p>payment-1 încasează plata, apoi <strong>comite</strong> offset-ul <code>8</code>: „am terminat tot până la 7; data viitoare dă-mi de la 8”. Offset-urile comise se păstrează chiar în Kafka (topic-ul intern <code>__consumer_offsets</code>).</p>
+<p>Ordinea contează: dacă payment-1 cade <em>după</em> plată dar <em>înainte</em> de commit, mesajul 7 va fi citit din nou. Asta e garanția <strong>at-least-once</strong>: niciun mesaj pierdut, dar uneori duplicate.</p>
+<p class="key">De aceea consumatorii trebuie să fie <strong>idempotenți</strong>: aceeași comandă procesată de două ori trebuie să încaseze o singură dată (de ex. verifici orderId-ul în baza de date).</p>`,
+ en:`<p>payment-1 charges the payment, then <strong>commits</strong> offset <code>8</code>: "I've finished everything up to 7; next time give me 8 onwards". Committed offsets are stored in Kafka itself (the internal <code>__consumer_offsets</code> topic).</p>
+<p>Order matters: if payment-1 crashes <em>after</em> charging but <em>before</em> committing, message 7 will be read again. That's the <strong>at-least-once</strong> guarantee: no message lost, but sometimes duplicates.</p>
+<p class="key">That's why consumers must be <strong>idempotent</strong>: the same order processed twice must charge only once (e.g. check the orderId in the database).</p>`}},
+
+{at:"mail",frame:R6,kind:"r",move:[[["b2","mail"]]],tables:["assign"],hl:{assign:"email-1"},log:{ro:"email-1 citește același mesaj",en:"email-1 reads the same message"},who:"email-1",
+ title:{ro:"Alt grup, aceeași comandă, offset-uri separate",en:"Another group, the same order, separate offsets"},
+ body:{ro:`<p>Serviciul de e-mail e alt <strong>consumer group</strong>, <code>email-service</code>. El primește <strong>toate</strong> mesajele topic-ului, inclusiv comanda 1042, independent de plăți.</p>
+<p>Fiecare grup are <strong>offset-urile lui</strong>. Email-ul e mai lent (la offset 5), dar nu încurcă pe nimeni: mesajele rămân în jurnal, nu se șterg când sunt citite.</p>
+<p>Așa obții ambele modele: <strong>în interiorul</strong> unui grup, mesajele se împart (ca o coadă); <strong>între</strong> grupuri, fiecare primește tot (publish/subscribe).</p>`,
+ en:`<p>The email service is another <strong>consumer group</strong>, <code>email-service</code>. It receives <strong>every</strong> message on the topic, including order 1042, independently of payments.</p>
+<p>Each group has <strong>its own offsets</strong>. Email is slower (at offset 5), but it gets in nobody's way: messages stay in the log; reading doesn't delete them.</p>
+<p>So you get both models: <strong>within</strong> a group, messages are shared out (like a queue); <strong>between</strong> groups, each gets everything (publish/subscribe).</p>`}},
+
+{at:["pay1","pay2"],frame:null,kind:"none",tables:["lag"],hl:{lag:"orders-2"},who:"Lag",
+ title:{ro:"Lag și scalare: câte instanțe ajută?",en:"Lag and scaling: how many instances help?"},
+ body:{ro:`<p><strong>Lag</strong>-ul = ultimul offset din partiție − offset-ul comis. Pe <code>orders-2</code>, payment-2 are 6 mesaje în urmă: plățile întârzie. Lag-ul e metrica principală de urmărit (alertă dacă tot crește).</p>
+<p>Soluția: mai multe instanțe. Pornești payment-3; grupul face un <strong>rebalance</strong> și reîmparte partițiile. Dar atenție:</p>
+<p class="key">Paralelismul maxim al unui grup = numărul de partiții. Cu 3 partiții, a 4-a instanță ar sta degeaba. Alegi numărul de partiții gândindu-te la vârful de trafic.</p>`,
+ en:`<p><strong>Lag</strong> = the partition's last offset − the committed offset. On <code>orders-2</code>, payment-2 is 6 messages behind: payments are delayed. Lag is the main metric to watch (alert if it keeps growing).</p>
+<p>The fix: more instances. You start payment-3; the group does a <strong>rebalance</strong> and reassigns partitions. But note:</p>
+<p class="key">A group's maximum parallelism = the number of partitions. With 3 partitions, a 4th instance would sit idle. Choose the partition count with peak traffic in mind.</p>`},
+ try:[{cmd:"kafka-consumer-groups.sh --bootstrap-server broker-1:9092 --describe --group payment-service",d:{ro:"Vezi pe fiecare partiție: offset curent, ultimul offset și LAG.",en:"See for each partition: current offset, log end offset and LAG."}}]},
+
+{at:"b2",frame:null,kind:"none",marks:{b2:{k:"drop",t:{ro:"căzut",en:"down"}}},who:{ro:"Pană",en:"Failure"},
+ title:{ro:"Pică broker-2: alegerea unui lider nou",en:"Broker-2 fails: electing a new leader"},
+ body:{ro:`<p>Broker-2 se oprește. Partiția <code>orders-1</code> rămâne fără lider. <strong>Controller</strong>-ul clusterului (în Kafka modern, quorum-ul <strong>KRaft</strong>; înainte, ZooKeeper) alege un lider nou <strong>din ISR</strong>: broker-3.</p>
+<p>Producătorii și consumatorii primesc erori o clipă, își reîmprospătează metadata și continuă cu broker-3. Mesajul 7 nu s-a pierdut: era deja pe broker-3, datorită <code>acks=all</code>.</p>
+<p>Dacă ISR-ul ar fi gol, Kafka ar aștepta (implicit <code>unclean.leader.election.enable=false</code>), în loc să aleagă o replică în urmă și să piardă mesaje.</p>`,
+ en:`<p>Broker-2 stops. The <code>orders-1</code> partition has no leader. The cluster's <strong>controller</strong> (in modern Kafka the <strong>KRaft</strong> quorum; previously ZooKeeper) elects a new leader <strong>from the ISR</strong>: broker-3.</p>
+<p>Producers and consumers get errors for a moment, refresh their metadata and carry on with broker-3. Message 7 wasn't lost: it was already on broker-3, thanks to <code>acks=all</code>.</p>
+<p>If the ISR were empty, Kafka would wait (by default <code>unclean.leader.election.enable=false</code>) rather than elect a lagging replica and lose messages.</p>`}},
+
+{at:["b1","b2","b3"],frame:null,kind:"none",summary:true,
+ title:{ro:"Retenție, reluare și recapitulare",en:"Retention, replay and recap"},
+ body:{ro:`<p>Mesajele nu se șterg când sunt citite, ci după <strong>retenție</strong> (de ex. 7 zile) sau, la topic-urile <strong>compactate</strong>, se păstrează ultima valoare pentru fiecare cheie. Poți <strong>relua</strong> evenimentele: muți offset-ul unui grup înapoi și le procesezi din nou.</p>
+<ul><li><strong>Topic</strong> → <strong>partiții</strong> → mesaje cu <strong>offset</strong>; ordinea e garantată doar într-o partiție.</li>
+<li><strong>Cheia</strong> alege partiția: aceeași cheie, aceeași partiție, aceeași ordine.</li>
+<li>Scrierea merge la <strong>lider</strong>; replicile din <strong>ISR</strong> copiază; <code>acks=all</code> + <code>min.insync.replicas=2</code> = fără pierderi.</li>
+<li>Un <strong>consumer group</strong> împarte partițiile; grupuri diferite primesc fiecare tot.</li>
+<li>Commit după procesare = <strong>at-least-once</strong> → consumatori idempotenți. Urmărește <strong>lag</strong>-ul.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Mergi la laborator ↓</button></p>`,
+ en:`<p>Messages aren't deleted when read but after the <strong>retention</strong> period (e.g. 7 days) or, on <strong>compacted</strong> topics, the latest value per key is kept. You can <strong>replay</strong> events: move a group's offset back and process them again.</p>
+<ul><li><strong>Topic</strong> → <strong>partitions</strong> → messages with an <strong>offset</strong>; ordering is only guaranteed within a partition.</li>
+<li>The <strong>key</strong> picks the partition: same key, same partition, same order.</li>
+<li>Writes go to the <strong>leader</strong>; <strong>ISR</strong> replicas copy; <code>acks=all</code> + <code>min.insync.replicas=2</code> = no loss.</li>
+<li>A <strong>consumer group</strong> shares out the partitions; different groups each get everything.</li>
+<li>Commit after processing = <strong>at-least-once</strong> → idempotent consumers. Watch the <strong>lag</strong>.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Go to the lab ↓</button></p>`}}
+],
+
+reference:(T,lang)=>{
+  const ro=lang==="ro";
+  return `<div class="ref-grid"><section class="card refcard"><h2>CLI</h2>
+<pre class="yaml"><span class="c"># ${ro?"creează topic-ul":"create the topic"}</span>
+kafka-topics.sh --bootstrap-server broker-1:9092 --create \\
+  --topic orders --partitions 3 --replication-factor 3 \\
+  --config min.insync.replicas=2
+
+<span class="c"># ${ro?"vezi liderii și ISR":"see leaders and ISR"}</span>
+kafka-topics.sh --bootstrap-server broker-1:9092 --describe --topic orders
+
+<span class="c"># ${ro?"citește de la început":"read from the beginning"}</span>
+kafka-console-consumer.sh --bootstrap-server broker-1:9092 \\
+  --topic orders --from-beginning --property print.key=true
+
+<span class="c"># ${ro?"reluare: mută offset-urile grupului cu 1 oră înapoi":"replay: move the group's offsets back 1 hour"}</span>
+kafka-consumer-groups.sh --bootstrap-server broker-1:9092 \\
+  --group payment-service --topic orders --reset-offsets \\
+  --by-duration PT1H --execute</pre></section>
+<section class="card refcard"><h2>${ro?"Setări care contează":"Settings that matter"}</h2>
+<div class="scroll"><table class="cmp"><tbody>
+<tr><td><code>acks=all</code></td><td>${ro?"producător: confirmare de la toate ISR":"producer: ack from every ISR replica"}</td></tr>
+<tr><td><code>enable.idempotence=true</code></td><td>${ro?"fără duplicate la retrimitere":"no duplicates on retries"}</td></tr>
+<tr><td><code>min.insync.replicas=2</code></td><td>${ro?"topic: câte replici trebuie să fie la zi":"topic: how many replicas must be in sync"}</td></tr>
+<tr><td><code>enable.auto.commit=false</code></td><td>${ro?"consumator: comiți tu, după procesare":"consumer: you commit, after processing"}</td></tr>
+<tr><td><code>max.poll.interval.ms</code></td><td>${ro?"dacă procesarea durează mai mult, consumatorul e scos din grup":"if processing takes longer, the consumer is kicked from the group"}</td></tr>
+<tr><td><code>retention.ms</code> / <code>cleanup.policy=compact</code></td><td>${ro?"cât se păstrează / doar ultima valoare pe cheie":"how long to keep / only the latest value per key"}</td></tr>
+</tbody></table></div></section></div>`;
+},
+
+gloss:[
+ ["Kafka","Apache Kafka",{ro:"Platformă de streaming: un jurnal distribuit, replicat, de evenimente.",en:"A streaming platform: a distributed, replicated log of events."}],
+ ["Topic",null,{ro:"Categoria în care se scriu evenimente de un anumit tip (ex. orders).",en:"The category events of one type are written to (e.g. orders)."}],
+ [{ro:"Partiție",en:"Partition"},null,{ro:"Bucată dintr-un topic: un jurnal ordonat, doar cu adăugare.",en:"A slice of a topic: an ordered, append-only log."}],
+ ["Offset",null,{ro:"Poziția unui mesaj într-o partiție (0, 1, 2, …).",en:"A message's position in a partition (0, 1, 2, …)."}],
+ ["Broker",null,{ro:"Un server Kafka; un cluster are mai mulți.",en:"A Kafka server; a cluster has several."}],
+ [{ro:"Lider",en:"Leader"},null,{ro:"Brokerul care primește scrierile pentru o partiție.",en:"The broker that accepts writes for a partition."}],
+ ["ISR","In-Sync Replicas",{ro:"Replicile unei partiții care sunt la zi cu liderul.",en:"A partition's replicas that are up to date with the leader."}],
+ ["Acks",null,{ro:"Câte confirmări așteaptă producătorul: 0, 1 sau all.",en:"How many acknowledgements the producer waits for: 0, 1 or all."}],
+ ["Consumer group",null,{ro:"Instanțe ale aceluiași serviciu care își împart partițiile.",en:"Instances of the same service that share out the partitions."}],
+ ["Commit",null,{ro:"Salvarea offset-ului până la care un grup a procesat.",en:"Saving the offset a group has processed up to."}],
+ ["Lag",null,{ro:"Câte mesaje are un grup de citit până ajunge la zi.",en:"How many messages a group has left to read to catch up."}],
+ ["Rebalance",null,{ro:"Reîmpărțirea partițiilor când un membru intră sau iese din grup.",en:"Reassigning partitions when a member joins or leaves the group."}],
+ ["At-least-once",null,{ro:"Garanția că niciun mesaj nu se pierde, dar poate fi procesat de două ori.",en:"The guarantee that no message is lost, but one may be processed twice."}],
+ ["KRaft",null,{ro:"Mecanismul de consens din Kafka care a înlocuit ZooKeeper.",en:"Kafka's consensus mechanism that replaced ZooKeeper."}]
+],
+glossEx:{
+ "Partition":{ro:"orders-0, orders-1, orders-2",en:"orders-0, orders-1, orders-2"},
+ "Lag":{ro:"ultimul offset 10, comis 4 → lag 6.",en:"log end 10, committed 4 → lag 6."}
+},
+
+quiz:[
+ {q:{ro:"Ce garantează Kafka despre ordinea mesajelor?",en:"What does Kafka guarantee about message order?"},o:[{ro:"Ordinea globală, în tot topic-ul",en:"Global order across the topic"},{ro:"Nicio ordine",en:"No order"},{ro:"Ordinea în interiorul unei partiții",en:"Order within a partition"},{ro:"Ordinea alfabetică a cheilor",en:"Alphabetical key order"}],a:2,e:{ro:"De aceea cheia (care alege partiția) contează.",en:"That's why the key (which picks the partition) matters."}},
+ {q:{ro:"Două comenzi ale aceluiași client au aceeași cheie. Ce se întâmplă?",en:"Two orders from the same customer share a key. What happens?"},o:[{ro:"Ajung în aceeași partiție, în ordine",en:"They land in the same partition, in order"},{ro:"Ajung în partiții diferite",en:"They land in different partitions"},{ro:"A doua o înlocuiește pe prima",en:"The second replaces the first"},{ro:"Kafka le respinge",en:"Kafka rejects them"}],a:0,e:{ro:"hash(cheie) % partiții.",en:"hash(key) % partitions."}},
+ {q:{ro:"Ce înseamnă acks=all?",en:"What does acks=all mean?"},o:[{ro:"Toți consumatorii au citit mesajul",en:"Every consumer has read the message"},{ro:"Producătorul nu așteaptă nimic",en:"The producer waits for nothing"},{ro:"Mesajul e trimis tuturor topic-urilor",en:"The message goes to every topic"},{ro:"Confirmarea vine după ce toate replicile din ISR au mesajul",en:"The ack comes once every ISR replica has the message"}],a:3,e:{ro:"Împreună cu min.insync.replicas=2, nu pierzi mesaje dacă pică un broker.",en:"Together with min.insync.replicas=2, you don't lose messages if a broker fails."}},
+ {q:{ro:"Două instanțe în același consumer group. Cine primește un mesaj?",en:"Two instances in the same consumer group. Who receives a message?"},o:[{ro:"Amândouă",en:"Both"},{ro:"Doar instanța care are partiția mesajului",en:"Only the instance that owns the message's partition"},{ro:"Niciuna",en:"Neither"},{ro:"Cea mai rapidă",en:"The faster one"}],a:1,e:{ro:"În interiorul grupului, partițiile se împart.",en:"Within a group, partitions are shared out."}},
+ {q:{ro:"Serviciul de e-mail e alt consumer group decât plățile. Ce primește?",en:"The email service is a different consumer group from payments. What does it receive?"},o:[{ro:"Doar mesajele necitite de plăți",en:"Only messages payments hasn't read"},{ro:"Nimic, plățile le-au consumat",en:"Nothing, payments consumed them"},{ro:"Toate mesajele, cu offset-urile lui proprii",en:"Every message, with its own offsets"},{ro:"Doar mesajele fără cheie",en:"Only keyless messages"}],a:2,e:{ro:"Mesajele nu se șterg la citire.",en:"Messages aren't deleted when read."}},
+ {q:{ro:"Topic cu 3 partiții, pornești 5 instanțe în același grup. Câte lucrează?",en:"A topic with 3 partitions; you start 5 instances in the same group. How many work?"},o:["5","3","1",{ro:"Depinde de cheie",en:"It depends on the key"}],a:1,e:{ro:"Paralelismul maxim = numărul de partiții.",en:"Maximum parallelism = the number of partitions."}},
+ {q:{ro:"Consumatorul cade după ce a procesat, dar înainte de commit. Ce urmează?",en:"The consumer crashes after processing but before committing. What next?"},o:[{ro:"Mesajul se pierde",en:"The message is lost"},{ro:"Kafka șterge mesajul",en:"Kafka deletes the message"},{ro:"Topic-ul se blochează",en:"The topic locks up"},{ro:"Mesajul e citit din nou (de aceea consumatorii trebuie să fie idempotenți)",en:"The message is read again (that's why consumers must be idempotent)"}],a:3,e:{ro:"Garanția at-least-once.",en:"The at-least-once guarantee."}},
+ {q:{ro:"Ce e lag-ul?",en:"What is lag?"},o:[{ro:"Câte mesaje mai are un grup de citit până e la zi",en:"How many messages a group has left to read to catch up"},{ro:"Latența rețelei",en:"Network latency"},{ro:"Numărul de brokeri căzuți",en:"The number of failed brokers"},{ro:"Mărimea unui mesaj",en:"A message's size"}],a:0,e:{ro:"Ultimul offset − offset-ul comis.",en:"Log end offset − committed offset."}}
+]
+};
+})();
+</script>
+<script src="../assets/engine.js?v=2"></script>
+<script src="../assets/labs-data.js?v=2"></script>
+<script src="../assets/lab.js?v=1"></script>
+<script type="module" src="../assets/auth.js?v=6"></script>
+</body>
+</html>

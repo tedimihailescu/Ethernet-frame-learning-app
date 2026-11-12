@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>IBM MQ și ActiveMQ</title>
+<meta name="description" content="Lecție interactivă: un mesaj de plată prin IBM MQ și ActiveMQ: coadă vs. topic, JMS, queue manager, canale, tranzacții, dead letter queue. / Interactive lesson: a payment message through IBM MQ and ActiveMQ.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<script>
+(function(){
+const BODY={ro:"&lt;plata id=\"P-5521\" suma=\"1200.00\" iban=\"RO49…\"/&gt;",en:"&lt;payment id=\"P-5521\" amount=\"1200.00\" iban=\"RO49…\"/&gt;"};
+const M1={msgId:"414d5120514d5f415050…01",body:BODY,pers:{ro:"PERSISTENT (scris în jurnalul de pe disc)",en:"PERSISTENT (written to the on-disk log)"},prio:"4",dest:"PAYMENTS",replyTo:"PAYMENTS.REPLY",qm:"QM_APP",chan:{ro:"APP.SVRCONN (canal client, port 1414, TLS)",en:"APP.SVRCONN (client channel, port 1414, TLS)"}};
+const M2={...M1,chan:undefined,dest:{ro:"PAYMENTS → coadă remote spre PAYMENTS.IN @ QM_CORE",en:"PAYMENTS → remote queue for PAYMENTS.IN @ QM_CORE"},xmitq:"QM_CORE.XMITQ",state:{ro:"put confirmat; mesajul așteaptă în coada de transmisie",en:"put committed; the message waits in the transmission queue"}};
+delete M2.chan;
+const M3={...M2,chan:{ro:"canal sender QM_APP.TO.QM_CORE → receiver (port 1414, TLS)",en:"sender channel QM_APP.TO.QM_CORE → receiver (port 1414, TLS)"},state:{ro:"lot (batch) confirmat de ambele capete: livrat o singură dată",en:"batch confirmed by both ends: delivered exactly once"}};
+const M4={msgId:M1.msgId,body:BODY,pers:M1.pers,prio:"4",dest:"PAYMENTS.IN",replyTo:"PAYMENTS.REPLY",qm:"QM_CORE",state:{ro:"în coadă · adâncime (CURDEPTH) = 1",en:"queued · depth (CURDEPTH) = 1"}};
+const M5={...M4,state:{ro:"citit sub syncpoint (tranzacție) → DB actualizată → COMMIT → scos din coadă",en:"read under syncpoint (transaction) → DB updated → COMMIT → removed from the queue"}};
+const M6={msgId:"414d5120514d5f434f52…7f",correl:M1.msgId,body:{ro:"&lt;raspuns id=\"P-5521\" stare=\"ACCEPTAT\"/&gt;",en:"&lt;reply id=\"P-5521\" status=\"ACCEPTED\"/&gt;"},dest:"PAYMENTS.REPLY",qm:"QM_CORE → QM_APP",state:{ro:"aplicația așteaptă răspunsul cu acest correlationId",en:"the app waits for the reply with this correlationId"}};
+const M7={msgId:"414d5120514d5f415050…09",body:{ro:"&lt;plata id=\"P-5530\" suma=\"abc\"/&gt;  ← sumă invalidă",en:"&lt;payment id=\"P-5530\" amount=\"abc\"/&gt;  ← invalid amount"},dest:"PAYMENTS.BACKOUT",qm:"QM_CORE",backout:{ro:"BackoutCount = 3 = BOTHRESH → mutat în coada de backout",en:"BackoutCount = 3 = BOTHRESH → moved to the backout queue"},state:{ro:"coada principală nu mai e blocată",en:"the main queue is no longer blocked"}};
+const M8={msgId:"414d5120514d5f434f52…a2",body:{ro:"{\"event\":\"PaymentAccepted\",\"id\":\"P-5521\"}",en:"{\"event\":\"PaymentAccepted\",\"id\":\"P-5521\"}"},dest:{ro:"topic PAYMENTS/EVENTS",en:"topic PAYMENTS/EVENTS"},qm:"QM_CORE",state:{ro:"o copie pentru fiecare abonat (abonament durabil)",en:"one copy per subscriber (durable subscription)"}};
+
+window.LESSON={
+docTitle:{ro:"IBM MQ și ActiveMQ",en:"IBM MQ and ActiveMQ"},
+eyebrow:{ro:"Lecție interactivă · Mesagerie",en:"Interactive lesson · Messaging"},
+title:{ro:"IBM MQ și ActiveMQ: drumul unui mesaj de plată",en:"IBM MQ and ActiveMQ: the journey of a payment message"},
+sub:{ro:"O aplicație de plăți trimite o instrucțiune spre sistemul bancar central, care noaptea poate fi oprit pentru mentenanță. Mesajul nu se poate pierde și nu se poate procesa de două ori. Urmărim mesajul prin IBM MQ: JMS, queue manager, coadă remote, canal, tranzacție, răspuns, mesaj otrăvit și publish/subscribe, apoi vedem aceleași idei în ActiveMQ și diferențele față de Kafka.",en:"A payments app sends an instruction to the core banking system, which may be down at night for maintenance. The message must not be lost or processed twice. We follow it through IBM MQ: JMS, the queue manager, a remote queue, a channel, a transaction, the reply, a poison message and publish/subscribe, then see the same ideas in ActiveMQ and how it all differs from Kafka."},
+meta:[{ro:"≈ 25 minute",en:"≈ 25 minutes"},{ro:"11 pași",en:"11 steps"},{ro:"8 întrebări",en:"8 questions"},{ro:"Intermediar",en:"Intermediate"}],
+goals:[{ro:"Coadă (point-to-point) vs. topic (publish/subscribe)",en:"Queue (point-to-point) vs topic (publish/subscribe)"},{ro:"Queue manager, coadă remote, coadă de transmisie și canal în IBM MQ",en:"Queue managers, remote queues, transmission queues and channels in IBM MQ"},{ro:"Mesaje persistente, tranzacții, request/reply și backout queue",en:"Persistent messages, transactions, request/reply and the backout queue"},{ro:"Aceleași concepte în ActiveMQ și când alegi MQ sau Kafka",en:"The same concepts in ActiveMQ, and when to pick MQ or Kafka"}],
+foot:{ro:"Nume de cozi, queue manageri și aplicații fictive. Lecția se leagă de lecția Kafka.",en:"Fictional queue, queue manager and app names. This lesson links to the Kafka lesson."},
+ui:{frameT:{ro:"Mesajul (live)",en:"The message (live)"},refT:{ro:"Comenzi și configurare",en:"Commands and configuration"},refLead:{ro:"Comenzi MQSC pentru IBM MQ, configurare ActiveMQ și un client JMS minimal.",en:"MQSC commands for IBM MQ, ActiveMQ configuration and a minimal JMS client."}},
+tryT:{ro:"Încearcă (runmqsc pe un queue manager de test)",en:"Try it (runmqsc on a test queue manager)"},
+legend:[["lg-app","MSG",{ro:"mesaj de aplicație",en:"application message"}],["lg-arp","XMIT",{ro:"între queue manageri",en:"between queue managers"}]],
+
+nodes:{
+  app:{type:"pod",name:"payments-api",lines:["JMS"]},
+  qm1:{type:"queue",name:"QM_APP",lines:["queue manager"]},
+  qm2:{type:"queue",name:"QM_CORE",lines:["queue manager"]},
+  core:{type:"server",name:"core-banking",lines:[{ro:"consumator",en:"consumer"}]},
+  dlq:{type:"box",name:"PAYMENTS.BACKOUT",lines:[{ro:"mesaje otrăvite",en:"poison messages"}]},
+  notif:{type:"pod",name:"notifications",lines:[{ro:"abonat la topic",en:"topic subscriber"}]}
+},
+links:[["app","qm1"],["qm1","qm2"],["qm2","core"],["qm2","dlq"],["qm2","notif"]],
+layouts:{
+  wide:{vb:[0,0,1000,480],n:{app:[90,200],qm1:[340,200],qm2:[620,200],core:[890,90],dlq:[890,330],notif:[620,400]},
+    texts:[{x:480,y:180,t:{ro:"canal",en:"channel"}}]},
+  narrow:{vb:[0,0,360,780],n:{app:[180,60],qm1:[180,220],qm2:[180,400],core:[70,590],dlq:[290,590],notif:[180,720]}}
+},
+groups:[
+  {id:"msg",color:"l7",fields:["msgId","correl","body","pers","prio"],name:{ro:"Mesajul (antet + conținut)",en:"The message (header + body)"},short:"MSG",grow:3},
+  {id:"dest",color:"l3",fields:["dest","replyTo"],name:{ro:"Destinație",en:"Destination"},short:"Dest",grow:2},
+  {id:"route",color:"arp",fields:["qm","xmitq","chan"],name:{ro:"Pe unde trece",en:"Where it travels"},short:{ro:"Drum",en:"Route"},grow:2},
+  {id:"state",color:"l4",fields:["backout","state"],name:{ro:"Stare",en:"State"},short:{ro:"Stare",en:"State"},grow:2}
+],
+fieldLabels:{msgId:"MessageId",correl:"CorrelationId",body:{ro:"Conținut",en:"Body"},pers:{ro:"Persistență",en:"Persistence"},prio:{ro:"Prioritate",en:"Priority"},dest:{ro:"Coadă / topic",en:"Queue / topic"},replyTo:"ReplyTo",qm:"Queue manager",xmitq:{ro:"Coadă de transmisie",en:"Transmission queue"},chan:{ro:"Canal",en:"Channel"},backout:"Backout",state:{ro:"Ce se întâmplă",en:"What happens"}},
+pdu:f=>f.correl?{badge:{ro:"Mesaj de răspuns",en:"Reply message"},tok:["REPLY","k-app"]}:f.xmitq&&f.chan?{badge:{ro:"Mesaj pe canal",en:"Message on a channel"},tok:["XMIT","k-arp"]}:f.backout?{badge:{ro:"Mesaj otrăvit",en:"Poison message"},tok:["POISON","k-tcp"]}:{badge:{ro:"Mesaj JMS / MQ",en:"JMS / MQ message"},tok:["MSG","k-app"]},
+
+init:{},
+tables:{
+  kinds:{title:{ro:"Coadă vs. topic",en:"Queue vs topic"},cols:["",{ro:"Coadă (point-to-point)",en:"Queue (point-to-point)"},{ro:"Topic (publish/subscribe)",en:"Topic (publish/subscribe)"}],plain:[0,1,2],
+    rows:()=>[[{ro:"Cine primește",en:"Who receives"},{ro:"un singur consumator",en:"exactly one consumer"},{ro:"fiecare abonat, câte o copie",en:"every subscriber, one copy each"}],[{ro:"Exemplu",en:"Example"},{ro:"execută plata P-5521",en:"execute payment P-5521"},{ro:"„plata P-5521 a fost acceptată”",en:"\"payment P-5521 was accepted\""}],[{ro:"După citire",en:"After reading"},{ro:"mesajul dispare din coadă",en:"the message leaves the queue"},{ro:"dispare după ce l-au primit toți abonații",en:"gone once every subscriber has it"}]]},
+  qapp:{title:{ro:"Cozile pe QM_APP",en:"Queues on QM_APP"},cols:[{ro:"Nume",en:"Name"},{ro:"Tip",en:"Type"},{ro:"Ce face",en:"What it does"}],plain:[2],
+    rows:()=>[["PAYMENTS","QREMOTE",{ro:"alias spre PAYMENTS.IN de pe QM_CORE",en:"points to PAYMENTS.IN on QM_CORE"}],["QM_CORE.XMITQ","QLOCAL (XMITQ)",{ro:"ține mesajele până le ia canalul",en:"holds messages until the channel takes them"}],["PAYMENTS.REPLY","QLOCAL",{ro:"aici vin răspunsurile",en:"replies arrive here"}]]},
+  qcore:{title:{ro:"Cozile pe QM_CORE",en:"Queues on QM_CORE"},cols:[{ro:"Nume",en:"Name"},{ro:"Tip",en:"Type"},"CURDEPTH",{ro:"Setări",en:"Settings"}],plain:[3],
+    rows:()=>[["PAYMENTS.IN","QLOCAL","1","BOTHRESH(3) BOQNAME(PAYMENTS.BACKOUT)"],["PAYMENTS.BACKOUT","QLOCAL","0",{ro:"citită de echipa de suport",en:"read by the support team"}],["SYSTEM.DEAD.LETTER.QUEUE","QLOCAL","0",{ro:"DLQ-ul queue manager-ului",en:"the queue manager's DLQ"}]]},
+  map:{title:{ro:"IBM MQ ↔ ActiveMQ",en:"IBM MQ ↔ ActiveMQ"},cols:["IBM MQ","ActiveMQ (Classic / Artemis)"],plain:[0,1],
+    rows:()=>[["Queue manager","Broker"],["QLOCAL / topic","queue:// / topic:// (Artemis: address + queue)"],["SVRCONN, port 1414","OpenWire / AMQP / STOMP / MQTT, port 61616"],[{ro:"Canal sender/receiver între QM-uri",en:"Sender/receiver channel between QMs"},{ro:"Network of brokers / bridge",en:"Network of brokers / bridge"}],["BOTHRESH + BOQNAME","redeliveryPolicy + ActiveMQ.DLQ"],["runmqsc, MQ Explorer","web console, artemis CLI"]]}
+},
+log:{title:{ro:"Jurnalul mesajului",en:"Message log"},lead:{ro:"Mesajul trece prin două queue manager-e, dar aplicația vede o singură coadă: PAYMENTS.",en:"The message crosses two queue managers, but the app sees a single queue: PAYMENTS."},first:{ro:"Pas",en:"Step"},minWidth:560,
+  cols:[{h:"Queue manager",v:f=>f.qm||"",cls:"ip"},{h:{ro:"Coadă",en:"Queue"},v:f=>f.xmitq&&f.chan?f.xmitq:f.dest,cls:"mac"},{h:{ro:"Stare",en:"State"},v:f=>f.state||"",cls:""}]},
+
+steps:[
+{at:["qm1","qm2"],frame:null,kind:"none",tables:["kinds"],who:{ro:"Ideea",en:"The idea"},
+ title:{ro:"De ce o coadă între aplicații",en:"Why a queue between applications"},
+ body:{ro:`<p>Sistemul bancar central (<em>core-banking</em>) e oprit în fiecare noapte o oră pentru mentenanță. Dacă aplicația de plăți l-ar chema direct, plățile din ora aceea ar eșua.</p>
+<p>Cu un <strong>broker de mesaje</strong> (IBM MQ, ActiveMQ), aplicația pune plata într-o <strong>coadă</strong> și merge mai departe. Brokerul o <strong>păstrează în siguranță</strong>, pe disc, până când core-banking o ia. Cele două sisteme nu trebuie să funcționeze în același timp.</p>
+<p>Brokerele au două tipuri de destinații: <strong>cozi</strong> (fiecare mesaj ajunge la un singur consumator) și <strong>topic-uri</strong> (fiecare abonat primește o copie).</p>`,
+ en:`<p>The core banking system is down for an hour every night for maintenance. If the payments app called it directly, payments in that hour would fail.</p>
+<p>With a <strong>message broker</strong> (IBM MQ, ActiveMQ), the app puts the payment on a <strong>queue</strong> and moves on. The broker <strong>keeps it safe</strong>, on disk, until core-banking takes it. The two systems don't need to be up at the same time.</p>
+<p>Brokers have two kinds of destination: <strong>queues</strong> (each message reaches one consumer) and <strong>topics</strong> (each subscriber gets a copy).</p>`}},
+
+{at:"app",frame:M1,kind:"m",move:[[["app","qm1"]]],log:{ro:"payments-api → QM_APP",en:"payments-api → QM_APP"},who:"payments-api",
+ title:{ro:"Aplicația trimite mesajul prin JMS",en:"The app sends the message via JMS"},
+ body:{ro:`<p>payments-api e o aplicație Java. Folosește <strong>JMS</strong>, interfața standard pentru mesagerie în Java (aceeași pentru IBM MQ și ActiveMQ). Se conectează la queue manager-ul local, <strong>QM_APP</strong>, printr-un <strong>canal client</strong> (SVRCONN) pe portul 1414, cu TLS.</p>
+<p>Mesajul are un <strong>antet</strong> și un <strong>conținut</strong>:</p>
+<ul><li><strong>MessageId</strong>: unic, dat de MQ;</li>
+<li><strong>PERSISTENT</strong>: scris pe disc, supraviețuiește unei reporniri (o plată nu se poate pierde);</li>
+<li><strong>ReplyTo</strong>: unde vrea aplicația să primească răspunsul.</li></ul>`,
+ en:`<p>payments-api is a Java app. It uses <strong>JMS</strong>, the standard messaging interface in Java (the same for IBM MQ and ActiveMQ). It connects to the local queue manager, <strong>QM_APP</strong>, through a <strong>client channel</strong> (SVRCONN) on port 1414, with TLS.</p>
+<p>The message has a <strong>header</strong> and a <strong>body</strong>:</p>
+<ul><li><strong>MessageId</strong>: unique, assigned by MQ;</li>
+<li><strong>PERSISTENT</strong>: written to disk, survives a restart (a payment mustn't be lost);</li>
+<li><strong>ReplyTo</strong>: where the app wants the reply.</li></ul>`},
+ more:{ro:`<p>Un <strong>queue manager</strong> (QM) e „serverul” IBM MQ: deține cozile, jurnalul de pe disc și canalele. O firmă are de obicei mai mulți, câte unul lângă fiecare sistem mare.</p>`,
+  en:`<p>A <strong>queue manager</strong> (QM) is the IBM MQ "server": it owns the queues, the on-disk log and the channels. A company usually has several, one next to each large system.</p>`}},
+
+{at:"qm1",frame:M2,kind:"m",tables:["qapp"],hl:{qapp:"QM_CORE.XMITQ"},log:{ro:"în coada de transmisie",en:"into the transmission queue"},who:"QM_APP",
+ title:{ro:"Coada remote: aplicația nu știe unde e core-banking",en:"The remote queue: the app doesn't know where core-banking is"},
+ body:{ro:`<p>Pentru aplicație, <code>PAYMENTS</code> e o coadă obișnuită. De fapt e o <strong>coadă remote</strong> (QREMOTE): o definiție care spune „mesajele astea merg la coada <code>PAYMENTS.IN</code> de pe <strong>QM_CORE</strong>”.</p>
+<p>QM_APP pune mesajul în <strong>coada de transmisie</strong> <code>QM_CORE.XMITQ</code> și îl scrie în jurnalul de pe disc. Apoi confirmă aplicației: <strong>put reușit</strong>. Din acest moment, mesajul e responsabilitatea MQ.</p>
+<p class="key">Dacă core-banking e oprit sau rețeaua spre el pică, mesajul doar <strong>așteaptă</strong> în XMITQ. Nu se pierde și aplicația nu primește eroare.</p>`,
+ en:`<p>To the app, <code>PAYMENTS</code> is an ordinary queue. It's actually a <strong>remote queue</strong> (QREMOTE): a definition saying "these messages go to the <code>PAYMENTS.IN</code> queue on <strong>QM_CORE</strong>".</p>
+<p>QM_APP puts the message on the <strong>transmission queue</strong> <code>QM_CORE.XMITQ</code> and writes it to the on-disk log. Then it confirms to the app: <strong>put succeeded</strong>. From this moment the message is MQ's responsibility.</p>
+<p class="key">If core-banking is down or the network to it fails, the message simply <strong>waits</strong> in the XMITQ. It isn't lost and the app gets no error.</p>`}},
+
+{at:"qm1",frame:M3,kind:"x",move:[[["qm1","qm2"]]],log:{ro:"pe canal spre QM_CORE",en:"over the channel to QM_CORE"},who:{ro:"Canal",en:"Channel"},
+ title:{ro:"Canalul mută mesajul între queue manager-e",en:"The channel moves the message between queue managers"},
+ body:{ro:`<p>Între QM_APP și QM_CORE există o pereche de <strong>canale</strong>: un canal <strong>sender</strong> pe QM_APP și un canal <strong>receiver</strong> pe QM_CORE. Canalul sender citește din XMITQ și trimite mesajele prin TCP (cu TLS).</p>
+<p>Mesajele merg în <strong>loturi</strong> (batches). Ambele capete confirmă fiecare lot înainte ca mesajele să fie șterse din XMITQ, deci un mesaj persistent ajunge <strong>exact o dată</strong>, chiar dacă rețeaua cade la mijloc.</p>`,
+ en:`<p>Between QM_APP and QM_CORE there's a pair of <strong>channels</strong>: a <strong>sender</strong> channel on QM_APP and a <strong>receiver</strong> channel on QM_CORE. The sender channel reads from the XMITQ and sends the messages over TCP (with TLS).</p>
+<p>Messages travel in <strong>batches</strong>. Both ends confirm each batch before the messages are removed from the XMITQ, so a persistent message arrives <strong>exactly once</strong>, even if the network drops halfway.</p>`},
+ try:[{cmd:"DISPLAY CHSTATUS(QM_APP.TO.QM_CORE)",d:{ro:"În runmqsc: canalul e RUNNING, RETRYING sau STOPPED?",en:"In runmqsc: is the channel RUNNING, RETRYING or STOPPED?"}}]},
+
+{at:"qm2",frame:M4,kind:"m",tables:["qcore"],hl:{qcore:"PAYMENTS.IN"},log:{ro:"în PAYMENTS.IN",en:"into PAYMENTS.IN"},who:"QM_CORE",
+ title:{ro:"Mesajul ajunge în coada locală",en:"The message lands in the local queue"},
+ body:{ro:`<p>QM_CORE pune mesajul în coada locală <code>PAYMENTS.IN</code>. Adâncimea cozii (<code>CURDEPTH</code>) devine 1.</p>
+<p>Adâncimea e cea mai importantă metrică: dacă tot crește, consumatorul e oprit sau prea lent. Coada are și o limită, <code>MAXDEPTH</code>; dacă e plină, mesajele noi ajung în <strong>dead letter queue</strong> sau aplicația primește eroare.</p>`,
+ en:`<p>QM_CORE puts the message on the local queue <code>PAYMENTS.IN</code>. The queue depth (<code>CURDEPTH</code>) becomes 1.</p>
+<p>Depth is the key metric: if it keeps rising, the consumer is down or too slow. The queue also has a limit, <code>MAXDEPTH</code>; when it's full, new messages go to the <strong>dead letter queue</strong> or the app gets an error.</p>`},
+ try:[{cmd:"DISPLAY QLOCAL(PAYMENTS.IN) CURDEPTH IPPROCS",d:{ro:"Câte mesaje sunt în coadă și câte aplicații o citesc.",en:"How many messages are queued and how many apps are reading it."}}]},
+
+{at:"core",frame:M5,kind:"m",move:[[["qm2","core"]]],log:{ro:"core-banking procesează",en:"core-banking processes"},who:"core-banking",
+ title:{ro:"Consumatorul citește într-o tranzacție",en:"The consumer reads inside a transaction"},
+ body:{ro:`<p>core-banking a revenit după mentenanță și citește mesajul <strong>sub syncpoint</strong> (o sesiune JMS tranzacționată): mesajul e „rezervat”, dar nu încă șters.</p>
+<ol><li>Verifică plata și actualizează conturile în baza de date.</li>
+<li>Dă <strong>COMMIT</strong>: abia acum mesajul dispare din coadă.</li></ol>
+<p>Dacă procesul cade între 1 și 2, tranzacția se anulează și mesajul <strong>revine în coadă</strong>, ca să fie procesat din nou. Pentru siguranță deplină, baza de date și MQ pot fi în aceeași tranzacție (XA / two-phase commit) sau consumatorul verifică dacă plata P-5521 a fost deja făcută.</p>`,
+ en:`<p>core-banking is back after maintenance and reads the message <strong>under syncpoint</strong> (a transacted JMS session): the message is "reserved" but not yet deleted.</p>
+<ol><li>It checks the payment and updates the accounts in the database.</li>
+<li>It issues a <strong>COMMIT</strong>: only now does the message leave the queue.</li></ol>
+<p>If the process dies between 1 and 2, the transaction rolls back and the message <strong>returns to the queue</strong> to be processed again. For full safety, the database and MQ can share one transaction (XA / two-phase commit), or the consumer checks whether payment P-5521 was already done.</p>`}},
+
+{at:"core",frame:M6,kind:"m",move:[[["core","qm2"]],[["qm2","qm1"]]],log:{ro:"răspunsul",en:"the reply"},who:"core-banking",
+ title:{ro:"Request / reply: răspunsul găsește cererea",en:"Request / reply: the reply finds its request"},
+ body:{ro:`<p>Aplicația de plăți vrea să știe dacă plata a fost acceptată. core-banking trimite un mesaj de <strong>răspuns</strong> în coada din <code>ReplyTo</code>, <code>PAYMENTS.REPLY</code>.</p>
+<p>Truc important: în <strong>CorrelationId</strong> pune <strong>MessageId-ul cererii</strong>. payments-api, care poate avea sute de cereri în așteptare, citește din coada de răspunsuri doar mesajul cu acel CorrelationId și știe exact la ce plată se referă.</p>`,
+ en:`<p>The payments app wants to know whether the payment was accepted. core-banking sends a <strong>reply</strong> message to the queue named in <code>ReplyTo</code>, <code>PAYMENTS.REPLY</code>.</p>
+<p>The key trick: it puts the <strong>request's MessageId</strong> into the <strong>CorrelationId</strong>. payments-api, which may have hundreds of requests pending, reads from the reply queue only the message with that CorrelationId and knows exactly which payment it's about.</p>`}},
+
+{at:"qm2",frame:M7,kind:"m",move:[[["qm2","core"]],[["core","qm2"]],[["qm2","dlq"]]],marks:{core:{k:"drop",t:{ro:"eroare ×3",en:"error ×3"}}},tables:["qcore"],hl:{qcore:"PAYMENTS.BACKOUT"},log:{ro:"mesaj otrăvit → backout",en:"poison message → backout"},who:{ro:"Mesaj otrăvit",en:"Poison message"},
+ title:{ro:"Mesajul otrăvit și coada de backout",en:"The poison message and the backout queue"},
+ body:{ro:`<p>Un alt mesaj are suma <code>"abc"</code>. core-banking dă eroare, tranzacția se anulează, mesajul revine în coadă… și e citit din nou, și dă iar eroare. Fără o regulă, s-ar învârti la nesfârșit și ar <strong>bloca</strong> toate plățile din spatele lui.</p>
+<p>MQ numără încercările în <strong>BackoutCount</strong>. Când ajunge la pragul cozii (<code>BOTHRESH(3)</code>), mesajul e mutat în <strong>coada de backout</strong> <code>PAYMENTS.BACKOUT</code>. Coada principală merge mai departe, iar echipa de suport analizează mesajul și îl retrimite după corectare.</p>`,
+ en:`<p>Another message has the amount <code>"abc"</code>. core-banking errors, the transaction rolls back, the message returns to the queue… is read again, and errors again. With no rule it would loop forever and <strong>block</strong> every payment behind it.</p>
+<p>MQ counts the attempts in <strong>BackoutCount</strong>. When it reaches the queue's threshold (<code>BOTHRESH(3)</code>), the message is moved to the <strong>backout queue</strong> <code>PAYMENTS.BACKOUT</code>. The main queue carries on, and the support team investigates the message and resubmits it once fixed.</p>`},
+ more:{ro:`<p>În IBM MQ, mutarea în coada de backout e făcută de clientul JMS (sau de aplicație), pe baza atributelor cozii. Separat, queue manager-ul are o <strong>dead letter queue</strong> (<code>SYSTEM.DEAD.LETTER.QUEUE</code>) pentru mesajele care nu pot fi livrate deloc (coadă inexistentă, coadă plină).</p>`,
+  en:`<p>In IBM MQ, the move to the backout queue is done by the JMS client (or the app), based on the queue's attributes. Separately, the queue manager has a <strong>dead letter queue</strong> (<code>SYSTEM.DEAD.LETTER.QUEUE</code>) for messages that can't be delivered at all (missing queue, full queue).</p>`}},
+
+{at:"qm2",frame:M8,kind:"m",move:[[["qm2","notif"]]],tables:["kinds"],log:{ro:"publicare pe topic",en:"publish to topic"},who:{ro:"Publish / subscribe",en:"Publish / subscribe"},
+ title:{ro:"Topic: cine e abonat primește o copie",en:"Topic: every subscriber gets a copy"},
+ body:{ro:`<p>După ce acceptă plata, core-banking <strong>publică</strong> un eveniment pe topic-ul <code>PAYMENTS/EVENTS</code>. Nu știe cine îl citește.</p>
+<p>Serviciul de notificări are un <strong>abonament durabil</strong>: dacă e oprit, MQ îi păstrează mesajele până revine. Mâine se poate abona și serviciul antifraudă, fără nicio schimbare în core-banking: fiecare abonat primește <strong>propria copie</strong>.</p>`,
+ en:`<p>After accepting the payment, core-banking <strong>publishes</strong> an event on the <code>PAYMENTS/EVENTS</code> topic. It doesn't know who reads it.</p>
+<p>The notifications service has a <strong>durable subscription</strong>: if it's down, MQ keeps its messages until it returns. Tomorrow the anti-fraud service can subscribe too, with no change to core-banking: each subscriber gets <strong>its own copy</strong>.</p>`}},
+
+{at:["qm1","qm2"],frame:null,kind:"none",tables:["map"],who:"ActiveMQ",
+ title:{ro:"Aceleași idei în ActiveMQ",en:"The same ideas in ActiveMQ"},
+ body:{ro:`<p><strong>Apache ActiveMQ</strong> e un broker open-source cu aceleași concepte: cozi, topic-uri, mesaje persistente, JMS, tranzacții, request/reply. Codul JMS al aplicației arată aproape la fel; se schimbă doar <em>ConnectionFactory</em>-ul.</p>
+<ul><li>Un <strong>broker</strong> în loc de queue manager; mai mulți brokeri se leagă într-o <em>network of brokers</em>.</li>
+<li>Protocoale: <strong>OpenWire</strong> (nativ), <strong>AMQP</strong>, STOMP, MQTT; portul implicit 61616.</li>
+<li>Mesajele care eșuează de prea multe ori merg, după <em>redeliveryPolicy</em>, în <code>ActiveMQ.DLQ</code>.</li>
+<li>Două variante: <strong>Classic</strong> și <strong>Artemis</strong> (noua generație, folosită și în Red Hat AMQ).</li></ul>`,
+ en:`<p><strong>Apache ActiveMQ</strong> is an open-source broker with the same concepts: queues, topics, persistent messages, JMS, transactions, request/reply. The app's JMS code looks almost the same; only the <em>ConnectionFactory</em> changes.</p>
+<ul><li>A <strong>broker</strong> instead of a queue manager; several brokers link into a <em>network of brokers</em>.</li>
+<li>Protocols: <strong>OpenWire</strong> (native), <strong>AMQP</strong>, STOMP, MQTT; default port 61616.</li>
+<li>Messages that fail too many times go, per the <em>redeliveryPolicy</em>, to <code>ActiveMQ.DLQ</code>.</li>
+<li>Two flavours: <strong>Classic</strong> and <strong>Artemis</strong> (the new generation, also used in Red Hat AMQ).</li></ul>`}},
+
+{at:["qm1","qm2","core"],frame:null,kind:"none",summary:true,
+ title:{ro:"MQ sau Kafka? Și recapitulare",en:"MQ or Kafka? And a recap"},
+ body:{ro:`<div class="scroll"><table class="cmp"><thead><tr><th></th><th>IBM MQ / ActiveMQ</th><th>Kafka</th></tr></thead><tbody>
+<tr><td>Model</td><td>cozi: mesajul dispare după procesare</td><td>jurnal: mesajele rămân, fiecare grup are offset-ul lui</td></tr>
+<tr><td>Bun pentru</td><td>comenzi, plăți, tranzacții, request/reply</td><td>fluxuri mari de evenimente, reluare, analiză</td></tr>
+<tr><td>Garanții</td><td>tranzacții, exact o dată între QM-uri</td><td>at-least-once; exactly-once cu tranzacții Kafka</td></tr>
+<tr><td>Reluare</td><td>nu (mesajul a plecat)</td><td>da (muți offset-ul)</td></tr></tbody></table></div>
+<ul><li><strong>Coadă</strong> = un consumator; <strong>topic</strong> = fiecare abonat.</li>
+<li>IBM MQ: aplicația → <strong>queue manager</strong> → coadă remote → <strong>XMITQ</strong> → <strong>canal</strong> → coada locală.</li>
+<li>Mesaje <strong>persistente</strong> + citire în <strong>tranzacție</strong> = nicio plată pierdută.</li>
+<li><strong>CorrelationId</strong> leagă răspunsul de cerere; <strong>BOTHRESH</strong> + coada de backout scot mesajele otrăvite.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Mergi la laborator ↓</button></p>`,
+ en:`<div class="scroll"><table class="cmp"><thead><tr><th></th><th>IBM MQ / ActiveMQ</th><th>Kafka</th></tr></thead><tbody>
+<tr><td>Model</td><td>queues: the message is gone after processing</td><td>log: messages stay, each group has its own offset</td></tr>
+<tr><td>Good for</td><td>commands, payments, transactions, request/reply</td><td>large event streams, replay, analytics</td></tr>
+<tr><td>Guarantees</td><td>transactions, exactly once between QMs</td><td>at-least-once; exactly-once with Kafka transactions</td></tr>
+<tr><td>Replay</td><td>no (the message is gone)</td><td>yes (move the offset)</td></tr></tbody></table></div>
+<ul><li><strong>Queue</strong> = one consumer; <strong>topic</strong> = every subscriber.</li>
+<li>IBM MQ: app → <strong>queue manager</strong> → remote queue → <strong>XMITQ</strong> → <strong>channel</strong> → local queue.</li>
+<li><strong>Persistent</strong> messages + reading in a <strong>transaction</strong> = no payment lost.</li>
+<li><strong>CorrelationId</strong> ties the reply to the request; <strong>BOTHRESH</strong> + a backout queue remove poison messages.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Go to the lab ↓</button></p>`}}
+],
+
+reference:(T,lang)=>{
+  const ro=lang==="ro";
+  return `<div class="ref-grid"><section class="card refcard"><h2>IBM MQ: MQSC</h2>
+<pre class="yaml"><span class="c">* QM_APP: ${ro?"coada remote și canalul sender":"the remote queue and the sender channel"}</span>
+DEFINE QLOCAL(QM_CORE.XMITQ) USAGE(XMITQ)
+DEFINE QREMOTE(PAYMENTS) RNAME(PAYMENTS.IN) RQMNAME(QM_CORE) XMITQ(QM_CORE.XMITQ)
+DEFINE CHANNEL(QM_APP.TO.QM_CORE) CHLTYPE(SDR) +
+       CONNAME('core-mq.example.com(1414)') XMITQ(QM_CORE.XMITQ) +
+       SSLCIPH(ANY_TLS13)
+
+<span class="c">* QM_CORE: ${ro?"coada locală cu backout":"the local queue with backout"}</span>
+DEFINE QLOCAL(PAYMENTS.IN) DEFPSIST(YES) MAXDEPTH(50000) +
+       BOTHRESH(3) BOQNAME(PAYMENTS.BACKOUT)
+DEFINE QLOCAL(PAYMENTS.BACKOUT)
+DEFINE CHANNEL(QM_APP.TO.QM_CORE) CHLTYPE(RCVR) SSLCIPH(ANY_TLS13)
+
+<span class="c">* ${ro?"verificări":"checks"}</span>
+DISPLAY QLOCAL(PAYMENTS.IN) CURDEPTH IPPROCS
+DISPLAY CHSTATUS(*)</pre></section>
+<section class="card refcard"><h2>JMS (Java)</h2>
+<pre class="yaml">try (JMSContext ctx = factory.createContext(JMSContext.SESSION_TRANSACTED)) {
+  Queue q = ctx.createQueue("PAYMENTS");
+  TextMessage m = ctx.createTextMessage(xml);
+  m.setJMSReplyTo(ctx.createQueue("PAYMENTS.REPLY"));
+  ctx.createProducer()
+     .setDeliveryMode(DeliveryMode.PERSISTENT)
+     .send(q, m);
+  ctx.commit();
+}</pre>
+<h3>ActiveMQ Classic: redelivery</h3>
+<pre class="yaml">&lt;redeliveryPolicy maximumRedeliveries="3"
+    initialRedeliveryDelay="1000" useExponentialBackOff="true"/&gt;
+<span class="c">&lt;!-- ${ro?"după 3 încercări → ActiveMQ.DLQ":"after 3 attempts → ActiveMQ.DLQ"} --&gt;</span></pre></section></div>`;
+},
+
+gloss:[
+ [{ro:"Broker de mesaje",en:"Message broker"},null,{ro:"Server care primește, păstrează și livrează mesaje între aplicații.",en:"A server that receives, stores and delivers messages between apps."}],
+ ["IBM MQ",null,{ro:"Brokerul de mesaje IBM, foarte folosit în bănci și industrie.",en:"IBM's message broker, widely used in banking and industry."}],
+ ["ActiveMQ","Apache ActiveMQ",{ro:"Broker open-source compatibil JMS (Classic și Artemis).",en:"An open-source JMS-compatible broker (Classic and Artemis)."}],
+ ["JMS","Jakarta / Java Message Service",{ro:"Interfața standard Java pentru trimis și primit mesaje.",en:"The standard Java interface for sending and receiving messages."}],
+ ["Queue manager","QM",{ro:"Serverul IBM MQ care deține cozile, jurnalul și canalele.",en:"The IBM MQ server that owns the queues, log and channels."}],
+ [{ro:"Coadă",en:"Queue"},null,{ro:"Destinație point-to-point: fiecare mesaj e citit de un singur consumator.",en:"A point-to-point destination: each message is read by one consumer."}],
+ ["Topic",null,{ro:"Destinație publish/subscribe: fiecare abonat primește o copie.",en:"A publish/subscribe destination: each subscriber gets a copy."}],
+ ["QREMOTE",{ro:"coadă remote",en:"remote queue"},{ro:"Definiție locală care trimite mesajele spre o coadă de pe alt QM.",en:"A local definition that sends messages to a queue on another QM."}],
+ ["XMITQ",{ro:"coadă de transmisie",en:"transmission queue"},{ro:"Coada în care așteaptă mesajele până le ia canalul.",en:"The queue where messages wait until the channel takes them."}],
+ [{ro:"Canal",en:"Channel"},null,{ro:"Legătura dintre două QM-uri (sender/receiver) sau dintre client și QM (SVRCONN).",en:"The link between two QMs (sender/receiver) or between a client and a QM (SVRCONN)."}],
+ [{ro:"Mesaj persistent",en:"Persistent message"},null,{ro:"Mesaj scris pe disc, care supraviețuiește unei reporniri.",en:"A message written to disk that survives a restart."}],
+ ["Syncpoint",{ro:"tranzacție",en:"transaction"},{ro:"Mesajul e scos din coadă doar la COMMIT; la rollback revine.",en:"The message leaves the queue only on COMMIT; on rollback it returns."}],
+ ["CorrelationId",null,{ro:"Câmp care leagă un răspuns de cererea lui.",en:"A field tying a reply to its request."}],
+ ["BackoutCount",null,{ro:"De câte ori a fost un mesaj anulat (rollback).",en:"How many times a message has been rolled back."}],
+ ["DLQ","Dead Letter Queue",{ro:"Coada pentru mesajele care nu pot fi livrate sau procesate.",en:"The queue for messages that can't be delivered or processed."}]
+],
+glossEx:{
+ "Queue manager":{ro:"QM_APP lângă aplicația de plăți, QM_CORE lângă core-banking.",en:"QM_APP next to the payments app, QM_CORE next to core-banking."},
+ "CorrelationId":{ro:"răspunsul are CorrelationId = MessageId-ul cererii.",en:"the reply has CorrelationId = the request's MessageId."}
+},
+
+quiz:[
+ {q:{ro:"Care e diferența dintre o coadă și un topic?",en:"What's the difference between a queue and a topic?"},o:[{ro:"Coada e mai rapidă",en:"A queue is faster"},{ro:"Coada: un consumator per mesaj; topic: fiecare abonat primește o copie",en:"Queue: one consumer per message; topic: every subscriber gets a copy"},{ro:"Topic-ul nu păstrează mesaje",en:"Topics don't store messages"},{ro:"Nicio diferență",en:"No difference"}],a:1,e:{ro:"Point-to-point vs. publish/subscribe.",en:"Point-to-point vs publish/subscribe."}},
+ {q:{ro:"core-banking e oprit pentru mentenanță. Ce se întâmplă cu plățile trimise?",en:"core-banking is down for maintenance. What happens to payments sent meanwhile?"},o:[{ro:"Se pierd",en:"They're lost"},{ro:"Aplicația primește eroare",en:"The app gets an error"},{ro:"Așteaptă în siguranță în coadă până revine",en:"They wait safely in the queue until it returns"},{ro:"Sunt trimise înapoi",en:"They're sent back"}],a:2,e:{ro:"Asta e decuplarea în timp.",en:"That's decoupling in time."}},
+ {q:{ro:"Ce face o coadă remote (QREMOTE) în IBM MQ?",en:"What does a remote queue (QREMOTE) do in IBM MQ?"},o:[{ro:"Trimite mesajele spre o coadă de pe alt queue manager",en:"Sends messages to a queue on another queue manager"},{ro:"Șterge mesajele vechi",en:"Deletes old messages"},{ro:"Criptează mesajele",en:"Encrypts messages"},{ro:"E un topic",en:"It's a topic"}],a:0,e:{ro:"Prin coada de transmisie și canal.",en:"Through the transmission queue and channel."}},
+ {q:{ro:"De ce o plată e trimisă ca mesaj PERSISTENT?",en:"Why is a payment sent as a PERSISTENT message?"},o:[{ro:"Ca să fie mai mică",en:"To make it smaller"},{ro:"Ca să ajungă la toți abonații",en:"To reach every subscriber"},{ro:"Ca să nu aibă nevoie de coadă",en:"So it needs no queue"},{ro:"Ca să supraviețuiască unei reporniri a brokerului",en:"To survive a broker restart"}],a:3,e:{ro:"E scrisă în jurnalul de pe disc.",en:"It's written to the on-disk log."}},
+ {q:{ro:"Consumatorul cade după ce a citit mesajul, dar înainte de COMMIT. Ce se întâmplă?",en:"The consumer dies after reading the message but before COMMIT. What happens?"},o:[{ro:"Mesajul se pierde",en:"The message is lost"},{ro:"Mesajul revine în coadă",en:"The message returns to the queue"},{ro:"Mesajul ajunge direct în DLQ",en:"The message goes straight to the DLQ"},{ro:"Coada se șterge",en:"The queue is deleted"}],a:1,e:{ro:"Rollback: va fi procesat din nou.",en:"Rollback: it will be processed again."}},
+ {q:{ro:"Cum află aplicația care răspuns e pentru care cerere?",en:"How does the app know which reply belongs to which request?"},o:[{ro:"După ora sosirii",en:"By arrival time"},{ro:"După prioritate",en:"By priority"},{ro:"CorrelationId-ul răspunsului = MessageId-ul cererii",en:"The reply's CorrelationId = the request's MessageId"},{ro:"Nu poate",en:"It can't"}],a:2,e:{ro:"Modelul request/reply.",en:"The request/reply pattern."}},
+ {q:{ro:"Un mesaj dă eroare la fiecare încercare. Ce îl oprește să blocheze coada?",en:"A message fails on every attempt. What stops it from blocking the queue?"},o:[{ro:"BOTHRESH: după N încercări e mutat în coada de backout",en:"BOTHRESH: after N attempts it's moved to the backout queue"},{ro:"MAXDEPTH",en:"MAXDEPTH"},{ro:"Prioritatea",en:"The priority"},{ro:"Nimic",en:"Nothing"}],a:0,e:{ro:"În ActiveMQ: redeliveryPolicy + ActiveMQ.DLQ.",en:"In ActiveMQ: redeliveryPolicy + ActiveMQ.DLQ."}},
+ {q:{ro:"Vrei să reprocesezi evenimentele de ieri. Ce e mai potrivit?",en:"You want to reprocess yesterday's events. What fits better?"},o:[{ro:"O coadă IBM MQ",en:"An IBM MQ queue"},{ro:"Un canal sender",en:"A sender channel"},{ro:"O coadă de backout",en:"A backout queue"},{ro:"Kafka, mutând offset-ul grupului înapoi",en:"Kafka, by moving the group's offset back"}],a:3,e:{ro:"Într-o coadă MQ mesajul procesat a dispărut.",en:"In an MQ queue a processed message is gone."}}
+]
+};
+})();
+</script>
+<script src="../assets/engine.js?v=2"></script>
+<script src="../assets/labs-data.js?v=2"></script>
+<script src="../assets/lab.js?v=1"></script>
+<script type="module" src="../assets/auth.js?v=6"></script>
+</body>
+</html>

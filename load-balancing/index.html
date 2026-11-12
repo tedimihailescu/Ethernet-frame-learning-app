@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Load balancing L4 și L7</title>
+<meta name="description" content="Lecție interactivă: cum împart load balancerele L4 și L7 traficul între servere. / Interactive lesson: how L4 and L7 load balancers spread traffic across servers.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<script>
+(function(){
+const VIP="203.0.113.10",CL="198.51.100.7",P7A="10.0.1.11",P7B="10.0.1.12",W1="10.0.2.21",W2="10.0.2.22",API="10.0.2.31";
+const F1={srcIp:CL,dstIp:VIP,srcPort:"51000",dstPort:"443",flags:"SYN"};
+const F2={srcIp:CL,dstIp:P7A,srcPort:"51000",dstPort:"443",flags:"SYN",dec:{ro:"L4: hash(IP+port) → proxy-a; ținut în tabela de conexiuni",en:"L4: hash(IP+port) → proxy-a; kept in the connection table"}};
+const F3={srcIp:CL,dstIp:P7A,srcPort:"51000",dstPort:"443",tls:{ro:"terminat pe proxy-a (are certificatul)",en:"terminated on proxy-a (it holds the certificate)"},method:"GET /api/cart",host:"shop.example.com",cookie:"session=ab12"};
+const F4={srcIp:P7A,dstIp:API,srcPort:"40112",dstPort:"8080",tls:{ro:"conexiune nouă proxy → api (HTTP intern sau mTLS)",en:"new connection proxy → api (internal HTTP or mTLS)"},method:"GET /api/cart",host:"shop.example.com",cookie:"session=ab12",xff:CL,rid:"req-9f2c",dec:{ro:"L7: calea /api/* → pool-ul api",en:"L7: path /api/* → the api pool"}};
+const F5={srcIp:P7A,dstIp:W1,srcPort:"40114",dstPort:"8080",method:"GET /",host:"shop.example.com",xff:CL,rid:"req-9f2d",dec:{ro:"round robin: web-1 (următoarea cerere → web-2)",en:"round robin: web-1 (next request → web-2)"}};
+const F6={srcIp:P7A,dstIp:W2,srcPort:"9100",dstPort:"8080",method:"GET /healthz",host:"web-2",dec:{ro:"timeout 2 s · a 3-a greșeală la rând → web-2 scos din pool",en:"2 s timeout · 3rd failure in a row → web-2 removed from the pool"}};
+const F7={srcIp:P7A,dstIp:W1,srcPort:"40120",dstPort:"8080",method:"GET /cos",host:"shop.example.com",cookie:"session=ab12; SERVERID=web-1",xff:CL,dec:{ro:"sticky: cookie-ul SERVERID → tot web-1",en:"sticky: the SERVERID cookie → web-1 again"}};
+const F8={srcIp:VIP,dstIp:CL,srcPort:"443",dstPort:"51000",flags:"ACK",dec:{ro:"răspunsul trece înapoi prin LB (sau direct, cu DSR)",en:"the reply goes back through the LB (or directly, with DSR)"}};
+
+window.LESSON={
+docTitle:{ro:"Load balancing L4 și L7",en:"L4 and L7 load balancing"},
+eyebrow:{ro:"Lecție interactivă · Internet și web",en:"Interactive lesson · Internet and web"},
+title:{ro:"Load balancing: L4 și L7, pas cu pas",en:"Load balancing: L4 and L7, step by step"},
+sub:{ro:"Un magazin online are o singură adresă publică, dar mai multe servere în spate. Urmărim o cerere prin două niveluri de load balancer: unul L4, care vede doar IP-uri și porturi, și unul L7, care citește HTTP. Apoi vedem algoritmii, health check-urile, sesiunile lipicioase și deploy-ul fără întreruperi.",en:"An online shop has one public address but several servers behind it. We follow a request through two tiers of load balancer: an L4 one that only sees IPs and ports, and an L7 one that reads HTTP. Then come algorithms, health checks, sticky sessions and zero-downtime deploys."},
+meta:[{ro:"≈ 25 minute",en:"≈ 25 minutes"},{ro:"11 pași",en:"11 steps"},{ro:"8 întrebări",en:"8 questions"},{ro:"Intermediar",en:"Intermediate"}],
+goals:[{ro:"Ce vede un load balancer L4 și ce vede unul L7",en:"What an L4 load balancer sees, and what an L7 one sees"},{ro:"Cum se alege serverul: round robin, least connections, hash",en:"How the server is chosen: round robin, least connections, hashing"},{ro:"Cum scoate un health check un server bolnav",en:"How a health check takes a sick server out"},{ro:"Sticky sessions, draining și păstrarea IP-ului clientului",en:"Sticky sessions, draining and keeping the client's IP"}],
+foot:{ro:"Adrese din blocurile de documentație (203.0.113.0/24, 198.51.100.0/24). Lecția continuă lecțiile Ethernet, NAT și Ingress.",en:"Addresses from the documentation ranges (203.0.113.0/24, 198.51.100.0/24). This lesson builds on the Ethernet, NAT and Ingress lessons."},
+ui:{frameT:{ro:"Pachetul / cererea (live)",en:"The packet / request (live)"},refT:{ro:"Configurații și comparație",en:"Configurations and comparison"},refLead:{ro:"Cum arată un load balancer L4 și unul L7 în HAProxy și nginx, plus L4 vs. L7 pe scurt.",en:"What L4 and L7 load balancers look like in HAProxy and nginx, plus L4 vs L7 in brief."}},
+tryT:{ro:"Încearcă",en:"Try it"},
+legend:[["lg-tcp","TCP",{ro:"pachet văzut de L4",en:"packet seen by L4"}],["lg-app","HTTP",{ro:"cerere văzută de L7",en:"request seen by L7"}]],
+
+nodes:{
+  cl:{type:"user",name:{ro:"Client",en:"Client"},lines:[CL]},
+  l4:{type:"box",name:"LB L4",lines:["VIP "+VIP+":443"]},
+  pa:{type:"server",name:"proxy-a",lines:["L7 · "+P7A]},
+  pb:{type:"server",name:"proxy-b",lines:["L7 · "+P7B]},
+  w1:{type:"server",name:"web-1",lines:[W1]},
+  w2:{type:"server",name:"web-2",lines:[W2]},
+  api:{type:"server",name:"api-1",lines:[API]}
+},
+links:[["cl","l4"],["l4","pa"],["l4","pb"],["pa","w1"],["pa","w2"],["pa","api"],["pb","w1"],["pb","w2"],["pb","api"]],
+layouts:{
+  wide:{vb:[0,0,1000,520],n:{cl:[80,260],l4:[290,260],pa:[520,140],pb:[520,380],w1:[840,90],w2:[840,260],api:[840,430]},
+    zones:[{x:430,y:40,w:190,h:450,top:true,l:{ro:"Nivel L7",en:"L7 tier"}},{x:740,y:40,w:250,h:450,top:true,l:{ro:"Servere",en:"Servers"}}]},
+  narrow:{vb:[0,0,360,780],n:{cl:[180,60],l4:[180,200],pa:[90,370],pb:[270,370],w1:[60,600],w2:[180,690],api:[300,600]}}
+},
+groups:[
+  {id:"ip",color:"l3",fields:["srcIp","dstIp"],name:{ro:"Antet IP",en:"IP header"},short:"IP",grow:2},
+  {id:"tcp",color:"l4",fields:["srcPort","dstPort","flags"],name:"TCP",short:"TCP",grow:2},
+  {id:"tls",color:"arp",fields:["tls"],name:"TLS",short:"TLS",grow:1},
+  {id:"http",color:"l7",fields:["method","host","cookie","xff","rid"],name:{ro:"HTTP (doar L7 vede asta)",en:"HTTP (only L7 sees this)"},short:"HTTP",grow:3},
+  {id:"dec",color:"l2",fields:["dec"],name:{ro:"Decizia load balancerului",en:"The load balancer's decision"},short:{ro:"Decizie",en:"Decision"},grow:2}
+],
+fieldLabels:{srcIp:{ro:"IP sursă",en:"Source IP"},dstIp:{ro:"IP destinație",en:"Destination IP"},srcPort:{ro:"Port sursă",en:"Source port"},dstPort:{ro:"Port destinație",en:"Destination port"},flags:"Flags",tls:"TLS",method:{ro:"Cerere",en:"Request"},host:"Host",cookie:"Cookie",xff:"X-Forwarded-For",rid:"X-Request-Id",dec:{ro:"Decizie",en:"Decision"}},
+pdu:f=>f.method?{badge:{ro:"Cerere HTTP",en:"HTTP request"},tok:[f.method.split(" ")[0],"k-app"]}:{badge:{ro:"Segment TCP",en:"TCP segment"},tok:["TCP "+(f.flags||""),"k-tcp"]},
+
+init:{conn:[]},
+tables:{
+  pools:{title:{ro:"Pool-urile de servere",en:"Server pools"},cols:["Pool",{ro:"Servere",en:"Servers"},{ro:"Regulă",en:"Rule"}],
+    rows:()=>[["proxies (L4)","proxy-a, proxy-b","TCP 443"],["web (L7)","web-1, web-2","/*"],["api (L7)","api-1","/api/*"]]},
+  conn:{title:{ro:"Tabela de conexiuni a LB L4",en:"The L4 LB's connection table"},cols:[{ro:"Client",en:"Client"},"VIP","Backend",{ro:"Stare",en:"State"}]},
+  algo:{title:{ro:"Algoritmi de alegere",en:"Selection algorithms"},cols:[{ro:"Algoritm",en:"Algorithm"},{ro:"Cum alege",en:"How it picks"},{ro:"Bun pentru",en:"Good for"}],plain:[1,2],
+    rows:()=>[["round robin",{ro:"pe rând: 1, 2, 1, 2",en:"in turn: 1, 2, 1, 2"},{ro:"servere egale, cereri scurte",en:"equal servers, short requests"}],["weighted",{ro:"proporțional cu greutatea",en:"in proportion to weight"},{ro:"servere de mărimi diferite",en:"servers of different sizes"}],["least connections",{ro:"cel cu cele mai puține conexiuni active",en:"the one with fewest active connections"},{ro:"cereri de durate diferite",en:"requests of varying length"}],["hash (IP / cookie)",{ro:"același client → același server",en:"same client → same server"},{ro:"cache-uri, sesiuni",en:"caches, sessions"}],["power of two",{ro:"ia 2 la întâmplare, alege pe cel mai liber",en:"pick 2 at random, take the less busy"},{ro:"multe LB-uri, fără stare comună",en:"many LBs with no shared state"}]]},
+  health:{title:{ro:"Starea pool-ului web",en:"Web pool health"},cols:["Server",{ro:"Verificare",en:"Check"},{ro:"Stare",en:"State"}],
+    rows:()=>[["web-1","GET /healthz → 200",{ro:"UP ✓",en:"UP ✓"}],["web-2","GET /healthz → timeout ×3",{ro:"DOWN ✗",en:"DOWN ✗"}]]}
+},
+log:{title:{ro:"Jurnalul drumului",en:"Path log"},lead:{ro:"Atenție la IP-ul destinație: LB L4 îl schimbă, proxy-ul L7 deschide o conexiune nouă.",en:"Watch the destination IP: the L4 LB rewrites it, the L7 proxy opens a new connection."},first:{ro:"Unde",en:"Where"},minWidth:600,
+  cols:[{h:{ro:"IP sursă → destinație",en:"Source → destination IP"},v:f=>f.srcIp+" → "+f.dstIp,cls:"ip"},{h:{ro:"Ce se vede",en:"What's visible"},v:f=>f.method||("TCP "+(f.flags||"")),cls:"mac"},{h:{ro:"Decizie",en:"Decision"},v:f=>f.dec||"",cls:""}]},
+
+steps:[
+{at:["l4"],frame:null,kind:"none",tables:["pools"],who:{ro:"Problema",en:"The problem"},
+ title:{ro:"Un nume, o adresă, multe servere",en:"One name, one address, many servers"},
+ body:{ro:`<p>De Black Friday, magazinul <code>shop.example.com</code> primește de zece ori mai mult trafic. Un singur server nu face față și, dacă pică, pică tot magazinul.</p>
+<p>Soluția: mai multe servere identice și, în fața lor, un <strong>load balancer</strong> (LB). DNS-ul dă o singură adresă, <strong>VIP</strong>-ul <code>203.0.113.10</code>, iar LB-ul împarte cererile între servere.</p>
+<p>Aici avem <strong>două niveluri</strong>, ca în multe firme și în cloud: un LB <strong>L4</strong> rapid în față, apoi doi <strong>proxy L7</strong> care citesc HTTP și trimit fiecare cerere la pool-ul potrivit.</p>`,
+ en:`<p>On Black Friday, <code>shop.example.com</code> gets ten times more traffic. One server can't cope and, if it fails, the whole shop fails.</p>
+<p>The fix: several identical servers and, in front of them, a <strong>load balancer</strong> (LB). DNS hands out a single address, the <strong>VIP</strong> <code>203.0.113.10</code>, and the LB spreads requests across the servers.</p>
+<p>Here we have <strong>two tiers</strong>, as at many companies and in the cloud: a fast <strong>L4</strong> LB in front, then two <strong>L7 proxies</strong> that read HTTP and send each request to the right pool.</p>`},
+ more:{ro:`<p>„L4” și „L7” vin din modelul OSI: nivelul 4 e transportul (TCP/UDP, porturi), nivelul 7 e aplicația (HTTP). Un LB L4 decide după IP și port; unul L7 decide după URL, header-e și cookie-uri.</p>`,
+  en:`<p>"L4" and "L7" come from the OSI model: layer 4 is transport (TCP/UDP, ports), layer 7 is the application (HTTP). An L4 LB decides by IP and port; an L7 one decides by URL, headers and cookies.</p>`}},
+
+{at:"cl",frame:F1,kind:"p",move:[[["cl","l4"]]],log:{ro:"client → VIP",en:"client → VIP"},who:{ro:"Client",en:"Client"},
+ title:{ro:"Clientul se conectează la VIP",en:"The client connects to the VIP"},
+ body:{ro:`<p>Browserul a aflat din DNS adresa <code>203.0.113.10</code> și trimite primul pachet TCP, <strong>SYN</strong>, spre portul 443.</p>
+<p>Clientul nu știe că în spate sunt mai multe servere. Pentru el, VIP-ul e „magazinul”. Asta e ideea: serverele se pot adăuga, scoate sau schimba fără ca vreun client să observe.</p>`,
+ en:`<p>The browser got the address <code>203.0.113.10</code> from DNS and sends the first TCP packet, the <strong>SYN</strong>, to port 443.</p>
+<p>The client doesn't know there are several servers behind it. To it, the VIP <em>is</em> the shop. That's the point: servers can be added, removed or replaced without any client noticing.</p>`}},
+
+{at:"l4",frame:F2,kind:"p",move:[[["l4","pa"]]],fx:[["conn",CL+":51000",VIP+":443","proxy-a","ESTABLISHED"]],tables:["conn"],hl:{conn:CL+":51000"},log:{ro:"LB L4 → proxy-a",en:"L4 LB → proxy-a"},who:"LB L4",
+ title:{ro:"LB-ul L4: decide doar după IP și port",en:"The L4 LB: decides by IP and port only"},
+ body:{ro:`<p>LB-ul L4 vede <strong>doar</strong> antetul IP și TCP: cine trimite, spre ce port. Nu vede URL-ul, nu vede cookie-urile; oricum, conținutul e criptat cu TLS.</p>
+<p>Alege un proxy după un <strong>hash</strong> al IP-urilor și porturilor (sau după cine are mai puține conexiuni), schimbă IP-ul destinație (DNAT, ca în <a href="../nat/index.html">lecția NAT</a>) și <strong>notează conexiunea</strong>. Toate pachetele acestei conexiuni TCP vor merge la același proxy.</p>
+<p class="key">L4 = rapid și simplu: lucrează pe pachete, poate duce milioane de conexiuni, merge cu orice protocol peste TCP/UDP.</p>`,
+ en:`<p>The L4 LB sees <strong>only</strong> the IP and TCP headers: who is sending, to which port. It can't see the URL or cookies; the content is TLS-encrypted anyway.</p>
+<p>It picks a proxy with a <strong>hash</strong> of the IPs and ports (or by who has the fewest connections), rewrites the destination IP (DNAT, as in the <a href="../nat/index.html">NAT lesson</a>) and <strong>records the connection</strong>. Every packet of this TCP connection will go to the same proxy.</p>
+<p class="key">L4 = fast and simple: it works on packets, can carry millions of connections, and works with any protocol over TCP/UDP.</p>`},
+ more:{ro:`<p>Exemple de LB L4: AWS Network Load Balancer, Google Cloud Network LB, Linux IPVS, HAProxy în <code>mode tcp</code>, Maglev la Google. Un Service Kubernetes cu kube-proxy e tot un LB L4 (vezi <a href="../kubernetes/index.html">lecția Kubernetes</a>).</p>`,
+  en:`<p>Examples of L4 LBs: AWS Network Load Balancer, Google Cloud Network LB, Linux IPVS, HAProxy in <code>mode tcp</code>, Google's Maglev. A Kubernetes Service with kube-proxy is an L4 LB too (see the <a href="../kubernetes/index.html">Kubernetes lesson</a>).</p>`}},
+
+{at:"pa",frame:F3,kind:"h",log:{ro:"proxy-a citește HTTP",en:"proxy-a reads HTTP"},who:"proxy-a",
+ title:{ro:"Proxy-ul L7 desface TLS-ul și citește cererea",en:"The L7 proxy unwraps TLS and reads the request"},
+ body:{ro:`<p>Proxy-a are <strong>certificatul</strong> magazinului, deci poate termina TLS-ul: negociază cu browserul și <strong>decriptează</strong> cererea. Acum vede tot:</p>
+<div class="flow"><span>GET /api/cart</span><span>Host: shop.example.com</span><span>Cookie: session=ab12</span></div>
+<p>Asta îi permite decizii pe care L4 nu le poate lua: după cale, după host, după header-e, după cookie-uri.</p>`,
+ en:`<p>Proxy-a holds the shop's <strong>certificate</strong>, so it can terminate TLS: it does the handshake with the browser and <strong>decrypts</strong> the request. Now it sees everything:</p>
+<div class="flow"><span>GET /api/cart</span><span>Host: shop.example.com</span><span>Cookie: session=ab12</span></div>
+<p>That allows decisions L4 can't make: by path, by host, by headers, by cookies.</p>`},
+ more:{ro:`<p>Exemple de LB L7: nginx, HAProxy în <code>mode http</code>, Envoy, Traefik, AWS Application Load Balancer, controller-ele Ingress din Kubernetes. Despre certificat vezi <a href="../certificate/index.html">lecția Certificate</a>.</p>`,
+  en:`<p>Examples of L7 LBs: nginx, HAProxy in <code>mode http</code>, Envoy, Traefik, the AWS Application Load Balancer, Kubernetes Ingress controllers. For the certificate, see the <a href="../certificate/index.html">Certificates lesson</a>.</p>`}},
+
+{at:"pa",frame:F4,kind:"h",move:[[["pa","api"]]],log:{ro:"proxy-a → api-1",en:"proxy-a → api-1"},tables:["pools"],hl:{pools:"api (L7)"},who:"proxy-a",
+ title:{ro:"Rutare după cale și o conexiune nouă",en:"Routing by path, and a new connection"},
+ body:{ro:`<p>Regula spune: <code>/api/*</code> → pool-ul <strong>api</strong>, restul → pool-ul <strong>web</strong>. Proxy-ul trimite cererea la <code>api-1</code>.</p>
+<p>Diferența mare față de L4: proxy-ul <strong>deschide o conexiune TCP nouă</strong> spre server. Sunt două conexiuni separate: client ↔ proxy și proxy ↔ server. De aceea IP-ul sursă văzut de server e al proxy-ului.</p>
+<p>Ca serverul să știe totuși cine e clientul, proxy-ul adaugă <code>X-Forwarded-For: 198.51.100.7</code> și un <code>X-Request-Id</code>, util la căutarea în log-uri.</p>`,
+ en:`<p>The rule says: <code>/api/*</code> → the <strong>api</strong> pool, everything else → the <strong>web</strong> pool. The proxy sends the request to <code>api-1</code>.</p>
+<p>The big difference from L4: the proxy <strong>opens a new TCP connection</strong> to the server. There are two separate connections: client ↔ proxy and proxy ↔ server. That's why the source IP the server sees is the proxy's.</p>
+<p>So the server still knows who the client is, the proxy adds <code>X-Forwarded-For: 198.51.100.7</code> and an <code>X-Request-Id</code>, useful when searching logs.</p>`}},
+
+{at:"pa",frame:F5,kind:"h",move:[[["pa","w1"]]],tables:["algo"],hl:{algo:"round robin"},log:{ro:"GET / → web-1",en:"GET / → web-1"},who:"proxy-a",
+ title:{ro:"Cum alege serverul: algoritmii",en:"How it picks the server: the algorithms"},
+ body:{ro:`<p>Următoarea cerere, <code>GET /</code>, merge la pool-ul web, care are două servere. Pe care? Depinde de <strong>algoritm</strong>:</p>
+<ul><li><strong>Round robin</strong>: pe rând. Acum web-1, data viitoare web-2.</li>
+<li><strong>Least connections</strong>: cel mai puțin ocupat. Bun când unele cereri durează mult.</li>
+<li><strong>Hash</strong> pe IP sau cookie: același client ajunge mereu la același server.</li></ul>
+<p>Majoritatea folosesc round robin sau least connections, cu <strong>greutăți</strong> dacă serverele au mărimi diferite.</p>`,
+ en:`<p>The next request, <code>GET /</code>, goes to the web pool, which has two servers. Which one? It depends on the <strong>algorithm</strong>:</p>
+<ul><li><strong>Round robin</strong>: in turn. Now web-1, next time web-2.</li>
+<li><strong>Least connections</strong>: the least busy. Good when some requests take long.</li>
+<li><strong>Hash</strong> on IP or cookie: the same client always reaches the same server.</li></ul>
+<p>Most setups use round robin or least connections, with <strong>weights</strong> if servers differ in size.</p>`}},
+
+{at:"pa",frame:F6,kind:"h",move:[[["pa","w2"]]],marks:{w2:{k:"drop",t:"DOWN"}},tables:["health"],hl:{health:"web-2"},log:{ro:"health check web-2",en:"health check web-2"},who:{ro:"Health check",en:"Health check"},
+ title:{ro:"Health check: un server bolnav e scos automat",en:"Health check: a sick server is removed automatically"},
+ body:{ro:`<p>La fiecare 5 secunde, proxy-ul întreabă fiecare server: <code>GET /healthz</code>. Web-2 are discul plin și nu mai răspunde în 2 secunde. După <strong>3 eșecuri la rând</strong>, proxy-ul îl marchează <strong>DOWN</strong> și nu-i mai trimite cereri.</p>
+<p>Clienții nu văd nimic: toate cererile merg la web-1. Când web-2 își revine și trece de 2 verificări la rând, intră înapoi în pool.</p>
+<p class="key">Fără health check, round robin-ul ar trimite jumătate din clienți spre un server mort.</p>`,
+ en:`<p>Every 5 seconds the proxy asks each server: <code>GET /healthz</code>. Web-2's disk is full and it stops answering within 2 seconds. After <strong>3 failures in a row</strong>, the proxy marks it <strong>DOWN</strong> and sends it no more requests.</p>
+<p>Clients notice nothing: every request goes to web-1. When web-2 recovers and passes 2 checks in a row, it rejoins the pool.</p>
+<p class="key">Without a health check, round robin would send half the clients to a dead server.</p>`},
+ more:{ro:`<p>Health check-ul trebuie să verifice ce contează (aplicația răspunde, baza e accesibilă), dar să fie ieftin. Pe lângă verificările <em>active</em>, multe proxy-uri au verificări <em>pasive</em> (outlier detection): dacă un server dă multe erori 5xx la cereri reale, e scos temporar.</p>`,
+  en:`<p>A health check must test what matters (the app answers, the database is reachable) but stay cheap. Besides <em>active</em> checks, many proxies do <em>passive</em> checks (outlier detection): if a server returns many 5xx errors on real requests, it's ejected for a while.</p>`}},
+
+{at:"pa",frame:F7,kind:"h",move:[[["pa","w1"]]],log:{ro:"sticky → web-1",en:"sticky → web-1"},who:{ro:"Sesiuni",en:"Sessions"},
+ title:{ro:"Sticky sessions: același client, același server",en:"Sticky sessions: same client, same server"},
+ body:{ro:`<p>Unele aplicații țin coșul de cumpărături <strong>în memoria</strong> serverului. Dacă a doua cerere ajunge pe alt server, coșul pare gol.</p>
+<p>Soluția rapidă: <strong>sticky sessions</strong>. La primul răspuns, proxy-ul pune un cookie <code>SERVERID=web-1</code>; cererile următoare cu acest cookie merg tot la web-1.</p>
+<p>Dezavantaje: încărcarea devine inegală, iar dacă web-1 cade, sesiunile lui se pierd. Soluția bună: aplicații <strong>fără stare</strong>, cu sesiunea într-un loc comun (Redis, baza de date) sau într-un token.</p>`,
+ en:`<p>Some apps keep the shopping cart <strong>in the server's memory</strong>. If the second request lands on another server, the cart looks empty.</p>
+<p>The quick fix: <strong>sticky sessions</strong>. On the first response the proxy sets a <code>SERVERID=web-1</code> cookie; later requests with that cookie go to web-1 again.</p>
+<p>Downsides: load becomes uneven, and if web-1 fails its sessions are lost. The proper fix: <strong>stateless</strong> apps, with the session in a shared place (Redis, the database) or in a token.</p>`}},
+
+{at:["pa","pb","w1","w2"],frame:null,kind:"none",who:{ro:"Deploy",en:"Deploys"},
+ title:{ro:"Deploy fără întreruperi: draining și slow start",en:"Zero-downtime deploys: draining and slow start"},
+ body:{ro:`<p>Vrei să actualizezi web-1 fără să tai cererile în curs:</p>
+<ol><li>Îl marchezi <strong>drain</strong>: nu mai primește cereri noi, dar cele începute se termină (de ex. 30 de secunde, „deregistration delay” în AWS).</li>
+<li>Îl oprești, îl actualizezi, îl pornești.</li>
+<li>Trece health check-ul și revine, cu <strong>slow start</strong>: primește trafic treptat, cât își încălzește cache-urile.</li></ol>
+<p>La fel face și LB-ul L4 cu proxy-urile: și ele au health check-uri, deci un proxy căzut e ocolit automat.</p>`,
+ en:`<p>You want to update web-1 without cutting requests in flight:</p>
+<ol><li>You mark it <strong>draining</strong>: it gets no new requests, but the ones in progress finish (e.g. 30 seconds, the "deregistration delay" in AWS).</li>
+<li>You stop it, update it, start it.</li>
+<li>It passes the health check and returns with <strong>slow start</strong>: traffic ramps up gradually while it warms its caches.</li></ol>
+<p>The L4 LB does the same with the proxies: they have health checks too, so a failed proxy is bypassed automatically.</p>`}},
+
+{at:"l4",frame:F8,kind:"p",move:[[["l4","cl"]]],log:{ro:"răspuns → client",en:"reply → client"},who:{ro:"Drumul înapoi",en:"The way back"},
+ title:{ro:"Drumul înapoi și IP-ul clientului",en:"The way back and the client's IP"},
+ body:{ro:`<p>Răspunsul trebuie să ajungă la client <strong>de la VIP</strong>, altfel clientul nu-l recunoaște. De obicei trece înapoi prin LB, care pune la loc adresa VIP-ului.</p>
+<ul><li><strong>DSR</strong> (Direct Server Return): la LB-uri L4, serverul poate răspunde direct clientului, cu VIP-ul ca sursă. LB-ul vede doar traficul de intrare, mult mai mic. Bun pentru video și descărcări.</li>
+<li><strong>IP-ul clientului</strong>: un proxy L7 îl pune în <code>X-Forwarded-For</code>; un LB L4 care face SNAT îl poate transmite cu <strong>PROXY protocol</strong> sau îl păstrează dacă nu face SNAT.</li></ul>`,
+ en:`<p>The reply must reach the client <strong>from the VIP</strong>, or the client won't recognise it. It usually goes back through the LB, which restores the VIP address.</p>
+<ul><li><strong>DSR</strong> (Direct Server Return): with L4 LBs, the server can reply straight to the client, using the VIP as the source. The LB only sees the much smaller inbound traffic. Good for video and downloads.</li>
+<li><strong>The client's IP</strong>: an L7 proxy puts it in <code>X-Forwarded-For</code>; an L4 LB doing SNAT can pass it with the <strong>PROXY protocol</strong>, or keeps it by not doing SNAT.</li></ul>`}},
+
+{at:["l4","pa","pb"],frame:null,kind:"none",summary:true,
+ title:{ro:"Recapitulare: L4 vs. L7",en:"Recap: L4 vs L7"},
+ body:{ro:`<div class="scroll"><table class="cmp"><thead><tr><th></th><th>L4</th><th>L7</th></tr></thead><tbody>
+<tr><td>${"Vede"}</td><td>IP, port, TCP/UDP</td><td>URL, host, header-e, cookie-uri</td></tr>
+<tr><td>TLS</td><td>${"îl lasă să treacă"}</td><td>${"îl termină (are certificatul)"}</td></tr>
+<tr><td>${"Conexiuni"}</td><td>${"una, trecută mai departe"}</td><td>${"două: client↔proxy, proxy↔server"}</td></tr>
+<tr><td>${"Viteză"}</td><td>${"foarte mare"}</td><td>${"mai mică, dar mai deștept"}</td></tr>
+<tr><td>${"Exemple"}</td><td>NLB, IPVS, Maglev</td><td>nginx, HAProxy, Envoy, ALB</td></tr></tbody></table></div>
+<ul><li>Algoritmi: round robin, least connections, hash, cu greutăți.</li><li>Health check-urile scot automat serverele bolnave.</li><li>Sticky sessions rezolvă rapid sesiunile în memorie, dar aplicațiile fără stare sunt mai bune.</li><li>Draining + slow start = deploy fără întreruperi.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Mergi la laborator ↓</button></p>`,
+ en:`<div class="scroll"><table class="cmp"><thead><tr><th></th><th>L4</th><th>L7</th></tr></thead><tbody>
+<tr><td>Sees</td><td>IP, port, TCP/UDP</td><td>URL, host, headers, cookies</td></tr>
+<tr><td>TLS</td><td>passes it through</td><td>terminates it (holds the certificate)</td></tr>
+<tr><td>Connections</td><td>one, passed along</td><td>two: client↔proxy, proxy↔server</td></tr>
+<tr><td>Speed</td><td>very high</td><td>lower, but smarter</td></tr>
+<tr><td>Examples</td><td>NLB, IPVS, Maglev</td><td>nginx, HAProxy, Envoy, ALB</td></tr></tbody></table></div>
+<ul><li>Algorithms: round robin, least connections, hashing, with weights.</li><li>Health checks remove sick servers automatically.</li><li>Sticky sessions quickly fix in-memory sessions, but stateless apps are better.</li><li>Draining + slow start = zero-downtime deploys.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Go to the lab ↓</button></p>`}}
+],
+
+reference:(T,lang)=>{
+  const ro=lang==="ro";
+  return `<div class="ref-grid"><section class="card refcard"><h2>HAProxy: L4 ${ro?"și":"and"} L7</h2>
+<pre class="yaml"><span class="c"># L4: ${ro?"doar TCP, TLS-ul trece neatins":"TCP only, TLS passes untouched"}</span>
+frontend shop_tcp
+  mode tcp
+  bind :443
+  default_backend proxies
+backend proxies
+  mode tcp
+  balance leastconn
+  server proxy-a 10.0.1.11:443 check
+  server proxy-b 10.0.1.12:443 check
+
+<span class="c"># L7: ${ro?"termină TLS, rutează după cale":"terminates TLS, routes by path"}</span>
+frontend shop_http
+  mode http
+  bind :443 ssl crt /etc/haproxy/shop.pem
+  acl is_api path_beg /api/
+  use_backend api if is_api
+  default_backend web
+backend web
+  mode http
+  balance roundrobin
+  option httpchk GET /healthz
+  cookie SERVERID insert indirect nocache
+  server web-1 10.0.2.21:8080 check cookie web-1
+  server web-2 10.0.2.22:8080 check cookie web-2</pre></section>
+<section class="card refcard"><h2>nginx (L7)</h2>
+<pre class="yaml">upstream web {
+  least_conn;
+  server 10.0.2.21:8080 max_fails=3 fail_timeout=30s;
+  server 10.0.2.22:8080 max_fails=3 fail_timeout=30s;
+}
+server {
+  listen 443 ssl;
+  location /api/ { proxy_pass http://api; }
+  location /     {
+    proxy_pass http://web;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  }
+}</pre>
+<h3>${ro?"De reținut":"Remember"}</h3>
+<p>${ro?"„max_fails” în nginx open-source e o verificare pasivă; verificările active (health_check) sunt în nginx Plus sau în alte proxy-uri.":"In open-source nginx \"max_fails\" is a passive check; active checks (health_check) are in nginx Plus or other proxies."}</p></section></div>`;
+},
+
+gloss:[
+ [{ro:"Load balancer",en:"Load balancer"},"LB",{ro:"Dispozitiv sau program care împarte traficul între mai multe servere.",en:"A device or program that spreads traffic across several servers."}],
+ ["VIP","Virtual IP",{ro:"Adresa publică a serviciului, deținută de load balancer, nu de un server.",en:"The service's public address, owned by the load balancer, not a server."}],
+ ["L4",{ro:"nivelul 4, transport",en:"layer 4, transport"},{ro:"Decizii doar după IP, port și protocol (TCP/UDP).",en:"Decisions only by IP, port and protocol (TCP/UDP)."}],
+ ["L7",{ro:"nivelul 7, aplicație",en:"layer 7, application"},{ro:"Decizii după conținutul HTTP: cale, host, header-e, cookie-uri.",en:"Decisions by HTTP content: path, host, headers, cookies."}],
+ ["Pool",{ro:"sau backend / upstream",en:"or backend / upstream"},{ro:"Grupul de servere între care se împarte traficul.",en:"The group of servers traffic is spread across."}],
+ ["Round robin",null,{ro:"Algoritm care alege serverele pe rând.",en:"An algorithm that picks servers in turn."}],
+ ["Least connections",null,{ro:"Algoritm care alege serverul cu cele mai puține conexiuni active.",en:"An algorithm that picks the server with the fewest active connections."}],
+ ["Health check",null,{ro:"Verificare periodică; serverele care nu răspund sunt scoase din pool.",en:"A periodic check; servers that don't answer are removed from the pool."}],
+ ["Sticky session",{ro:"sau session affinity",en:"or session affinity"},{ro:"Același client e trimis mereu la același server (prin cookie sau hash).",en:"The same client is always sent to the same server (via cookie or hash)."}],
+ ["Draining",{ro:"sau connection draining",en:"or connection draining"},{ro:"Serverul nu mai primește cereri noi, dar le termină pe cele începute.",en:"The server gets no new requests but finishes those in progress."}],
+ ["X-Forwarded-For","XFF",{ro:"Header pus de proxy cu IP-ul real al clientului.",en:"A header set by the proxy with the client's real IP."}],
+ ["DSR","Direct Server Return",{ro:"Serverul răspunde direct clientului, ocolind LB-ul L4.",en:"The server replies straight to the client, bypassing the L4 LB."}],
+ ["PROXY protocol",null,{ro:"Antet mic trimis de un LB L4 la începutul conexiunii, cu IP-ul clientului.",en:"A small header an L4 LB sends at the start of a connection, with the client's IP."}],
+ [{ro:"Terminare TLS",en:"TLS termination"},null,{ro:"Locul unde se decriptează TLS-ul; acolo stă certificatul.",en:"Where TLS is decrypted; that's where the certificate lives."}]
+],
+glossEx:{
+ "VIP":{ro:"shop.example.com → 203.0.113.10, adresa LB-ului.",en:"shop.example.com → 203.0.113.10, the LB's address."},
+ "Health check":{ro:"GET /healthz la 5 s; 3 eșecuri → DOWN, 2 reușite → UP.",en:"GET /healthz every 5 s; 3 failures → DOWN, 2 successes → UP."},
+ "X-Forwarded-For":{ro:"X-Forwarded-For: 198.51.100.7",en:"X-Forwarded-For: 198.51.100.7"}
+},
+
+quiz:[
+ {q:{ro:"Ce poate vedea un load balancer L4?",en:"What can an L4 load balancer see?"},o:[{ro:"URL-ul și cookie-urile",en:"The URL and cookies"},{ro:"IP-urile, porturile și protocolul",en:"IPs, ports and protocol"},{ro:"Parola utilizatorului",en:"The user's password"},{ro:"Conținutul paginii",en:"The page content"}],a:1,e:{ro:"Conținutul e criptat și L4 nu-l desface.",en:"The content is encrypted and L4 doesn't unwrap it."}},
+ {q:{ro:"Vrei ca /api/* să meargă la alte servere decât restul site-ului. Ce LB îți trebuie?",en:"You want /api/* to go to different servers than the rest of the site. Which LB do you need?"},o:["L4",{ro:"L7",en:"L7"},{ro:"Doar DNS",en:"Just DNS"},{ro:"Un switch",en:"A switch"}],a:1,e:{ro:"Calea e în HTTP; doar L7 o citește.",en:"The path is in HTTP; only L7 reads it."}},
+ {q:{ro:"De ce vede serverul IP-ul proxy-ului L7 ca sursă?",en:"Why does the server see the L7 proxy's IP as the source?"},o:[{ro:"Proxy-ul deschide o conexiune TCP nouă spre server",en:"The proxy opens a new TCP connection to the server"},{ro:"Din cauza DNS-ului",en:"Because of DNS"},{ro:"Clientul își ascunde IP-ul",en:"The client hides its IP"},{ro:"E o eroare",en:"It's a bug"}],a:0,e:{ro:"IP-ul clientului ajunge în X-Forwarded-For.",en:"The client's IP travels in X-Forwarded-For."}},
+ {q:{ro:"Ce face health check-ul când un server nu mai răspunde?",en:"What does the health check do when a server stops answering?"},o:[{ro:"Îl repornește",en:"Restarts it"},{ro:"Trimite un e-mail clientului",en:"Emails the client"},{ro:"Îl scoate din pool până își revine",en:"Takes it out of the pool until it recovers"},{ro:"Nimic",en:"Nothing"}],a:2,e:{ro:"După câteva eșecuri la rând e marcat DOWN.",en:"After a few failures in a row it's marked DOWN."}},
+ {q:{ro:"Cereri care durează foarte diferit (unele 10 ms, altele 10 s). Ce algoritm e mai potrivit?",en:"Requests take very different times (some 10 ms, others 10 s). Which algorithm fits best?"},o:["Round robin","Least connections",{ro:"Alfabetic",en:"Alphabetical"},{ro:"Mereu primul server",en:"Always the first server"}],a:1,e:{ro:"Trimite la serverul cel mai puțin ocupat în acel moment.",en:"It sends to the least busy server at that moment."}},
+ {q:{ro:"Care e dezavantajul sticky sessions?",en:"What's the downside of sticky sessions?"},o:[{ro:"Sunt ilegale",en:"They're illegal"},{ro:"Criptarea nu mai merge",en:"Encryption stops working"},{ro:"Clientul nu mai poate folosi cookie-uri",en:"The client can't use cookies"},{ro:"Încărcare inegală și sesiuni pierdute dacă serverul cade",en:"Uneven load and lost sessions if the server fails"}],a:3,e:{ro:"Mai bine: aplicații fără stare și sesiunea în Redis/bază.",en:"Better: stateless apps with the session in Redis/a database."}},
+ {q:{ro:"Ce înseamnă „draining” un server?",en:"What does \"draining\" a server mean?"},o:[{ro:"Nu mai primește cereri noi, dar le termină pe cele în curs",en:"It gets no new requests but finishes those in progress"},{ro:"Îi ștergi discul",en:"Wiping its disk"},{ro:"Îi crești greutatea",en:"Raising its weight"},{ro:"Îl muți în alt pool",en:"Moving it to another pool"}],a:0,e:{ro:"Pasul de dinaintea unui deploy sau al unei opriri.",en:"The step before a deploy or shutdown."}},
+ {q:{ro:"Unde stă certificatul TLS al site-ului într-un setup L4 → L7?",en:"Where does the site's TLS certificate live in an L4 → L7 setup?"},o:[{ro:"Pe LB-ul L4",en:"On the L4 LB"},{ro:"Pe proxy-ul L7, care termină TLS-ul",en:"On the L7 proxy, which terminates TLS"},{ro:"În browser",en:"In the browser"},{ro:"În DNS",en:"In DNS"}],a:1,e:{ro:"L4 doar trece pachetele criptate mai departe.",en:"L4 just passes the encrypted packets along."}}
+]
+};
+})();
+</script>
+<script src="../assets/engine.js?v=2"></script>
+<script src="../assets/labs-data.js?v=2"></script>
+<script src="../assets/lab.js?v=1"></script>
+<script type="module" src="../assets/auth.js?v=6"></script>
+</body>
+</html>

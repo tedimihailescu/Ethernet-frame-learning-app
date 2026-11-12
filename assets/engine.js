@@ -36,7 +36,12 @@ const BASE={
   glossEyebrow:{ro:"Dicționar",en:"Glossary"},quizEyebrow:{ro:"Test final",en:"Final quiz"},refEyebrow:{ro:"Referință",en:"Reference"},
   src:{ro:"Codul sursă pe GitHub ↗",en:"Source code on GitHub ↗"},
   theme:{ro:"Comută tema luminoasă / întunecată",en:"Toggle light / dark theme"},
-  lgRing:{ro:"dispozitivul activ",en:"active device"}
+  lgRing:{ro:"dispozitivul activ",en:"active device"},
+  simple:{ro:"👁 Mod simplu",en:"👁 Simple mode"},simpleOn:{ro:"👁 Mod simplu: pornit",en:"👁 Simple mode: on"},
+  simpleTip:{ro:"Ascunde detaliile avansate (tabele, jurnal, „Află mai mult”, comenzi) ca să urmărești doar povestea.",en:"Hides advanced details (tables, log, \"Learn more\", commands) so you can follow just the story."},
+  outline:{ro:"☰ Toți pașii lecției",en:"☰ All the lesson's steps"},nextIs:{ro:"Următorul:",en:"Next:"},prevIs:{ro:"← Înapoi",en:"← Back"},
+  toLab:{ro:"Gata! Mergi la laborator și test ↓",en:"Done! Go to the lab and quiz ↓"},
+  hoverTip:{ro:"Cuvintele subliniate punctat au explicație: pune mouse-ul pe ele sau atinge-le.",en:"Words with a dotted underline have an explanation: hover over or tap them."}
 };
 const UI=Object.assign({},BASE,LS.ui||{});
 const S=LS.steps,N=S.length;
@@ -55,7 +60,8 @@ document.getElementById("app").innerHTML=`
 <div class="wrap" id="sim">
   <section class="card diagram"><svg id="net" role="img" aria-labelledby="t-title"></svg><div class="dlegend" id="dlegend"></div></section>
   <section class="card controls"><div class="btns"><button type="button" class="btn" id="b-reset"></button><button type="button" class="btn" id="b-back"></button><button type="button" class="btn" id="b-play"></button><button type="button" class="btn primary" id="b-next"></button></div>
-    <div class="progress"><div class="stepno" id="stepno" aria-live="polite"></div><div class="dots" id="dots"></div></div></section>
+    <div class="progress"><div class="stepno" id="stepno" aria-live="polite"></div><div class="dots" id="dots"></div></div>
+    <div class="easy"><button type="button" class="btn" id="b-simple" aria-pressed="false"></button><details class="outline" id="outline"><summary data-t="outline"></summary><ol id="outlineList"></ol></details><span class="easy-tip" data-t="hoverTip"></span></div></section>
   <div class="main"><div class="col"><section class="card" id="exp" aria-live="polite"></section></div>
     <div class="col"><section class="card" id="frame"></section><section class="card" id="tables" hidden></section></div></div>
   <section class="card full" id="log"></section>
@@ -156,10 +162,52 @@ function renderExp(){
     h+=`<div class="stack"><h3>${T(UI.stackT).replace("{d}",T(k.dev))} · ${T(UI[k.dir])}</h3>`;
     LS.layers.forEach(([n,name,pdu])=>{const off=n>k.max,on=k.on.includes(n);h+=`<div class="layer L${n}${on?" on":""}${off?" off":""}"><span class="n">L${n}</span><span>${T(name)}</span><span class="pdu">${off?T(UI.notUsed):T(pdu)}</span></div>`});
     h+=`</div>`}
+  // step-to-step buttons right under the explanation, naming what comes next
+  h+=`<div class="stepnav">${cur>0?`<button type="button" class="btn" data-nav="-1">${T(UI.prevIs)}</button>`:""}${cur<N-1
+    ?`<button type="button" class="btn primary" data-nav="1"><span class="nx">${T(UI.nextIs)} ${T(S[cur+1].title)}</span><span aria-hidden="true"> →</span></button>`
+    :`<button type="button" class="btn primary" data-goto="lab">${T(UI.toLab)}</button>`}</div>`;
   $("#exp").innerHTML=h;
-  const dm=$("#exp details.more");if(dm)dm.addEventListener("toggle",()=>{moreOpen=dm.open});
-  $("#exp").querySelectorAll("[data-goto]").forEach(b=>b.onclick=()=>{stop();$("#"+b.dataset.goto).scrollIntoView({behavior:mqReduce.matches?"auto":"smooth"})});
+  addTips($("#exp"));
+  const dm=$("#exp details.more");if(dm)dm.addEventListener("toggle",()=>{moreOpen=dm.open;if(dm.open)addTips(dm)});
+  $("#exp").querySelectorAll("[data-goto]").forEach(b=>b.onclick=()=>{stop();($("#"+b.dataset.goto)||$("#quiz")).scrollIntoView({behavior:mqReduce.matches?"auto":"smooth"})});
+  $("#exp").querySelectorAll("[data-nav]").forEach(b=>b.onclick=()=>{if(playing)stop();const d=+b.dataset.nav;go(cur+d,d>0);
+    const top=$(".diagram").getBoundingClientRect().top;if(top<0||top>innerHeight*.6)$(".diagram").scrollIntoView({behavior:mqReduce.matches?"auto":"smooth",block:"start"})});
 }
+
+/* ---------- glossary tooltips: the first mention of each glossary term in a step gets a dotted underline ---------- */
+let GIDX=null,GLANG=null;
+const reEsc=s=>s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+function glossIndex(){
+  if(GIDX&&GLANG===lang)return GIDX;GLANG=lang;const seen=new Set();GIDX=[];
+  (LS.gloss||[]).forEach(([t,full,d])=>{const def=(T(full)?T(full)+": ":"")+T(d);
+    [T(t),glossKey(t)].forEach(x=>{if(!x||x.length<2||seen.has(x.toLowerCase()))return;seen.add(x.toLowerCase());
+      const strict=x.length<=6&&x===x.toUpperCase();
+      GIDX.push({term:x,def,key:glossKey(t),re:new RegExp(`(^|[^\\p{L}\\p{N}_-])(${reEsc(x)})(?=$|[^\\p{L}\\p{N}_])`,strict?"u":"iu")})})});
+  GIDX.sort((a,b)=>b.term.length-a.term.length);return GIDX;
+}
+function addTips(root){
+  const idx=glossIndex();if(!idx.length||!root)return;const used=new Set();
+  root.querySelectorAll(".gt").forEach(e=>used.add(e.dataset.k));
+  const w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,{acceptNode:n=>n.parentElement.closest("code,a,pre,button,summary,.gt,h2,h3,h4,.eyebrow,.flow,.stack,.cmd,.stepnav")?NodeFilter.FILTER_REJECT:NodeFilter.FILTER_ACCEPT});
+  const queue=[];while(w.nextNode())queue.push(w.currentNode);
+  while(queue.length){const node=queue.shift(),text=node.nodeValue;let best=null;
+    for(const g of idx){if(used.has(g.key))continue;const m=g.re.exec(text);if(m&&(!best||m.index<best.m.index))best={g,m}}
+    if(!best)continue;const {g,m}=best,start=m.index+m[1].length;used.add(g.key);
+    const after=node.splitText(start);const rest=after.splitText(m[2].length);
+    const sp=document.createElement("span");sp.className="gt";sp.tabIndex=0;sp.dataset.k=g.key;sp.dataset.d=g.def;sp.textContent=after.nodeValue;after.replaceWith(sp);
+    queue.unshift(rest)}
+}
+const tip=document.createElement("div");tip.className="gtip";tip.setAttribute("role","tooltip");tip.hidden=true;document.body.appendChild(tip);
+let tipFor=null;
+function showTip(el){tipFor=el;tip.textContent=el.dataset.d;tip.hidden=false;const r=el.getBoundingClientRect(),tw=Math.min(300,innerWidth-24);tip.style.maxWidth=tw+"px";
+  const w=tip.offsetWidth,h=tip.offsetHeight;let x=Math.max(12,Math.min(r.left,innerWidth-w-12)),y=r.bottom+8;if(y+h>innerHeight-8)y=r.top-h-8;
+  tip.style.left=x+"px";tip.style.top=(y+scrollY)+"px"}
+function hideTip(){tip.hidden=true;tipFor=null}
+document.addEventListener("mouseover",e=>{const g=e.target.closest&&e.target.closest(".gt");if(g)showTip(g);else if(tipFor&&!e.target.closest(".gtip"))hideTip()});
+document.addEventListener("focusin",e=>{const g=e.target.closest&&e.target.closest(".gt");if(g)showTip(g)});
+document.addEventListener("focusout",e=>{if(e.target.closest&&e.target.closest(".gt"))hideTip()});
+document.addEventListener("click",e=>{const g=e.target.closest(".gt");if(g){if(tipFor===g)hideTip();else showTip(g)}else if(!e.target.closest(".gtip"))hideTip()});
+addEventListener("scroll",()=>{if(tipFor&&!tipFor.matches(":hover"))hideTip()},{passive:true});
 function renderFrame(){
   const st=S[cur],f=st.frame,p=prevFrame(cur);let h=`<h2>${T(LS.frameT||UI.frameT)}`;
   if(!f){h+=`</h2><p class="empty">${T(st.summary?UI.sumFrame:UI.noFrame)}</p>`;$("#frame").innerHTML=h;return}
@@ -202,13 +250,17 @@ function renderLog(){
 }
 function renderQuiz(){
   const Q=LS.quiz;let h=`<h2>${T(UI.quizT)}</h2>`;
+  if(!qOrder)qOrder=Q.map(q=>shuffle(q.o.map((_,i)=>i)));
   Q.forEach((q,qi)=>{const a=answers[qi];h+=`<div class="q"><p class="t">${qi+1}. ${T(q.q)}</p><div class="opts">`;
-    q.o.forEach((o,oi)=>{let c="";if(a!==null){if(oi===q.a)c="right";else if(oi===a)c="wrong"}h+=`<button type="button" class="opt ${c}" data-q="${qi}" data-o="${oi}" ${a!==null?"disabled":""}>${T(o)}</button>`});
+    qOrder[qi].forEach(oi=>{const o=q.o[oi];let c="";if(a!==null){if(oi===q.a)c="right";else if(oi===a)c="wrong"}h+=`<button type="button" class="opt ${c}" data-q="${qi}" data-o="${oi}" ${a!==null?"disabled":""}>${T(o)}</button>`});
     h+=`</div>`;if(a!==null)h+=`<p class="fb ${a===q.a?"ok":"no"}" role="status"><b>${T(a===q.a?UI.right:UI.wrong)}</b> ${T(q.e)}</p>`;h+=`</div>`});
   const done=answers.filter(x=>x!==null).length,ok=answers.filter((x,i)=>x===Q[i].a).length;
   h+=`<div class="score">${T(UI.score)}: ${ok} / ${Q.length}${done?` <button type="button" class="btn" id="retry">${T(UI.retry)}</button>`:""}</div>`;
-  $("#quiz").innerHTML=h;const r=$("#retry");if(r)r.onclick=()=>{answers.fill(null);renderQuiz()};
+  $("#quiz").innerHTML=h;const r=$("#retry");if(r)r.onclick=()=>{answers.fill(null);qOrder=null;renderQuiz()};
 }
+// answer options are shown in a random order (the stored answer is still the original index)
+let qOrder=null;
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
 $("#quiz").addEventListener("click",e=>{const b=e.target.closest(".opt");if(!b||b.disabled)return;answers[+b.dataset.q]=+b.dataset.o;renderQuiz();
   if(answers.every(a=>a!==null)){
     const score=answers.filter((x,i)=>x===LS.quiz[i].a).length;
@@ -229,8 +281,14 @@ function renderControls(){
   $("#b-back").disabled=cur===0;$("#b-next").disabled=cur===N-1;$("#b-reset").disabled=cur===0&&!playing;
   $("#stepno").textContent=`${T(UI.step)} ${cur+1} ${T(UI.of)} ${N}`;
   const d=$("#dots");if(d.children.length!==N)d.innerHTML=S.map((_,i)=>`<button type="button" data-i="${i}"></button>`).join("");
-  [...d.children].forEach((b,i)=>{b.className=i===cur?"cur":i<cur?"done":"";b.setAttribute("aria-label",`${T(UI.step)} ${i+1}: ${T(S[i].title)}`);b.setAttribute("aria-current",i===cur?"step":"false")});
+  [...d.children].forEach((b,i)=>{b.className=i===cur?"cur":i<cur?"done":"";b.setAttribute("aria-label",`${T(UI.step)} ${i+1}: ${T(S[i].title)}`);b.title=`${i+1}. ${T(S[i].title)}`;b.setAttribute("aria-current",i===cur?"step":"false")});
+  $("#outlineList").innerHTML=S.map((s,i)=>`<li class="${i===cur?"cur":i<cur?"done":""}"><button type="button" data-i="${i}">${i<cur?"✓ ":""}${T(s.title)}</button></li>`).join("");
+  const sb=$("#b-simple");sb.textContent=T(simple?UI.simpleOn:UI.simple);sb.setAttribute("aria-pressed",simple?"true":"false");sb.title=T(UI.simpleTip);
+  try{store.set("cadru-last",JSON.stringify({id:LESSON_ID,step:cur,n:N}));if(history.replaceState&&(!location.hash||/^#step-\d+$/.test(location.hash)))history.replaceState(null,"",cur?"#step-"+(cur+1):location.pathname+location.search)}catch(e){}
 }
+const LESSON_ID=location.pathname.split("/").filter(Boolean).slice(-2)[0]||"lesson";
+let simple=store.get("cadru-simple")==="1";
+function applySimple(){document.body.classList.toggle("simple",simple)}
 function renderStatic(){
   document.documentElement.lang=lang;document.title=T(LS.docTitle);
   document.querySelectorAll("[data-t]").forEach(e=>{e.textContent=T(UI[e.dataset.t])});
@@ -267,5 +325,9 @@ $("#theme").onclick=()=>{const r=document.documentElement,isDark=r.dataset.theme
 const onLayout=()=>{buildDiagram();updateDiagram(false)};
 if(mqNarrow.addEventListener)mqNarrow.addEventListener("change",onLayout);else mqNarrow.addListener(onLayout);
 
+$("#b-simple").onclick=()=>{simple=!simple;store.set("cadru-simple",simple?"1":"0");applySimple();renderControls()};
+$("#outlineList").onclick=e=>{const b=e.target.closest("button");if(!b)return;if(playing)stop();$("#outline").open=false;go(+b.dataset.i,false)};
+{const m=/^#step-(\d+)$/.exec(location.hash);if(m)cur=Math.max(0,Math.min(N-1,(+m[1])-1))}
+applySimple();
 buildDiagram();renderStatic();renderGloss();renderQuiz();render(false);
 })();

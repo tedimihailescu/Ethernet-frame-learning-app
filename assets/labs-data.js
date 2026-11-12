@@ -197,6 +197,66 @@ microservicii: { title: B("Microservicii", "Microservices"), tasks: [
  { type: "order", name: B("Cererea SOAP", "The SOAP request"), q: B("Ordonează drumul unei cereri SOAP prin sistem.", "Order a SOAP request's path through the system."),
    items: [B("Clientul trimite POST cu plicul SOAP", "The client sends a POST with the SOAP envelope"), B("nginx alege un server din upstream", "nginx picks a server from the upstream"), B("Un fir de lucru din monolit preia cererea", "A worker thread in the monolith takes the request"), B("Plicul XML e parsat și operația e trimisă modulului potrivit", "The XML envelope is parsed and the operation dispatched to the right module"), B("Modulul ia o conexiune din pool-ul OCI și interoghează Oracle", "The module takes an OCI pool connection and queries Oracle"), B("Răspunsul SOAP se întoarce prin nginx la client", "The SOAP response returns through nginx to the client")],
    hint: B("Din afară spre bază de date și înapoi.", "From outside to the database and back.") }
+]},
+
+ldap: { title: "LDAP", tasks: [
+ { type: "term", name: B("Caută utilizatorul", "Find the user"), q: B("Cu contul de serviciu, caută-o pe ana sub ou=People,dc=example,dc=com și afișează-i mail-ul și grupurile. Folosește ldapsearch cu filtrul (uid=ana).", "With the service account, search for ana under ou=People,dc=example,dc=com and show her mail and groups. Use ldapsearch with the filter (uid=ana)."),
+   prompt: "ops@portal:~$", need: ["ldapsearch", "(uid=ana)"], sol: "ldapsearch -x -H ldaps://ldap.example.com -D \"cn=svc-portal,ou=Services,dc=example,dc=com\" -W -b \"ou=People,dc=example,dc=com\" \"(uid=ana)\" mail memberOf",
+   out: "Enter LDAP Password:\n# ana, People, example.com\ndn: uid=ana,ou=People,dc=example,dc=com\nmail: ana@example.com\nmemberOf: cn=portal-users,ou=Groups,dc=example,dc=com\nmemberOf: cn=portal-admins,ou=Groups,dc=example,dc=com\n\n# numEntries: 1",
+   hint: B("Comanda e ldapsearch; filtrul se scrie între ghilimele: \"(uid=ana)\".", "The command is ldapsearch; the filter goes in quotes: \"(uid=ana)\"."), why: B("Ai aflat DN-ul complet: acum portalul poate face bind ca Ana.", "You found the full DN: now the portal can bind as Ana.") },
+ { type: "input", name: B("Codul de eroare", "The error code"), q: B("Ana își greșește parola. Ce cod de rezultat LDAP primește bind-ul? (doar numărul)", "Ana mistypes her password. What LDAP result code does the bind get? (just the number)"),
+   ans: ["49"], hint: B("Se numește invalidCredentials.", "It's called invalidCredentials."), why: B("49 invalidCredentials; în AD, „data 52e” spune că parola e greșită.", "49 invalidCredentials; in AD, \"data 52e\" says the password is wrong.") },
+ { type: "order", name: B("Login cu LDAP", "LDAP login"), q: B("Pune în ordine pașii unui login în portal.", "Put the steps of a portal login in order."),
+   items: [B("Ana trimite numele și parola prin HTTPS", "Ana sends her name and password over HTTPS"), B("Portalul deschide LDAPS spre director și verifică certificatul", "The portal opens LDAPS to the directory and checks the certificate"), B("Bind cu contul de serviciu", "Bind with the service account"), B("Search după (uid=ana) → DN-ul ei", "Search for (uid=ana) → her DN"), B("Bind cu DN-ul Anei și parola tastată", "Bind with Ana's DN and the typed password"), B("Grupurile devin roluri, Ana primește cookie-ul de sesiune", "Groups become roles, Ana gets the session cookie")],
+   hint: B("Search, then bind.", "Search, then bind.") }
+]},
+
+"load-balancing": { title: "Load balancing", tasks: [
+ { type: "term", name: B("Verifică HAProxy", "Check HAProxy"), q: B("Ai adăugat web-3 în backend. Verifică configurația HAProxy (/etc/haproxy/haproxy.cfg) înainte de reload.", "You added web-3 to the backend. Check the HAProxy configuration (/etc/haproxy/haproxy.cfg) before reloading."),
+   prompt: "root@proxy-a:~#", need: ["haproxy", "-c", "-f"], sol: "haproxy -c -f /etc/haproxy/haproxy.cfg",
+   out: "Configuration file is valid",
+   hint: B("-c = check, -f = fișierul.", "-c = check, -f = the file."), why: B("Apoi: systemctl reload haproxy, fără să cadă conexiunile.", "Then: systemctl reload haproxy, without dropping connections.") },
+ { type: "input", name: B("Câte ajung la web-1?", "How many reach web-1?"), q: B("Pool-ul are web-1 cu weight 3 și web-2 cu weight 1. Din 400 de cereri, câte ajung la web-1 cu weighted round robin?", "The pool has web-1 with weight 3 and web-2 with weight 1. Out of 400 requests, how many reach web-1 with weighted round robin?"),
+   ans: ["300"], hint: B("Greutățile se adună: 3 + 1 = 4 părți.", "Weights add up: 3 + 1 = 4 parts."), why: B("400 × 3/4 = 300; web-2 primește 100.", "400 × 3/4 = 300; web-2 gets 100.") },
+ { type: "order", name: B("Deploy fără întreruperi", "Zero-downtime deploy"), q: B("Ordonează pașii actualizării lui web-1.", "Order the steps for updating web-1."),
+   items: [B("Marchezi web-1 „drain”: fără cereri noi", "Mark web-1 as draining: no new requests"), B("Aștepți să se termine cererile în curs", "Wait for in-flight requests to finish"), B("Oprești și actualizezi web-1", "Stop and update web-1"), B("Pornești web-1, trece health check-ul", "Start web-1; it passes the health check"), B("Revine în pool cu slow start", "It rejoins the pool with slow start")],
+   hint: B("Întâi golești, apoi lucrezi.", "Empty it first, then work on it.") }
+]},
+
+certificate: { title: B("Certificate", "Certificates"), tasks: [
+ { type: "term", name: B("Când expiră?", "When does it expire?"), q: B("Afișează datele de valabilitate ale certificatului din fișierul shop.crt.", "Show the validity dates of the certificate in shop.crt."),
+   prompt: "ops@web:~$", need: ["openssl", "x509", "shop.crt", ["-dates", "-enddate", "-text"]], sol: "openssl x509 -in shop.crt -noout -dates",
+   out: "notBefore=Nov 12 00:00:00 2026 GMT\nnotAfter=Feb 10 23:59:59 2027 GMT",
+   hint: B("openssl x509 -in fișier -noout și opțiunea pentru date.", "openssl x509 -in file -noout plus the dates option."), why: B("90 de zile: reînnoirea automată trebuie să ruleze cu ~30 de zile înainte.", "90 days: automatic renewal should run ~30 days ahead.") },
+ { type: "input", name: B("Câte certificate în lanț?", "How many in the chain?"), q: B("Serverul e configurat corect cu fullchain.pem. Câte certificate trimite în negocierea TLS? (rădăcina nu se trimite)", "The server is correctly set up with fullchain.pem. How many certificates does it send in the TLS handshake? (the root isn't sent)"),
+   ans: ["2", "doi", "two"], hint: B("Site-ul + …", "The site + …"), why: B("Certificatul site-ului + intermediarul; rădăcina e deja în browser.", "The site certificate + the intermediate; the root is already in the browser.") },
+ { type: "order", name: B("Viața unui certificat", "A certificate's life"), q: B("Pune în ordine pașii până la lacătul din browser.", "Put the steps up to the browser padlock in order."),
+   items: [B("Generezi cheia privată pe server", "Generate the private key on the server"), B("Creezi CSR-ul cu numele în SAN", "Create the CSR with the names in the SAN"), B("CA-ul verifică domeniul (ACME)", "The CA checks the domain (ACME)"), B("CA-ul semnează și emite certificatul", "The CA signs and issues the certificate"), B("Instalezi certificatul + intermediarul + cheia", "Install the certificate + intermediate + key"), B("Browserul verifică lanțul până la o rădăcină de încredere", "The browser checks the chain up to a trusted root")],
+   hint: B("Cheia vine prima și nu pleacă niciodată de pe server.", "The key comes first and never leaves the server.") }
+]},
+
+kafka: { title: "Kafka", tasks: [
+ { type: "term", name: B("Lag-ul grupului", "The group's lag"), q: B("Plățile întârzie. Afișează offset-urile și lag-ul grupului payment-service.", "Payments are delayed. Show the offsets and lag of the payment-service group."),
+   prompt: "ops@kafka:~$", need: ["kafka-consumer-groups", "--describe", "payment-service"], sol: "kafka-consumer-groups.sh --bootstrap-server broker-1:9092 --describe --group payment-service",
+   out: "GROUP            TOPIC   PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG  CONSUMER-ID\npayment-service  orders  0          12              12              0    payment-1-a1\npayment-service  orders  1          8               8               0    payment-1-a1\npayment-service  orders  2          4               10              6    payment-2-b7",
+   hint: B("Unealta e kafka-consumer-groups.sh, cu --describe --group.", "The tool is kafka-consumer-groups.sh, with --describe --group."), why: B("Partiția 2 are lag 6: payment-2 e lent sau blocat.", "Partition 2 has lag 6: payment-2 is slow or stuck.") },
+ { type: "input", name: B("Câte instanțe ajută?", "How many instances help?"), q: B("Topic-ul orders are 6 partiții. Câte instanțe dintr-un consumer group pot lucra în paralel, maxim?", "The orders topic has 6 partitions. At most how many instances in one consumer group can work in parallel?"),
+   ans: ["6", "sase", "șase", "six"], hint: B("O partiție e citită de un singur membru al grupului.", "A partition is read by only one member of the group."), why: B("Paralelismul maxim = numărul de partiții; a 7-a instanță ar sta degeaba.", "Maximum parallelism = the number of partitions; a 7th instance would sit idle.") },
+ { type: "order", name: B("Drumul unui record", "A record's journey"), q: B("Ordonează drumul comenzii 1042 prin Kafka.", "Order the journey of order 1042 through Kafka."),
+   items: [B("Producătorul alege partiția din cheie", "The producer picks the partition from the key"), B("Trimite record-ul liderului partiției", "It sends the record to the partition leader"), B("Liderul îl scrie la offset 7", "The leader writes it at offset 7"), B("Replicile din ISR îl copiază; vine ack-ul (acks=all)", "ISR replicas copy it; the ack arrives (acks=all)"), B("Consumatorul din grup îl citește și îl procesează", "The group's consumer reads and processes it"), B("Consumatorul comite offset-ul 8", "The consumer commits offset 8")],
+   hint: B("Commit-ul vine ultimul, după procesare.", "The commit comes last, after processing.") }
+]},
+
+mq: { title: "IBM MQ / ActiveMQ", tasks: [
+ { type: "term", name: B("Adâncimea cozii", "Queue depth"), q: B("În runmqsc pe QM_CORE, afișează câte mesaje sunt în PAYMENTS.IN.", "In runmqsc on QM_CORE, show how many messages are in PAYMENTS.IN."),
+   prompt: "QM_CORE>", need: [["display", "dis"], "payments.in", "curdepth"], sol: "DISPLAY QLOCAL(PAYMENTS.IN) CURDEPTH",
+   out: "AMQ8409I: Display Queue details.\n   QUEUE(PAYMENTS.IN)                      TYPE(QLOCAL)\n   CURDEPTH(1)",
+   hint: B("DISPLAY QLOCAL(numele cozii) CURDEPTH", "DISPLAY QLOCAL(queue name) CURDEPTH"), why: B("Dacă CURDEPTH tot crește, consumatorul e oprit sau prea lent.", "If CURDEPTH keeps rising, the consumer is down or too slow.") },
+ { type: "input", name: B("Mesajul otrăvit", "The poison message"), q: B("PAYMENTS.IN are BOTHRESH(3). După a câta citire eșuată e mutat mesajul în coada de backout? (doar numărul)", "PAYMENTS.IN has BOTHRESH(3). After which failed read is the message moved to the backout queue? (just the number)"),
+   ans: ["3", "trei", "three"], hint: B("BOTHRESH = pragul de backout.", "BOTHRESH = the backout threshold."), why: B("BackoutCount ajunge la 3 → PAYMENTS.BACKOUT; coada principală merge mai departe.", "BackoutCount reaches 3 → PAYMENTS.BACKOUT; the main queue carries on.") },
+ { type: "order", name: B("Drumul plății", "The payment's path"), q: B("Ordonează drumul mesajului de plată prin IBM MQ.", "Order the payment message's path through IBM MQ."),
+   items: [B("payments-api face put pe coada PAYMENTS (JMS)", "payments-api puts to the PAYMENTS queue (JMS)"), B("QM_APP îl pune în coada de transmisie QM_CORE.XMITQ", "QM_APP places it on the QM_CORE.XMITQ transmission queue"), B("Canalul sender îl duce la QM_CORE", "The sender channel carries it to QM_CORE"), B("Ajunge în coada locală PAYMENTS.IN", "It lands in the local queue PAYMENTS.IN"), B("core-banking îl citește în tranzacție și dă COMMIT", "core-banking reads it in a transaction and COMMITs"), B("Răspunsul cu CorrelationId ajunge în PAYMENTS.REPLY", "The reply with the CorrelationId arrives in PAYMENTS.REPLY")],
+   hint: B("Coadă remote → XMITQ → canal → coadă locală.", "Remote queue → XMITQ → channel → local queue.") }
 ]}
 };
 })();

@@ -2,7 +2,8 @@
 // Points are worked out from the saved results (which can't be edited), plus whatever
 // was won or lost at the roulette (users/{uid}.roulette, a running total).
 export const TESTS = ["ethernet", "vlan", "nat", "dns", "https", "ipv6", "bgp", "tomcat", "monolit-cpp",
-  "microservicii", "kubernetes", "k8s-intrare", "ingress", "gke-retea", "service-mesh", "observabilitate"];
+  "microservicii", "kubernetes", "k8s-intrare", "ingress", "gke-retea", "service-mesh", "observabilitate",
+  "certificate", "load-balancing", "ldap", "kafka", "mq"];
 export const PER_TEST = 5;
 export const MIN_SHARE = 0.8;
 

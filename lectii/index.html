@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Toate lecțiile</title>
+<meta name="description" content="Toate lecțiile interactive, pe subiecte. / Every interactive lesson, by topic.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/theme.css">
+<style>
+.page{max-width:1180px;margin:0 auto;padding:24px max(16px,env(safe-area-inset-right,0px)) 40px max(16px,env(safe-area-inset-left,0px))}
+h1{font:700 clamp(1.6rem,4vw,2.4rem) var(--head);margin:0 0 6px}
+.lead{color:var(--muted);margin:0 0 16px}
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 8px}
+.chip{border:2px solid var(--text);background:var(--surface);color:var(--text);border-radius:999px;padding:6px 12px;font:600 .88rem var(--sans);cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--accent);color:var(--accent-text)}
+.search{flex:1 1 220px;min-width:0;font:500 .95rem var(--sans);padding:9px 12px;border:2px solid var(--text);border-radius:10px;background:var(--surface);color:var(--text)}
+.cat-h{display:flex;align-items:baseline;gap:10px;margin:28px 0 12px}
+.cat-h h2{font:700 1.3rem var(--head);margin:0}
+.cat-h p{margin:0;color:var(--muted);font-size:.92rem}
+.path{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.lesson{display:flex;flex-direction:column;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;color:var(--text);text-decoration:none;min-width:0;transition:border-color .15s,transform .15s}
+.lesson:hover{border-color:var(--accent);transform:translateY(-2px)}
+.lesson:focus-visible{outline:2px solid var(--focus);outline-offset:3px}
+.lesson .top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.lesson .num{font:600 .74rem var(--mono);color:var(--accent);letter-spacing:.08em}
+.lesson .lvl{font:500 .74rem var(--mono);padding:2px 8px;border-radius:999px;border:1px solid var(--border);color:var(--muted)}
+.lesson .new{font:700 .7rem var(--mono);padding:2px 8px;border-radius:999px;background:var(--accent);color:var(--accent-text)}
+.lesson svg{width:100%;height:auto;max-height:110px;background:var(--surface2);border-radius:8px}
+.lesson h3{font:700 1.2rem var(--head);margin:0}
+.lesson p{margin:0;color:var(--muted);font-size:.93rem}
+.lesson ul{margin:0;padding-left:1.1em;font-size:.88rem}
+.lesson .stats{font:500 .78rem var(--mono);color:var(--muted)}
+.lesson .go{margin-top:auto;font-weight:600;color:var(--accent);font-size:.92rem}
+.none{color:var(--muted);padding:20px 0}
+.ill-line{stroke:var(--link);stroke-width:2.5}
+.ill-dev{fill:var(--surface);stroke:var(--text);stroke-width:1.6}
+.ill-acc{fill:var(--accent)}
+.ill-tok{fill:var(--l2bg);stroke:var(--l2);stroke-width:1.4}
+.ill-dns{fill:var(--arpbg);stroke:var(--arp);stroke-width:1.4}
+.ill-txt{font:700 9px var(--sans)}
+@media (max-width:980px){.path{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:640px){.path{grid-template-columns:minmax(0,1fr)}}
+@media (prefers-reduced-motion:reduce){.lesson{transition:none}.lesson:hover{transform:none}}
+</style>
+</head>
+<body>
+<header class="topbar" id="top"><div class="topbar-in">
+  <a class="brand" href="../index.html"><svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="var(--accent)"/><path d="M7 16h18M19 11l6 5-6 5" fill="none" stroke="var(--accent-text)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="16" r="2.6" fill="var(--accent-text)"/></svg><span data-t="brand"></span></a>
+  <nav class="nav" data-menu data-root="../" aria-label="Meniu / Menu"></nav>
+  <div class="tools"><div class="seg" role="group" aria-label="Limba / Language"><button type="button" data-lang="ro">RO</button><button type="button" data-lang="en">EN</button></div><button type="button" class="icon-btn" id="theme">◐</button></div>
+</div></header>
+
+<main class="page">
+  <h1 data-t="title"></h1>
+  <p class="lead" data-t="lead"></p>
+  <div class="filters" id="chips"></div>
+  <div class="filters"><input class="search" id="q" type="search" autocomplete="off"></div>
+  <div id="list"></div>
+</main>
+<footer class="foot"><div class="foot-in"><p data-t="foot"></p></div></footer>
+
+<script src="../assets/catalog.js?v=1"></script>
+<script src="../assets/menu.js?v=1"></script>
+<script>
+(function(){
+"use strict";
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+let lang=store.get("cadru-lang")==="en"?"en":"ro";
+const T=v=>(v&&typeof v==="object"&&!Array.isArray(v))?v[lang]:v;
+const C=window.CATALOG,NEW=["ldap","load-balancing","certificate","kafka","mq"];
+const UI={brand:{ro:"Rețea pas cu pas",en:"Network step by step"},title:{ro:"Toate lecțiile",en:"All lessons"},
+  lead:{ro:"Alege un subiect sau caută. Fiecare lecție: simulare pas cu pas, laborator și test (peste 80% = 🪙 5 puncte).",en:"Pick a topic or search. Every lesson: a step-by-step simulation, a lab and a quiz (over 80% = 🪙 5 points)."},
+  all:{ro:"Toate",en:"All"},ph:{ro:"Caută: Kafka, certificat, DNS…",en:"Search: Kafka, certificate, DNS…"},none:{ro:"Nicio lecție nu se potrivește.",en:"No lesson matches."},
+  lesson:{ro:"LECȚIA",en:"LESSON"},start:{ro:"Începe lecția →",en:"Start the lesson →"},nw:{ro:"NOU",en:"NEW"},
+  foot:{ro:"Proiect educațional. Adresele și numele din lecții sunt exemple.",en:"An educational project. Addresses and names in the lessons are examples."}};
+let cat=(location.hash||"").slice(1),q="";
+const fold=s=>String(s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+function card(l,n){return `<a class="lesson" href="../${l.href}"><div class="top"><span class="num">${T(UI.lesson)} ${String(n).padStart(2,"0")}</span>${NEW.includes(l.id)?`<span class="new">${T(UI.nw)}</span>`:`<span class="lvl">${T(l.lvl)}</span>`}</div>${C.ILL[l.ill]||""}<h3>${T(l.t)}</h3><p>${T(l.d)}</p><ul>${l.topics.map(t=>`<li>${T(t)}</li>`).join("")}</ul><span class="stats">${T(l.stats)}</span><span class="go">${T(UI.start)}</span></a>`}
+function render(){
+  document.documentElement.lang=lang;document.title=T(UI.title);
+  document.querySelectorAll("[data-t]").forEach(e=>{e.textContent=T(UI[e.dataset.t])});
+  document.getElementById("q").placeholder=T(UI.ph);document.getElementById("q").setAttribute("aria-label",T(UI.ph));
+  if(cat&&!C.CATS.some(c=>c.id===cat))cat="";
+  document.getElementById("chips").innerHTML=`<button type="button" class="chip" data-c="" aria-pressed="${!cat}">${T(UI.all)}</button>`+C.CATS.map(c=>`<button type="button" class="chip" data-c="${c.id}" aria-pressed="${cat===c.id}">${c.icon} ${T(c.t)}</button>`).join("");
+  const f=fold(q.trim());let n=0,h="",shown=0;
+  C.CATS.forEach(c=>{const items=c.list.map(id=>[C.byId(id),++n]).filter(([l])=>!f||fold(T(l.t)+" "+T(l.d)+" "+l.topics.map(T).join(" ")+" "+l.id).includes(f));
+    if((cat&&cat!==c.id)||!items.length)return;shown+=items.length;
+    h+=`<section id="${c.id}"><div class="cat-h"><h2>${c.icon} ${T(c.t)}</h2><p>${T(c.d)}</p></div><div class="path">${items.map(([l,i])=>card(l,i)).join("")}</div></section>`});
+  document.getElementById("list").innerHTML=shown?h:`<p class="none">${T(UI.none)}</p>`;
+  document.querySelectorAll("[data-lang]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.lang===lang?"true":"false"));
+}
+document.getElementById("chips").addEventListener("click",e=>{const b=e.target.closest(".chip");if(!b)return;cat=b.dataset.c;history.replaceState(null,"",cat?"#"+cat:location.pathname);render()});
+document.getElementById("q").addEventListener("input",e=>{q=e.target.value;render()});
+window.addEventListener("hashchange",()=>{cat=location.hash.slice(1);render();scrollTo(0,0)});
+document.querySelectorAll("[data-lang]").forEach(b=>b.onclick=()=>{lang=b.dataset.lang;store.set("cadru-lang",lang);render();window.dispatchEvent(new Event("cadru:lang"))});
+const saved=store.get("cadru-theme");if(saved==="light"||saved==="dark")document.documentElement.dataset.theme=saved;
+document.getElementById("theme").onclick=()=>{const r=document.documentElement,d=r.dataset.theme?r.dataset.theme==="dark":matchMedia("(prefers-color-scheme: dark)").matches;const nt=d?"light":"dark";r.dataset.theme=nt;store.set("cadru-theme",nt)};
+render();
+})();
+</script>
+<script type="module" src="../assets/auth.js?v=6"></script>
+</body>
+</html>
