@@ -317,6 +317,18 @@ istio: { title: "Istio", tasks: [
  { type: "order", name: B("Adoptarea Istio", "Adopting Istio"), q: B("Ordonează pașii prin care magazinul adoptă Istio în siguranță.", "Order the steps for the shop to adopt Istio safely."),
    items: [B("Instalezi istiod cu istioctl install", "Install istiod with istioctl install"), B("Pui istio-injection=enabled pe namespace", "Label the namespace istio-injection=enabled"), B("Repornești podurile: primesc sidecar-ul", "Restart the pods: they get the sidecar"), B("PeerAuthentication PERMISSIVE cât migrezi", "PeerAuthentication PERMISSIVE while migrating"), B("Treci la STRICT când toți sunt în mesh", "Switch to STRICT once everyone is in the mesh"), B("Adaugi AuthorizationPolicy pe payments", "Add an AuthorizationPolicy on payments")],
    hint: B("STRICT doar după ce toate serviciile au sidecar.", "STRICT only after every service has a sidecar.") }
+]},
+
+cassandra: { title: "Cassandra", tasks: [
+ { type: "term", name: B("Starea clusterului", "Cluster state"), q: B("Verifică ce noduri din cluster sunt pornite (UN) și care sunt căzute (DN).", "Check which nodes in the cluster are up (UN) and which are down (DN)."),
+   prompt: "$", need: ["nodetool", "status"], sol: "nodetool status",
+   out: "Datacenter: eu-west\n--  Address    Load     Tokens  Owns   Rack\nUN  10.0.1.11  412 GiB  16      50.1%  r1\nUN  10.0.1.12  405 GiB  16      49.8%  r2\nDN  10.0.1.13  398 GiB  16      50.3%  r3",
+   hint: B("nodetool <comandă>", "nodetool <command>"), why: B("U/D = Up/Down, N = Normal; 10.0.1.13 e căzut.", "U/D = Up/Down, N = Normal; 10.0.1.13 is down.") },
+ { type: "input", name: B("Cvorumul", "The quorum"), q: B("Cu factorul de replicare 3, câte replici trebuie să confirme o scriere QUORUM? (un număr)", "With a replication factor of 3, how many replicas must acknowledge a QUORUM write? (a number)"),
+   ans: ["2", "doi", "two"], hint: B("Majoritatea din 3.", "A majority of 3."), why: B("2 din 3; scriere și citire QUORUM au mereu un nod comun.", "2 of 3; a QUORUM write and read always share a node.") },
+ { type: "order", name: B("Viața unei scrieri", "A write's life"), q: B("Ordonează drumul evenimentului IN_TRANSIT, de la aplicație până la disc.", "Order the IN_TRANSIT event's path, from the app to disk."),
+   items: [B("Driverul calculează tokenul cheii parcel_id", "The driver works out the parcel_id key's token"), B("Coordonatorul trimite scrierea la cele 3 replici", "The coordinator sends the write to the 3 replicas"), B("Fiecare replică adaugă la commit log și pune în memtable", "Each replica appends to the commit log and puts it in the memtable"), B("2 replici confirmă: QUORUM, aplicația primește OK", "2 replicas acknowledge: QUORUM, the app gets OK"), B("Memtable-ul plin e scris pe disc ca SSTable", "The full memtable is written to disk as an SSTable"), B("Compactarea îmbină SSTable-urile", "Compaction merges the SSTables")],
+   hint: B("Aplicația primește OK înainte ca datele să ajungă în SSTable.", "The app gets OK before the data reaches an SSTable.") }
 ]}
 };
 })();

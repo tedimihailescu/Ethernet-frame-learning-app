@@ -75,7 +75,7 @@ h1{font:700 clamp(1.6rem,4vw,2.4rem) var(--head);margin:0 0 6px}
 </main>
 <footer class="foot"><div class="foot-in"><p data-t="foot"></p></div></footer>
 
-<script src="../assets/catalog.js?v=5"></script>
+<script src="../assets/catalog.js?v=6"></script>
 <script src="../assets/menu.js?v=2"></script>
 <script>
 (function(){
@@ -83,7 +83,7 @@ h1{font:700 clamp(1.6rem,4vw,2.4rem) var(--head);margin:0 0 6px}
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
 let lang=store.get("cadru-lang")==="en"?"en":"ro";
 const T=v=>(v&&typeof v==="object"&&!Array.isArray(v))?v[lang]:v;
-const C=window.CATALOG,NEW=["istio","gitops","artifactory","xfb","xfb-gateway"];
+const C=window.CATALOG,NEW=["cassandra","istio","gitops","artifactory","xfb","xfb-gateway"];
 const UI={brand:{ro:"Rețea pas cu pas",en:"Network step by step"},title:{ro:"Toate lecțiile",en:"All lessons"},
   lead:{ro:"Alege un subiect sau caută. Fiecare lecție: simulare pas cu pas, laborator și test (peste 80% = 🪙 5 puncte).",en:"Pick a topic or search. Every lesson: a step-by-step simulation, a lab and a quiz (over 80% = 🪙 5 points)."},
   all:{ro:"Toate",en:"All"},ph:{ro:"Caută: Kafka, certificat, DNS…",en:"Search: Kafka, certificate, DNS…"},none:{ro:"Nicio lecție nu se potrivește.",en:"No lesson matches."},
@@ -136,6 +136,6 @@ document.getElementById("theme").onclick=()=>{const r=document.documentElement,d
 render();
 })();
 </script>
-<script type="module" src="../assets/auth.js?v=11"></script>
+<script type="module" src="../assets/auth.js?v=12"></script>
 </body>
 </html>

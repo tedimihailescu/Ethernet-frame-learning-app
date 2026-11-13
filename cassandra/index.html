@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cassandra: drumul unei scrieri și al unei citiri</title>
+<meta name="description" content="Lecție interactivă despre Apache Cassandra: modelarea după interogări, cheia de partiție, inelul de tokeni, replicare, coordonator, commit log, memtable, SSTable, niveluri de consistență, hinted handoff, read repair, tombstones, compactare și mai multe centre de date. / Interactive Apache Cassandra lesson.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<script>
+(function(){
+const KEY="parcel_id = 'PK-7731'",TOK="−1 847 293 006 412 551 204",REP={ro:"nod 5, nod 6, nod 1 (RF = 3)",en:"node 5, node 6, node 1 (RF = 3)"};
+const INS1="INSERT INTO events_by_parcel (parcel_id, event_time, status, place) VALUES ('PK-7731', '2026-11-13 09:42', 'IN_TRANSIT', 'Cluj hub')";
+const INS2="INSERT INTO events_by_parcel (parcel_id, event_time, status, place) VALUES ('PK-7731', '2026-11-13 11:05', 'OUT_FOR_DELIVERY', 'Cluj')";
+const SEL="SELECT * FROM events_by_parcel WHERE parcel_id = 'PK-7731' LIMIT 10";
+const F0={key:KEY,token:TOK,replicas:REP,result:{ro:"driverul știe harta inelului și trimite direct la un nod care are datele",en:"the driver knows the ring map and sends straight to a node that has the data"}};
+const F1={cql:INS1,cl:"QUORUM",key:KEY,token:TOK,replicas:REP,result:{ro:"nodul 5 e coordonator: trimite scrierea la toate cele 3 replici",en:"node 5 is the coordinator: it sends the write to all 3 replicas"}};
+const F2={...F1,disk:{ro:"1) adăugat la commit log (scriere secvențială pe disc) · 2) pus în memtable (RAM) · 3) confirmat",en:"1) appended to the commit log (sequential disk write) · 2) put in the memtable (RAM) · 3) acknowledged"},result:{ro:"nicio citire de pe disc, niciun index de actualizat: o scriere durează microsecunde",en:"no disk reads, no index to update: a write takes microseconds"}};
+const F3={...F1,acks:{ro:"nod 5 ✓ · nod 6 ✓ → 2 din 3 = QUORUM · nod 1 ✓ (după încă 2 ms)",en:"node 5 ✓ · node 6 ✓ → 2 of 3 = QUORUM · node 1 ✓ (2 ms later)"},result:{ro:"aplicația primește OK după 4 ms",en:"the app gets OK after 4 ms"}};
+const F4={cql:INS2,cl:"QUORUM",key:KEY,token:TOK,replicas:REP,acks:{ro:"nod 5 ✓ · nod 6 ✓ · nod 1 ✗ (căzut)",en:"node 5 ✓ · node 6 ✓ · node 1 ✗ (down)"},result:{ro:"scrierea reușește; nodul 5 păstrează un hint pentru nodul 1",en:"the write succeeds; node 5 keeps a hint for node 1"}};
+const F5={cql:SEL,cl:"QUORUM",key:KEY,replicas:{ro:"întrebate: nod 5 (date complete), nod 1 (digest)",en:"asked: node 5 (full data), node 1 (digest)"},acks:{ro:"digest-urile diferă: nodul 1 nu are evenimentul de la 11:05",en:"the digests differ: node 1 is missing the 11:05 event"},result:{ro:"câștigă timestamp-ul cel mai nou; aplicația vede OUT_FOR_DELIVERY, iar nodul 1 e reparat (read repair)",en:"the newest timestamp wins; the app sees OUT_FOR_DELIVERY, and node 1 is fixed (read repair)"}};
+const F6={cql:SEL,cl:"QUORUM",key:KEY,disk:{ro:"memtable → bloom filter pe 4 SSTable-uri (3 spun „sigur nu”) → index de partiție → 1 SSTable citit → îmbinare după timestamp",en:"memtable → bloom filters on 4 SSTables (3 say \"definitely not\") → partition index → 1 SSTable read → merge by timestamp"},result:{ro:"2 evenimente găsite: unul în memtable, unul pe disc",en:"2 events found: one in the memtable, one on disk"}};
+const F7={cql:"DELETE FROM events_by_parcel WHERE parcel_id = 'PK-7731' AND event_time = '2026-11-13 09:42'",cl:"QUORUM",key:KEY,disk:{ro:"se scrie un tombstone (marcaj de ștergere), nu se șterge nimic pe loc",en:"a tombstone (deletion marker) is written; nothing is removed in place"},result:{ro:"datele dispar fizic abia la compactare, după gc_grace_seconds (10 zile)",en:"the data is physically removed only at compaction, after gc_grace_seconds (10 days)"}};
+const F8={cql:"CREATE KEYSPACE tracking WITH replication = {'class': 'NetworkTopologyStrategy', 'eu-west': 3, 'eu-central': 3}",cl:"LOCAL_QUORUM",replicas:{ro:"3 replici în fiecare centru de date",en:"3 replicas in each data centre"},result:{ro:"aplicația din eu-west așteaptă doar 2 noduri locale; celălalt centru primește datele asincron",en:"the app in eu-west waits only for 2 local nodes; the other data centre gets the data asynchronously"}};
+
+window.LESSON={
+docTitle:{ro:"Cassandra: drumul unei scrieri și al unei citiri",en:"Cassandra: the journey of a write and a read"},
+eyebrow:{ro:"Lecție interactivă · Aplicații în producție",en:"Interactive lesson · Production apps"},
+title:{ro:"Cassandra: drumul unei scrieri și al unei citiri",en:"Cassandra: the journey of a write and a read"},
+sub:{ro:"O firmă de curierat primește 50 000 de evenimente de urmărire pe secundă: „preluat”, „în tranzit”, „în livrare”. Le ține într-un cluster Apache Cassandra cu 6 noduri, fără un server principal. Urmărim un colet: cum e modelat tabelul, pe ce noduri ajunge evenimentul, ce se întâmplă pe disc, ce înseamnă QUORUM, ce face clusterul când un nod cade și cum se repară datele.",en:"A courier company receives 50,000 tracking events per second: \"picked up\", \"in transit\", \"out for delivery\". It keeps them in a 6-node Apache Cassandra cluster with no primary server. We follow one parcel: how the table is modelled, which nodes the event lands on, what happens on disk, what QUORUM means, what the cluster does when a node goes down and how the data is repaired."},
+meta:[{ro:"≈ 30 minute",en:"≈ 30 minutes"},{ro:"12 pași",en:"12 steps"},{ro:"8 întrebări",en:"8 questions"},{ro:"Intermediar",en:"Intermediate"}],
+goals:[{ro:"Modelarea după interogări: cheia de partiție și coloanele de ordonare",en:"Query-first modelling: the partition key and clustering columns"},{ro:"Inelul de tokeni, replicarea și coordonatorul",en:"The token ring, replication and the coordinator"},{ro:"Drumul pe disc: commit log, memtable, SSTable, compactare",en:"The path on disk: commit log, memtable, SSTable, compaction"},{ro:"Consistență reglabilă, hinted handoff, read repair, tombstones",en:"Tunable consistency, hinted handoff, read repair, tombstones"}],
+foot:{ro:"Nume de firmă, colete și adrese fictive.",en:"Fictional company, parcels and addresses."},
+ui:{frameT:{ro:"Operația (live)",en:"The operation (live)"},refT:{ro:"CQL și nodetool",en:"CQL and nodetool"},refLead:{ro:"Schema din lecție, interogările bune și rele, și comenzile de operare.",en:"The lesson's schema, good and bad queries, and the operations commands."}},
+tryT:{ro:"Încearcă (pe un cluster de test)",en:"Try it (on a test cluster)"},
+legend:[["lg-app","WRITE",{ro:"scriere",en:"write"}],["lg-ip","READ",{ro:"citire",en:"read"}],["lg-tcp","DOWN",{ro:"nod căzut / date vechi",en:"node down / stale data"}],["lg-arp","INFO",{ro:"token, hint, reparare",en:"token, hint, repair"}]],
+
+nodes:{
+  app:{type:"server",name:"tracking-api",lines:[{ro:"driver Java",en:"Java driver"}]},
+  n1:{type:"db",name:{ro:"nod 1",en:"node 1"},lines:["10.0.1.11"]},
+  n2:{type:"db",name:{ro:"nod 2",en:"node 2"},lines:["10.0.1.12"]},
+  n3:{type:"db",name:{ro:"nod 3",en:"node 3"},lines:["10.0.1.13"]},
+  n4:{type:"db",name:{ro:"nod 4",en:"node 4"},lines:["10.0.1.14"]},
+  n5:{type:"db",name:{ro:"nod 5",en:"node 5"},lines:["10.0.1.15"]},
+  n6:{type:"db",name:{ro:"nod 6",en:"node 6"},lines:["10.0.1.16"]}
+},
+links:[["app","n5"],["n1","n2","virt"],["n2","n3","virt"],["n3","n4","virt"],["n4","n5","virt"],["n5","n6","virt"],["n6","n1","virt"],["n5","n1"]],
+layouts:{
+  wide:{vb:[0,0,1000,560],n:{app:[110,330],n1:[640,110],n2:[820,205],n3:[820,395],n4:[640,490],n5:[460,395],n6:[460,205]},
+    zones:[{x:360,y:20,w:580,h:530,top:true,cls:"virt",l:{ro:"Cluster tracking · datacenter eu-west · RF = 3",en:"tracking cluster · eu-west data centre · RF = 3"}}],
+    texts:[{x:640,y:305,t:{ro:"inelul de tokeni ↻",en:"the token ring ↻"}}]},
+  narrow:{vb:[0,0,360,680],n:{app:[100,70],n5:[100,250],n6:[260,250],n1:[305,410],n2:[260,570],n3:[100,570],n4:[40,410]},
+    zones:[{x:6,y:190,w:348,h:480,top:true,cls:"virt",l:{ro:"Cluster · RF = 3",en:"Cluster · RF = 3"}}],
+    texts:[{x:180,y:415,t:{ro:"inelul ↻",en:"the ring ↻"}}],side:{app:"right"}}
+},
+groups:[
+  {id:"q",color:"l7",fields:["cql","cl"],name:"CQL",short:"CQL",grow:4},
+  {id:"p",color:"l3",fields:["key","token","replicas"],name:{ro:"Partiția",en:"The partition"},short:{ro:"Partiție",en:"Partition"},grow:3},
+  {id:"d",color:"l2",fields:["disk"],name:{ro:"Pe nod",en:"On the node"},short:{ro:"Nod",en:"Node"},grow:3},
+  {id:"r",color:"arp",fields:["acks","result"],name:{ro:"Rezultat",en:"Result"},short:{ro:"Rezultat",en:"Result"},grow:3}
+],
+fieldLabels:{cql:"CQL",cl:{ro:"Nivel de consistență",en:"Consistency level"},key:{ro:"Cheia de partiție",en:"Partition key"},token:{ro:"Token (Murmur3)",en:"Token (Murmur3)"},replicas:{ro:"Replici",en:"Replicas"},disk:{ro:"Ce face nodul",en:"What the node does"},acks:{ro:"Confirmări",en:"Acknowledgements"},result:{ro:"Efect",en:"Effect"}},
+pdu:f=>{const a=JSON.stringify(f.acks||"");
+  if(/✗/.test(a))return {badge:{ro:"Replică căzută",en:"A replica is down"},tok:["DOWN","k-tcp"]};
+  if(/differ/.test(a))return {badge:{ro:"Read repair",en:"Read repair"},tok:["REPAIR","k-arp"]};
+  if(!f.cql)return {badge:{ro:"Calculul tokenului",en:"Working out the token"},tok:["TOKEN","k-arp"]};
+  if(/^SELECT/.test(f.cql))return {badge:{ro:"Citire",en:"Read"},tok:["SELECT","k-ip"]};
+  if(/^DELETE/.test(f.cql))return {badge:{ro:"Ștergere = tombstone",en:"Delete = tombstone"},tok:["DELETE","k-tcp"]};
+  if(/^CREATE/.test(f.cql))return {badge:{ro:"Schemă",en:"Schema"},tok:["SCHEMA","k-arp"]};
+  return {badge:{ro:"Scriere",en:"Write"},tok:["INSERT","k-app"]}},
+
+init:{},
+tables:{
+  why:{title:{ro:"Cassandra vs. o bază relațională clasică",en:"Cassandra vs a classic relational database"},cols:["",{ro:"Relațională (PostgreSQL, Oracle)",en:"Relational (PostgreSQL, Oracle)"},"Cassandra"],plain:[0,1,2],
+    rows:()=>[[{ro:"Arhitectură",en:"Architecture"},{ro:"un server principal + replici",en:"one primary + replicas"},{ro:"toate nodurile egale, fără principal",en:"all nodes equal, no primary"}],[{ro:"Scalare",en:"Scaling"},{ro:"server mai mare",en:"a bigger server"},{ro:"mai multe noduri, liniar",en:"more nodes, linearly"}],[{ro:"Un nod cade",en:"A node goes down"},{ro:"failover, pauză de scrieri",en:"failover, a pause in writes"},{ro:"scrierile continuă",en:"writes carry on"}],[{ro:"Interogări",en:"Queries"},{ro:"orice JOIN, orice WHERE",en:"any JOIN, any WHERE"},{ro:"doar cele pentru care ai modelat tabelul",en:"only those the table was modelled for"}],[{ro:"Consistență",en:"Consistency"},{ro:"tranzacții ACID",en:"ACID transactions"},{ro:"reglabilă per interogare",en:"tunable per query"}]]},
+  part:{title:{ro:"Partiția PK-7731 (ordonată după event_time, descrescător)",en:"Partition PK-7731 (ordered by event_time, descending)"},cols:["event_time","status","place"],plain:[],
+    rows:()=>[["2026-11-13 11:05","OUT_FOR_DELIVERY","Cluj"],["2026-11-13 09:42","IN_TRANSIT","Cluj hub"],["2026-11-12 18:20","IN_TRANSIT",{ro:"Hub București",en:"Bucharest hub"}],["2026-11-12 14:03","PICKED_UP",{ro:"București",en:"Bucharest"}]]},
+  ring:{idx:true,title:{ro:"Cine deține ce parte din inel (simplificat: un token pe nod)",en:"Who owns which part of the ring (simplified: one token per node)"},cols:[{ro:"Nod",en:"Node"},{ro:"Tokeni deținuți",en:"Tokens owned"},{ro:"Replici în plus pentru",en:"Extra replicas for"}],plain:[0,2],
+    rows:()=>[[{ro:"nod 5",en:"node 5"},"−3,07·10¹⁸ … 0",{ro:"nod 3, nod 4",en:"node 3, node 4"}],[{ro:"nod 6",en:"node 6"},"0 … 3,07·10¹⁸",{ro:"nod 4, nod 5",en:"node 4, node 5"}],[{ro:"nod 1",en:"node 1"},"3,07·10¹⁸ … 9,22·10¹⁸",{ro:"nod 5, nod 6",en:"node 5, node 6"}],[{ro:"nod 2 … 4",en:"node 2 … 4"},{ro:"restul inelului",en:"the rest of the ring"},"…"]]},
+  cl:{title:{ro:"Niveluri de consistență (RF = 3)",en:"Consistency levels (RF = 3)"},cols:[{ro:"Nivel",en:"Level"},{ro:"Așteaptă",en:"Waits for"},{ro:"Pe scurt",en:"In short"}],plain:[1,2],
+    rows:()=>[["ONE",{ro:"1 replică",en:"1 replica"},{ro:"cel mai rapid, poate citi date vechi",en:"fastest, may read old data"}],["QUORUM",{ro:"2 replici",en:"2 replicas"},{ro:"scriere + citire QUORUM = date mereu la zi",en:"QUORUM write + read = always up to date"}],["LOCAL_QUORUM",{ro:"2 replici din centrul de date local",en:"2 replicas in the local data centre"},{ro:"standardul cu mai multe centre de date",en:"the standard with several data centres"}],["ALL",{ro:"3 replici",en:"3 replicas"},{ro:"un singur nod căzut = eroare",en:"one node down = an error"}]]},
+  comp:{title:{ro:"Strategii de compactare",en:"Compaction strategies"},cols:[{ro:"Strategie",en:"Strategy"},{ro:"Bună pentru",en:"Good for"}],plain:[1],
+    rows:()=>[["SizeTiered (STCS)",{ro:"multe scrieri, implicit",en:"heavy writes, the default"}],["Leveled (LCS)",{ro:"multe citiri și actualizări",en:"heavy reads and updates"}],["TimeWindow (TWCS)",{ro:"serii de timp cu TTL, ca evenimentele de urmărire",en:"time series with a TTL, like tracking events"}],["Unified (UCS, 5.0)",{ro:"una configurabilă care le poate imita pe celelalte",en:"a configurable one that can mimic the others"}]]}
+},
+log:{title:{ro:"Jurnalul operațiilor",en:"Operations log"},lead:{ro:"Aceeași partiție, PK-7731, scrisă, citită, reparată și ștearsă.",en:"The same partition, PK-7731, written, read, repaired and deleted."},first:{ro:"Pas",en:"Step"},minWidth:600,
+  cols:[{h:"CQL",v:f=>f.cql?f.cql.replace(/ [(].*| WHERE.*| WITH.*/,""):(f.token||""),cls:"mac"},{h:"CL",v:f=>f.cl||"",cls:"ip"},{h:{ro:"Efect",en:"Effect"},v:f=>f.result||"",cls:""}]},
+
+steps:[
+{at:["n1","n2","n3","n4","n5","n6"],frame:null,kind:"none",tables:["why"],who:{ro:"Ideea",en:"The idea"},
+ title:{ro:"De ce Cassandra: multe scrieri, niciun nod principal",en:"Why Cassandra: lots of writes, no primary node"},
+ body:{ro:`<p>Fiecare scanare a unui colet produce un eveniment. În zilele de vârf sunt <strong>50 000 de scrieri pe secundă</strong>, iar clienții verifică non-stop unde le e coletul. O singură bază relațională ar trebui să fie un server tot mai mare, iar dacă el cade, scrierile se opresc.</p>
+<p><strong>Apache Cassandra</strong> e o bază de date distribuită în care <strong>toate nodurile sunt egale</strong>. Datele sunt împărțite între noduri și copiate pe mai multe dintre ele. Ai nevoie de mai multă capacitate? Adaugi noduri.</p>
+<p class="key">Prețul: renunți la JOIN-uri și la interogări arbitrare. Tabelele se proiectează pentru interogările pe care le vei face.</p>`,
+ en:`<p>Every parcel scan produces an event. On peak days there are <strong>50,000 writes per second</strong>, and customers keep checking where their parcel is. A single relational database would need an ever-bigger server, and if it goes down, writes stop.</p>
+<p><strong>Apache Cassandra</strong> is a distributed database in which <strong>all nodes are equal</strong>. The data is split across the nodes and copied to several of them. Need more capacity? Add nodes.</p>
+<p class="key">The price: you give up JOINs and arbitrary queries. Tables are designed for the queries you'll run.</p>`}},
+
+{at:"app",frame:null,kind:"none",tables:["part"],who:{ro:"Modelul de date",en:"The data model"},
+ title:{ro:"Tabelul se face după întrebare",en:"The table is built around the question"},
+ body:{ro:`<p>Întrebarea aplicației: <em>„care sunt ultimele evenimente ale coletului X?”</em>. Tabelul e făcut exact pentru ea:</p>
+<p><code>PRIMARY KEY ((parcel_id), event_time)</code> cu <code>CLUSTERING ORDER BY (event_time DESC)</code></p>
+<ul><li><strong>Cheia de partiție</strong> (<code>parcel_id</code>) decide <strong>pe ce noduri</strong> stau datele. Toate evenimentele unui colet sunt împreună, într-o singură <strong>partiție</strong>.</li>
+<li><strong>Coloana de ordonare</strong> (<code>event_time</code>) decide <strong>ordinea</strong> rândurilor în partiție: cele mai noi primele.</li></ul>
+<p>Ai și întrebarea „toate coletele livrate azi în Cluj”? Faci un <strong>al doilea tabel</strong>, cu altă cheie, și scrii evenimentul în amândouă. Duplicarea datelor e normală în Cassandra.</p>`,
+ en:`<p>The app's question: <em>"what are parcel X's latest events?"</em>. The table is built exactly for it:</p>
+<p><code>PRIMARY KEY ((parcel_id), event_time)</code> with <code>CLUSTERING ORDER BY (event_time DESC)</code></p>
+<ul><li>The <strong>partition key</strong> (<code>parcel_id</code>) decides <strong>which nodes</strong> hold the data. All of a parcel's events are together, in a single <strong>partition</strong>.</li>
+<li>The <strong>clustering column</strong> (<code>event_time</code>) decides the <strong>order</strong> of rows within the partition: newest first.</li></ul>
+<p>Also need "every parcel delivered today in Cluj"? You make a <strong>second table</strong>, with a different key, and write the event to both. Duplicating data is normal in Cassandra.</p>`}},
+
+{at:"n5",frame:F0,kind:"t",move:[[["app","n5"]]],tables:["ring"],hl:{ring:0},log:{ro:"tokenul coletului",en:"the parcel's token"},who:{ro:"Inelul de tokeni",en:"The token ring"},
+ title:{ro:"Pe ce noduri ajunge coletul PK-7731?",en:"Which nodes does parcel PK-7731 land on?"},
+ body:{ro:`<p>Cheia de partiție trece printr-o funcție hash (<strong>Murmur3</strong>) și devine un număr, <strong>tokenul</strong>: aici <code>${TOK}</code>.</p>
+<p>Toate tokenurile posibile formează un <strong>inel</strong>, iar fiecare nod deține o bucată din el. Tokenul coletului cade în bucata nodului 5. Cu <strong>factorul de replicare 3</strong>, datele merg și pe următoarele 2 noduri, în sensul acelor de ceasornic: <strong>nod 5, nod 6, nod 1</strong>.</p>
+<p>Driverul din aplicație cunoaște harta inelului (e <em>token-aware</em>), deci trimite cererea direct la unul dintre aceste noduri.</p>`,
+ en:`<p>The partition key goes through a hash function (<strong>Murmur3</strong>) and becomes a number, the <strong>token</strong>: here <code>${TOK}</code>.</p>
+<p>All possible tokens form a <strong>ring</strong>, and every node owns a slice of it. The parcel's token falls in node 5's slice. With a <strong>replication factor of 3</strong>, the data also goes to the next 2 nodes, clockwise: <strong>node 5, node 6, node 1</strong>.</p>
+<p>The driver in the app knows the ring map (it's <em>token-aware</em>), so it sends the request straight to one of these nodes.</p>`},
+ more:{ro:`<p>În realitate, fiecare nod deține mai multe bucăți mici din inel (<strong>vnodes</strong>, implicit 16 în Cassandra 4+). Așa, când adaugi un nod, el preia câte puțin de la toți, nu jumătate de la un singur vecin. Replicile se pun și pe <em>rack</em>-uri diferite, ca un rack căzut să nu ia toate copiile.</p>`,
+  en:`<p>In reality each node owns many small slices of the ring (<strong>vnodes</strong>, 16 by default in Cassandra 4+). That way, a newly added node takes a little from everyone, not half from a single neighbour. Replicas are also placed on different <em>racks</em>, so a failed rack doesn't take all copies.</p>`},
+ try:[{cmd:"nodetool getendpoints tracking events_by_parcel PK-7731",d:{ro:"Arată pe ce noduri stă o cheie.",en:"Shows which nodes hold a key."}}]},
+
+{at:"n5",frame:F1,kind:"w",move:[[["app","n5"]],[["n5","n6"],["n5","n1"]]],log:{ro:"scrierea pleacă spre replici",en:"the write goes to the replicas"},who:{ro:"Coordonatorul",en:"The coordinator"},
+ title:{ro:"Scrierea: nodul 5 coordonează",en:"The write: node 5 coordinates"},
+ body:{ro:`<p>Scanerul din hub-ul Cluj trimite evenimentul <code>IN_TRANSIT</code>. Aplicația face un <code>INSERT</code> cu nivelul de consistență <strong>QUORUM</strong>.</p>
+<p>Nodul care primește cererea devine <strong>coordonator</strong> pentru ea. Oricare nod poate fi coordonator; aici e nodul 5, care e și replică. El scrie local și trimite în paralel aceeași scriere la nodul 6 și nodul 1.</p>
+<p class="key">Nu există un nod principal care să decidă: orice nod poate primi orice cerere.</p>`,
+ en:`<p>The scanner at the Cluj hub sends the <code>IN_TRANSIT</code> event. The app runs an <code>INSERT</code> at consistency level <strong>QUORUM</strong>.</p>
+<p>The node that receives the request becomes its <strong>coordinator</strong>. Any node can be a coordinator; here it's node 5, which is also a replica. It writes locally and sends the same write to node 6 and node 1 in parallel.</p>
+<p class="key">There's no primary node making decisions: any node can take any request.</p>`}},
+
+{at:["n5","n6","n1"],frame:F2,kind:"w",log:{ro:"commit log + memtable",en:"commit log + memtable"},who:{ro:"Pe disc",en:"On disk"},
+ title:{ro:"Ce face fiecare replică: commit log și memtable",en:"What each replica does: commit log and memtable"},
+ body:{ro:`<p>Fiecare din cele 3 replici face același lucru, foarte simplu:</p>
+<ol><li>adaugă scrierea la sfârșitul <strong>commit log</strong>-ului, pe disc (scriere secvențială, rapidă), ca să nu se piardă la o cădere de curent;</li>
+<li>o pune în <strong>memtable</strong>, o structură sortată în memorie;</li>
+<li>răspunde „gata”.</li></ol>
+<p>Nu citește nimic de pe disc și nu actualizează nimic pe loc. Când memtable-ul se umple, e scris pe disc ca un fișier nou, <strong>SSTable</strong>, care nu se mai modifică niciodată.</p>
+<p class="key">De aceea scrierile în Cassandra sunt atât de rapide: doar adaugi, nu modifici.</p>`,
+ en:`<p>Each of the 3 replicas does the same, very simple thing:</p>
+<ol><li>appends the write to the end of the <strong>commit log</strong> on disk (a fast, sequential write), so it isn't lost in a power cut;</li>
+<li>puts it in the <strong>memtable</strong>, a sorted structure in memory;</li>
+<li>answers "done".</li></ol>
+<p>It reads nothing from disk and updates nothing in place. When the memtable fills up, it's written to disk as a new file, an <strong>SSTable</strong>, which never changes again.</p>
+<p class="key">That's why Cassandra writes are so fast: you only append, never modify.</p>`},
+ try:[{cmd:"nodetool flush tracking",d:{ro:"Scrie forțat memtable-urile pe disc, ca SSTable-uri.",en:"Forces the memtables to disk as SSTables."}}]},
+
+{at:"n5",frame:F3,kind:"w",move:[[["n6","n5"]],[["n5","app"]]],tables:["cl"],hl:{cl:"QUORUM"},log:{ro:"QUORUM atins",en:"QUORUM reached"},who:"QUORUM",
+ title:{ro:"Câte confirmări aștepți? Nivelul de consistență",en:"How many acknowledgements do you wait for? The consistency level"},
+ body:{ro:`<p>Coordonatorul nu așteaptă toate replicile, ci câte cere <strong>nivelul de consistență</strong>. <strong>QUORUM</strong> = majoritatea: 2 din 3. Nodul 5 și nodul 6 confirmă, deci aplicația primește OK. Nodul 1 confirmă și el, puțin mai târziu.</p>
+<p>Regula de aur: dacă <strong>scrii</strong> cu QUORUM și <strong>citești</strong> cu QUORUM, cele două grupuri de câte 2 noduri au mereu cel puțin un nod comun, deci citirea vede mereu ultima scriere. Pe scurt: <code>W + R &gt; RF</code> (2 + 2 &gt; 3).</p>
+<p>Cu <strong>ONE</strong> e mai rapid, dar o citire poate nimeri o replică rămasă în urmă. Alegerea se face <strong>per interogare</strong>.</p>`,
+ en:`<p>The coordinator doesn't wait for every replica, only as many as the <strong>consistency level</strong> asks for. <strong>QUORUM</strong> = a majority: 2 of 3. Node 5 and node 6 acknowledge, so the app gets OK. Node 1 acknowledges too, a little later.</p>
+<p>The golden rule: if you <strong>write</strong> at QUORUM and <strong>read</strong> at QUORUM, the two groups of 2 nodes always share at least one node, so the read always sees the latest write. In short: <code>W + R &gt; RF</code> (2 + 2 &gt; 3).</p>
+<p><strong>ONE</strong> is faster, but a read may hit a replica that has fallen behind. The choice is made <strong>per query</strong>.</p>`}},
+
+{at:"n1",frame:F4,kind:"w",move:[[["app","n5"]],[["n5","n6"]]],marks:{n1:{k:"drop",t:{ro:"căzut",en:"down"}}},log:{ro:"nod căzut, hint păstrat",en:"node down, hint kept"},who:"Hinted handoff",
+ title:{ro:"Nodul 1 cade, scrierile continuă",en:"Node 1 goes down, writes carry on"},
+ body:{ro:`<p>La 10:30 nodul 1 cade: un disc defect. Nodurile află asta în câteva secunde, prin <strong>gossip</strong> (fiecare nod vorbește în fiecare secundă cu câțiva vecini despre starea tuturor).</p>
+<p>La 11:05 vine evenimentul <code>OUT_FOR_DELIVERY</code>. Cu QUORUM sunt suficiente 2 replici: nodul 5 și nodul 6 confirmă, aplicația primește OK. Nimeni nu observă nimic.</p>
+<p>Coordonatorul păstrează un <strong>hint</strong>: „scrierea asta e pentru nodul 1”. Dacă nodul revine în <strong>3 ore</strong> (<code>max_hint_window</code>), primește hint-urile și ajunge la zi singur.</p>`,
+ en:`<p>At 10:30 node 1 goes down: a faulty disk. The other nodes find out within seconds, through <strong>gossip</strong> (every second, each node talks to a few neighbours about everyone's state).</p>
+<p>At 11:05 the <code>OUT_FOR_DELIVERY</code> event arrives. At QUORUM, 2 replicas are enough: node 5 and node 6 acknowledge, and the app gets OK. Nobody notices a thing.</p>
+<p>The coordinator keeps a <strong>hint</strong>: "this write is for node 1". If the node comes back within <strong>3 hours</strong> (<code>max_hint_window</code>), it receives the hints and catches up by itself.</p>`},
+ try:[{cmd:"nodetool status",d:{ro:"UN = Up/Normal; DN = Down/Normal (căzut).",en:"UN = Up/Normal; DN = Down/Normal (down)."}}]},
+
+{at:"n5",frame:F5,kind:"r",move:[[["app","n5"]],[["n5","n1"]],[["n1","n5"]],[["n5","app"]]],rest:["n1"],marks:{n1:{k:"ok",t:{ro:"reparat ✓",en:"repaired ✓"}}},log:{ro:"citire QUORUM + read repair",en:"QUORUM read + read repair"},who:"Read repair",
+ title:{ro:"Citirea: replicile nu sunt de acord",en:"The read: the replicas disagree"},
+ body:{ro:`<p>Discul a fost schimbat abia după 4 ore, peste fereastra de 3 ore, deci hint-urile pentru nodul 1 s-au oprit. Nodul 1 nu are evenimentul de la 11:05.</p>
+<p>Clientul deschide pagina coletului: un <code>SELECT</code> cu QUORUM. Coordonatorul (nodul 5) cere <strong>datele complete</strong> de la o replică și doar un <strong>digest</strong> (un hash al datelor) de la alta, aici nodul 1. Hash-urile diferă.</p>
+<p>Coordonatorul cere datele complete și de la nodul 1 și le îmbină: pentru fiecare celulă câștigă <strong>timestamp-ul cel mai nou</strong>. Clientul vede <code>OUT_FOR_DELIVERY</code>, iar coordonatorul scrie evenimentul lipsă și pe nodul 1: <strong>read repair</strong>.</p>`,
+ en:`<p>The disk was only replaced after 4 hours, beyond the 3-hour window, so the hints for node 1 stopped. Node 1 doesn't have the 11:05 event.</p>
+<p>The customer opens the parcel page: a <code>SELECT</code> at QUORUM. The coordinator (node 5) asks one replica for the <strong>full data</strong> and another, here node 1, only for a <strong>digest</strong> (a hash of the data). The hashes differ.</p>
+<p>The coordinator fetches the full data from node 1 too and merges them: for every cell, the <strong>newest timestamp wins</strong>. The customer sees <code>OUT_FOR_DELIVERY</code>, and the coordinator writes the missing event to node 1 as well: a <strong>read repair</strong>.</p>`},
+ more:{ro:`<p>Read repair repară doar partițiile citite. Pentru restul, echipa rulează periodic <code>nodetool repair</code> (sau Cassandra Reaper), care compară replicile cu arbori Merkle și copiază diferențele. Repair-ul trebuie rulat pe tot clusterul mai des decât <code>gc_grace_seconds</code> (10 zile).</p>`,
+  en:`<p>Read repair only fixes the partitions that are read. For everything else, the team regularly runs <code>nodetool repair</code> (or Cassandra Reaper), which compares replicas using Merkle trees and copies the differences. Repair must cover the whole cluster more often than <code>gc_grace_seconds</code> (10 days).</p>`}},
+
+{at:"n5",frame:F6,kind:"r",log:{ro:"drumul citirii pe un nod",en:"the read path on a node"},who:{ro:"Citirea pe nod",en:"Reading on a node"},
+ title:{ro:"Cum citește un nod: memtable, bloom filter, SSTable-uri",en:"How a node reads: memtable, bloom filters, SSTables"},
+ body:{ro:`<p>Pentru că SSTable-urile nu se modifică, rândurile unei partiții pot fi împrăștiate în memtable și în mai multe SSTable-uri. La o citire, nodul:</p>
+<ol><li>caută în <strong>memtable</strong>;</li>
+<li>întreabă <strong>bloom filter</strong>-ul fiecărui SSTable, o structură mică din memorie care răspunde „sigur nu e aici” sau „poate e aici”;</li>
+<li>pentru „poate”, folosește <strong>indexul de partiție</strong> ca să sară direct la locul din fișier;</li>
+<li><strong>îmbină</strong> rezultatele după timestamp.</li></ol>
+<p>Cu cât sunt mai multe SSTable-uri de verificat, cu atât citirea e mai lentă. De aceea există compactarea.</p>`,
+ en:`<p>Because SSTables never change, a partition's rows can be spread across the memtable and several SSTables. On a read, the node:</p>
+<ol><li>looks in the <strong>memtable</strong>;</li>
+<li>asks each SSTable's <strong>bloom filter</strong>, a small in-memory structure that answers "definitely not here" or "maybe here";</li>
+<li>for "maybe", uses the <strong>partition index</strong> to jump straight to the right place in the file;</li>
+<li><strong>merges</strong> the results by timestamp.</li></ol>
+<p>The more SSTables there are to check, the slower the read. That's why compaction exists.</p>`},
+ try:[{cmd:"nodetool tablehistograms tracking events_by_parcel",d:{ro:"Câte SSTable-uri atinge o citire și cât de mari sunt partițiile.",en:"How many SSTables a read touches and how big partitions are."}}]},
+
+{at:["n5","n6","n1"],frame:F7,kind:"d",tables:["comp"],hl:{comp:"TimeWindow (TWCS)"},log:{ro:"ștergere = tombstone",en:"delete = tombstone"},who:{ro:"Ștergeri și compactare",en:"Deletes and compaction"},
+ title:{ro:"Ștergerea nu șterge: tombstones și compactare",en:"Deleting doesn't delete: tombstones and compaction"},
+ body:{ro:`<p>Un eveniment greșit trebuie șters. Dar SSTable-urile nu se modifică, deci un <code>DELETE</code> scrie un <strong>tombstone</strong>: un marcaj „rândul ăsta e șters de la ora X”.</p>
+<p><strong>Compactarea</strong> rulează în fundal: îmbină mai multe SSTable-uri într-unul nou, păstrează doar versiunea cea mai nouă a fiecărei celule și aruncă datele șterse, dar doar după <code>gc_grace_seconds</code> (10 zile). Până atunci, tombstone-ul trebuie să ajungă pe toate replicile, altfel o replică veche ar putea „învia” rândul șters.</p>
+<p>Evenimentele de urmărire nu trebuie păstrate pentru totdeauna, așa că se scriu cu <code>USING TTL 7776000</code> (90 de zile) și cu compactarea <strong>TimeWindow</strong>: SSTable-urile pe zile întregi expirate se aruncă direct.</p>`,
+ en:`<p>A wrong event has to be deleted. But SSTables never change, so a <code>DELETE</code> writes a <strong>tombstone</strong>: a marker saying "this row was deleted at time X".</p>
+<p><strong>Compaction</strong> runs in the background: it merges several SSTables into a new one, keeps only the newest version of each cell and drops deleted data, but only after <code>gc_grace_seconds</code> (10 days). Until then the tombstone must reach every replica, or an old replica could "resurrect" the deleted row.</p>
+<p>Tracking events don't need to be kept forever, so they're written with <code>USING TTL 7776000</code> (90 days) and <strong>TimeWindow</strong> compaction: SSTables covering whole expired days are simply dropped.</p>`},
+ more:{ro:`<p>Mii de tombstones într-o partiție încetinesc citirile (nodul trebuie să le parcurgă) și pot opri o interogare cu eroarea <code>TombstoneOverwhelmingException</code>. Un model care șterge și rescrie des aceleași rânduri e un semn rău.</p>`,
+  en:`<p>Thousands of tombstones in a partition slow reads down (the node has to scan past them) and can abort a query with <code>TombstoneOverwhelmingException</code>. A model that keeps deleting and rewriting the same rows is a bad sign.</p>`}},
+
+{at:["n1","n2","n3","n4","n5","n6"],frame:F8,kind:"s",log:{ro:"două centre de date",en:"two data centres"},who:{ro:"Mai multe centre de date",en:"Several data centres"},
+ title:{ro:"Două centre de date și LOCAL_QUORUM",en:"Two data centres and LOCAL_QUORUM"},
+ body:{ro:`<p>Firma deschide un al doilea centru de date, <code>eu-central</code>, cu încă 6 noduri. Keyspace-ul folosește <strong>NetworkTopologyStrategy</strong>: câte 3 replici în fiecare centru de date.</p>
+<p>Aplicația din <code>eu-west</code> scrie și citește cu <strong>LOCAL_QUORUM</strong>: așteaptă doar 2 noduri din centrul ei, fără latența dintre orașe. Celălalt centru primește datele imediat după, asincron.</p>
+<p>Dacă un centru de date întreg cade, aplicațiile se mută pe celălalt, care are toate datele. Asta e una dintre cele mai mari forțe ale Cassandrei.</p>`,
+ en:`<p>The company opens a second data centre, <code>eu-central</code>, with another 6 nodes. The keyspace uses <strong>NetworkTopologyStrategy</strong>: 3 replicas in each data centre.</p>
+<p>The app in <code>eu-west</code> writes and reads at <strong>LOCAL_QUORUM</strong>: it waits only for 2 nodes in its own data centre, without the latency between cities. The other data centre gets the data right after, asynchronously.</p>
+<p>If a whole data centre goes down, the apps move to the other one, which has all the data. This is one of Cassandra's biggest strengths.</p>`}},
+
+{at:["app","n1","n2","n3","n4","n5","n6"],frame:null,kind:"none",summary:true,
+ title:{ro:"Greșeli frecvente și recapitulare",en:"Common mistakes and a recap"},
+ body:{ro:`<p><strong>Greșeli frecvente:</strong></p>
+<ul><li><strong>Partiții uriașe</strong>: de exemplu cheia <code>city</code> pentru toate evenimentele dintr-un oraș. O partiție stă pe un singur set de noduri; ține-o sub ~100 MB, eventual cu o „găleată” pe zi în cheie.</li>
+<li><code>ALLOW FILTERING</code> sau <code>WHERE</code> pe o coloană care nu e în cheie: Cassandra trebuie să citească tot clusterul.</li>
+<li>Repair-ul uitat, deci date „înviate” după ștergeri.</li></ul>
+<p><strong>Recapitulare:</strong></p>
+<ul><li>Toate nodurile sunt egale; cheia de partiție → <strong>token</strong> → poziție pe <strong>inel</strong> → <strong>RF</strong> replici.</li>
+<li>Scrierea: <strong>commit log + memtable</strong>, apoi SSTable-uri care nu se modifică; compactarea le îmbină.</li>
+<li><strong>QUORUM</strong> la scriere și citire = date mereu la zi; ONE = rapid, dar poate fi vechi.</li>
+<li>Nod căzut: <strong>hint</strong>-uri, <strong>read repair</strong>, <strong>nodetool repair</strong>; ștergerile sunt <strong>tombstones</strong>.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Mergi la laborator ↓</button></p>`,
+ en:`<p><strong>Common mistakes:</strong></p>
+<ul><li><strong>Huge partitions</strong>: for example <code>city</code> as the key for every event in a city. A partition lives on a single set of nodes; keep it under ~100 MB, perhaps with a per-day "bucket" in the key.</li>
+<li><code>ALLOW FILTERING</code> or <code>WHERE</code> on a column that isn't in the key: Cassandra has to read the whole cluster.</li>
+<li>Forgetting repair, so data "comes back to life" after deletes.</li></ul>
+<p><strong>Recap:</strong></p>
+<ul><li>All nodes are equal; partition key → <strong>token</strong> → position on the <strong>ring</strong> → <strong>RF</strong> replicas.</li>
+<li>A write: <strong>commit log + memtable</strong>, then SSTables that never change; compaction merges them.</li>
+<li><strong>QUORUM</strong> on write and read = always up to date; ONE = fast, but possibly stale.</li>
+<li>Node down: <strong>hints</strong>, <strong>read repair</strong>, <strong>nodetool repair</strong>; deletes are <strong>tombstones</strong>.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Go to the lab ↓</button></p>`}}
+],
+
+reference:(T,lang)=>{
+  const ro=lang==="ro";
+  return `<div class="ref-grid"><section class="card refcard"><h2>${ro?"Schema":"The schema"}</h2>
+<pre class="yaml">CREATE KEYSPACE tracking WITH replication =
+  {'class': 'NetworkTopologyStrategy', 'eu-west': 3};
+
+CREATE TABLE tracking.events_by_parcel (
+  parcel_id  text,
+  event_time timestamp,
+  status     text,
+  place      text,
+  PRIMARY KEY ((parcel_id), event_time)
+) WITH CLUSTERING ORDER BY (event_time DESC)
+  AND default_time_to_live = 7776000
+  AND compaction = {'class': 'TimeWindowCompactionStrategy',
+                    'compaction_window_unit': 'DAYS',
+                    'compaction_window_size': 1};</pre>
+<h3>${ro?"Interogări":"Queries"}</h3>
+<pre class="yaml"><span class="c">-- ${ro?"bine: o singură partiție":"good: a single partition"}</span>
+SELECT * FROM events_by_parcel WHERE parcel_id = 'PK-7731' LIMIT 10;
+<span class="c">-- ${ro?"rău: citește tot clusterul":"bad: reads the whole cluster"}</span>
+SELECT * FROM events_by_parcel WHERE status = 'LOST' ALLOW FILTERING;
+<span class="c">-- ${ro?"în cqlsh":"in cqlsh"}</span>
+CONSISTENCY QUORUM;
+TRACING ON;</pre></section>
+<section class="card refcard"><h2>nodetool</h2>
+<pre class="yaml">nodetool status                 <span class="c"># ${ro?"UN / DN, încărcare, ownership":"UN / DN, load, ownership"}</span>
+nodetool getendpoints tracking events_by_parcel PK-7731
+nodetool tablestats tracking.events_by_parcel
+nodetool tablehistograms tracking events_by_parcel
+nodetool flush tracking
+nodetool compactionstats
+nodetool repair -pr tracking    <span class="c"># ${ro?"pe fiecare nod, pe rând":"on each node, in turn"}</span></pre>
+<h3>${ro?"Exemplu nodetool status":"Example nodetool status"}</h3>
+<pre class="yaml">Datacenter: eu-west
+--  Address    Load    Tokens  Owns   Rack
+UN  10.0.1.11  412 GiB 16      50.1%  r1
+UN  10.0.1.12  405 GiB 16      49.8%  r2
+DN  10.0.1.13  398 GiB 16      50.3%  r3</pre></section></div>`;
+},
+
+gloss:[
+ ["Cassandra",null,{ro:"Bază de date distribuită, fără nod principal, făcută pentru multe scrieri.",en:"A distributed database with no primary node, built for heavy writes."}],
+ [{ro:"Cheie de partiție",en:"Partition key"},null,{ro:"Partea din cheie care decide pe ce noduri stau datele.",en:"The part of the key that decides which nodes hold the data."}],
+ [{ro:"Coloană de ordonare",en:"Clustering column"},null,{ro:"Partea din cheie care ordonează rândurile într-o partiție.",en:"The part of the key that orders rows within a partition."}],
+ [{ro:"Partiție",en:"Partition"},null,{ro:"Toate rândurile cu aceeași cheie de partiție, stocate împreună.",en:"All rows with the same partition key, stored together."}],
+ ["Token",null,{ro:"Hash-ul cheii de partiție; arată poziția pe inel.",en:"The hash of the partition key; it gives the position on the ring."}],
+ [{ro:"Factor de replicare (RF)",en:"Replication factor (RF)"},null,{ro:"Câte copii ale fiecărui rând există.",en:"How many copies of each row exist."}],
+ [{ro:"Coordonator",en:"Coordinator"},null,{ro:"Nodul care primește o cerere și o duce la replici.",en:"The node that receives a request and takes it to the replicas."}],
+ ["QUORUM",null,{ro:"Majoritatea replicilor: 2 din 3.",en:"A majority of replicas: 2 of 3."}],
+ ["Memtable",null,{ro:"Structura din memorie unde ajung scrierile.",en:"The in-memory structure where writes land."}],
+ ["SSTable",null,{ro:"Fișier de date pe disc, sortat, care nu se mai modifică.",en:"A sorted data file on disk that never changes."}],
+ ["Commit log",null,{ro:"Jurnalul pe disc care protejează scrierile din memtable la o cădere.",en:"The on-disk log that protects memtable writes from a crash."}],
+ ["Hint",null,{ro:"O scriere păstrată pentru un nod căzut, livrată când revine.",en:"A write kept for a down node, delivered when it returns."}],
+ ["Tombstone",null,{ro:"Marcaj de ștergere; datele dispar abia la compactare.",en:"A deletion marker; the data goes only at compaction."}],
+ [{ro:"Compactare",en:"Compaction"},null,{ro:"Îmbinarea SSTable-urilor și curățarea datelor vechi sau șterse.",en:"Merging SSTables and cleaning up old or deleted data."}]
+],
+glossEx:{
+ "QUORUM":{ro:"nodul 5 și nodul 6 confirmă, nodul 1 încă nu: scrierea e reușită.",en:"node 5 and node 6 acknowledge, node 1 not yet: the write succeeds."},
+ "Tombstone":{ro:"DELETE pe evenimentul de la 09:42 scrie un marcaj, nu șterge rândul.",en:"a DELETE on the 09:42 event writes a marker; it doesn't remove the row."}
+},
+
+quiz:[
+ {q:{ro:"Ce decide cheia de partiție?",en:"What does the partition key decide?"},o:[{ro:"Ordinea rândurilor",en:"The order of rows"},{ro:"Pe ce noduri stau datele",en:"Which nodes hold the data"},{ro:"Nivelul de consistență",en:"The consistency level"},{ro:"Cât timp trăiesc datele",en:"How long data lives"}],a:1,e:{ro:"Cheia → token → poziție pe inel → replici.",en:"Key → token → position on the ring → replicas."}},
+ {q:{ro:"Cum proiectezi tabelele în Cassandra?",en:"How do you design tables in Cassandra?"},o:[{ro:"Normalizat, cu JOIN-uri",en:"Normalised, with JOINs"},{ro:"Un singur tabel pentru tot",en:"One table for everything"},{ro:"După interogările pe care le vei face, cu duplicare dacă e nevoie",en:"Around the queries you'll run, duplicating data if needed"},{ro:"Nu contează",en:"It doesn't matter"}],a:2,e:{ro:"Nu există JOIN-uri; fiecare interogare are tabelul ei.",en:"There are no JOINs; each query gets its own table."}},
+ {q:{ro:"Ce face o replică la o scriere, înainte să confirme?",en:"What does a replica do on a write before acknowledging?"},o:[{ro:"Adaugă la commit log și pune în memtable",en:"Appends to the commit log and puts it in the memtable"},{ro:"Rescrie SSTable-ul existent",en:"Rewrites the existing SSTable"},{ro:"Citește rândul vechi de pe disc",en:"Reads the old row from disk"},{ro:"Așteaptă compactarea",en:"Waits for compaction"}],a:0,e:{ro:"Doar adaugă; de aceea scrierile sunt rapide.",en:"It only appends; that's why writes are fast."}},
+ {q:{ro:"Cu RF = 3, câte confirmări cere QUORUM?",en:"With RF = 3, how many acknowledgements does QUORUM need?"},o:["1","2","3",{ro:"Toate nodurile din cluster",en:"Every node in the cluster"}],a:1,e:{ro:"Majoritatea: 2 din 3.",en:"A majority: 2 of 3."}},
+ {q:{ro:"De ce scriere QUORUM + citire QUORUM dă mereu date la zi?",en:"Why does a QUORUM write + QUORUM read always return up-to-date data?"},o:[{ro:"Pentru că așteaptă compactarea",en:"Because it waits for compaction"},{ro:"Pentru că se folosește doar nodul principal",en:"Because only the primary node is used"},{ro:"Pentru că citește din commit log",en:"Because it reads from the commit log"},{ro:"Cele două grupuri de câte 2 din 3 noduri au mereu un nod comun",en:"The two groups of 2 out of 3 nodes always share a node"}],a:3,e:{ro:"W + R > RF.",en:"W + R > RF."}},
+ {q:{ro:"Un nod e căzut 1 oră, apoi revine. Cum primește scrierile ratate?",en:"A node is down for 1 hour, then returns. How does it get the writes it missed?"},o:[{ro:"Prin hint-urile păstrate de coordonatori",en:"Through the hints kept by the coordinators"},{ro:"Nu le mai primește niciodată",en:"It never gets them"},{ro:"Din backup",en:"From a backup"},{ro:"Aplicația le retrimite",en:"The app resends them"}],a:0,e:{ro:"Sub max_hint_window (3 h); peste, e nevoie de repair.",en:"Within max_hint_window (3 h); beyond that, repair is needed."}},
+ {q:{ro:"Ce face un DELETE în Cassandra?",en:"What does a DELETE do in Cassandra?"},o:[{ro:"Șterge imediat rândul de pe disc",en:"Removes the row from disk straight away"},{ro:"Scrie un tombstone; datele dispar la compactare, după gc_grace_seconds",en:"Writes a tombstone; the data goes at compaction, after gc_grace_seconds"},{ro:"Nimic, Cassandra nu permite ștergeri",en:"Nothing, Cassandra doesn't allow deletes"},{ro:"Mută rândul în alt tabel",en:"Moves the row to another table"}],a:1,e:{ro:"SSTable-urile nu se modifică.",en:"SSTables never change."}},
+ {q:{ro:"Care cheie de partiție e o idee proastă pentru evenimentele de urmărire?",en:"Which partition key is a bad idea for tracking events?"},o:["parcel_id",{ro:"(parcel_id, zi)",en:"(parcel_id, day)"},{ro:"city: toate evenimentele unui oraș într-o partiție",en:"city: all of a city's events in one partition"},{ro:"(customer_id, lună)",en:"(customer_id, month)"}],a:2,e:{ro:"O partiție uriașă stă pe doar 3 noduri și crește la nesfârșit.",en:"A huge partition lives on only 3 nodes and grows forever."}}
+]
+};
+})();
+</script>
+<script src="../assets/engine.js?v=3"></script>
+<script src="../assets/labs-data.js?v=6"></script>
+<script src="../assets/lab.js?v=1"></script>
+<script type="module" src="../assets/auth.js?v=12"></script>
+</body>
+</html>
