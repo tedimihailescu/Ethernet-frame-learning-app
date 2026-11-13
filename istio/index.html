@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Istio: de ce ai nevoie de un service mesh</title>
+<meta name="description" content="Lecție interactivă: de ce are nevoie o aplicație cu multe microservicii de un service mesh și cum rezolvă Istio problemele: timeout și circuit breaker, mTLS STRICT, AuthorizationPolicy, ingress gateway, fault injection, canary, egress și observabilitate. / Interactive lesson: why you need a service mesh and how Istio solves the problems.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<script>
+(function(){
+const E=v=>v&&typeof v==="object"?(v.en||""):String(v||"");
+const ID=sa=>"spiffe://cluster.local/ns/shop/sa/"+sa;
+const PLAIN={ro:"niciuna (HTTP simplu)",en:"none (plain HTTP)"};
+const F1={req:"GET /recommendations?cart=771",from:"checkout (10.4.1.22)",to:"recommendations:8080",tls:PLAIN,status:{ro:"… niciun răspuns de 30 s",en:"… no answer for 30 s"},rule:{ro:"niciun timeout configurat în checkout",en:"no timeout configured in checkout"},result:{ro:"200 din 200 de fire ale lui checkout așteaptă: checkout nu mai răspunde nimănui",en:"200 of checkout's 200 threads are waiting: checkout stops answering anyone"}};
+const F2={req:"POST /v1/charge",from:{ro:"job rapoarte (10.4.2.19)",en:"reports job (10.4.2.19)"},to:"payments:8080",tls:PLAIN,status:"200 OK",rule:{ro:"nicio regulă: orice pod poate apela orice pod",en:"no rule: any pod can call any pod"},result:{ro:"un job de rapoarte a putut încasa bani; tokenul de card a trecut în clar prin rețea",en:"a reporting job could charge money; the card token crossed the network in plain text"}};
+const F3={xds:{ro:"rute, clustere, endpoint-uri pentru toate serviciile din shop",en:"routes, clusters, endpoints for every service in shop"},cert:{ro:"certificat X.509 pentru "+ID("web")+", reînnoit automat la 24 h",en:"X.509 certificate for "+ID("web")+", renewed automatically every 24 h"},rule:"namespace shop: istio-injection=enabled",result:{ro:"fiecare pod are acum 2/2 containere: aplicația + istio-proxy (Envoy)",en:"every pod now has 2/2 containers: the app + istio-proxy (Envoy)"}};
+const F4={req:"GET https://shop.example.com/",from:{ro:"browserul clientului",en:"the customer's browser"},to:"istio-ingressgateway:443 → web:8080",tls:{ro:"TLS de la browser, terminat la gateway; mai departe mTLS",en:"TLS from the browser, terminated at the gateway; mTLS from there on"},status:"200 OK",rule:"Gateway shop-gw · VirtualService shop",result:{ro:"„/” merge la web, „/api/checkout” la checkout",en:"\"/\" goes to web, \"/api/checkout\" to checkout"}};
+const F5={req:"POST /api/checkout",from:"web (10.4.1.15)",to:"checkout:8080",tls:{ro:"mTLS · TLS 1.3, pornit automat de Envoy",en:"mTLS · TLS 1.3, started automatically by Envoy"},id:ID("web"),status:"200 OK",rule:"PeerAuthentication shop: STRICT",result:{ro:"criptat și cu identitate verificată; aplicațiile nu s-au schimbat deloc",en:"encrypted, with a verified identity; the apps didn't change at all"}};
+const F6={req:"POST /v1/charge",from:{ro:"job rapoarte (10.4.2.19)",en:"reports job (10.4.2.19)"},to:"payments:8080",tls:"mTLS · TLS 1.3",id:ID("reports"),status:"403 Forbidden · RBAC: access denied",rule:{ro:"AuthorizationPolicy payments: doar sa/checkout, doar POST /v1/charge",en:"AuthorizationPolicy payments: only sa/checkout, only POST /v1/charge"},result:{ro:"oprit de Envoy-ul lui payments; aplicația nici nu vede cererea",en:"stopped by payments' Envoy; the app never even sees the request"}};
+const F7={req:"GET /recommendations?cart=771",from:"checkout (10.4.1.22)",to:"recommendations:8080",tls:"mTLS · TLS 1.3",id:ID("checkout"),status:{ro:"504 Gateway Timeout după 1 s",en:"504 Gateway Timeout after 1 s"},rule:{ro:"timeout 1 s · 2 reîncercări · max. 50 de cereri în așteptare",en:"1 s timeout · 2 retries · max 50 pending requests"},result:{ro:"checkout afișează coșul fără recomandări; firele nu se mai blochează",en:"checkout shows the cart without recommendations; threads no longer get stuck"}};
+const F8={req:"GET /recommendations?cart=771",hdr:"x-test: chaos",from:"checkout (staging)",to:"recommendations:8080",tls:"mTLS · TLS 1.3",status:{ro:"răspuns întârziat 5 s de Envoy (intenționat)",en:"response delayed 5 s by Envoy (on purpose)"},rule:{ro:"fault: delay 5 s pentru cererile cu x-test: chaos",en:"fault: 5 s delay for requests with x-test: chaos"},result:{ro:"checkout răspunde în 1,1 s fără recomandări ✓ testul de reziliență a trecut",en:"checkout answers in 1.1 s without recommendations ✓ the resilience test passed"}};
+const F9={req:"POST /v1/charge",hdr:"x-canary: true",from:"checkout (10.4.1.22)",to:"payments v2 (10.4.3.40)",tls:"mTLS · TLS 1.3",id:ID("checkout"),status:"200 OK",rule:{ro:"VirtualService payments: antet x-canary → v2; restul 95% v1 / 5% v2",en:"VirtualService payments: x-canary header → v2; the rest 95% v1 / 5% v2"},result:{ro:"testerii văd v2; clienții reali ajung la v2 doar în 5% din cazuri",en:"testers see v2; real customers reach v2 only 5% of the time"}};
+const F10={req:"POST https://api.psp.example.com/charges",from:"payments (10.4.3.31)",to:"api.psp.example.com:443",tls:{ro:"TLS spre procesatorul de plăți",en:"TLS to the payment processor"},status:"201 Created",rule:{ro:"ServiceEntry psp · outboundTrafficPolicy: REGISTRY_ONLY",en:"ServiceEntry psp · outboundTrafficPolicy: REGISTRY_ONLY"},result:{ro:"permis; orice alt domeniu extern e blocat (502)",en:"allowed; any other external domain is blocked (502)"}};
+const F11={metric:"istio_requests_total{source_workload=checkout, destination_workload=recommendations, response_code=504} +1",span:{ro:"span „recommendations” 1000 ms, legat de trace-ul comenzii",en:"span \"recommendations\" 1000 ms, linked to the order's trace"},rule:"istioctl analyze -n shop",result:{ro:"✔ No validation issues found; Kiali arată graful serviciilor cu erorile pe fiecare săgeată",en:"✔ No validation issues found; Kiali shows the service graph with errors on every arrow"}};
+
+window.LESSON={
+docTitle:{ro:"Istio: de ce ai nevoie de un service mesh",en:"Istio: why you need a service mesh"},
+eyebrow:{ro:"Lecție interactivă · Kubernetes",en:"Interactive lesson · Kubernetes"},
+title:{ro:"Istio: de ce ai nevoie de un service mesh",en:"Istio: why you need a service mesh"},
+sub:{ro:"Un magazin online are zeci de microservicii scrise în Java, Go și Python. Într-o seară de Black Friday, un serviciu lent oprește tot magazinul, iar un audit arată că orice pod poate încasa bani. Vedem ce probleme apar când serviciile vorbesc direct între ele și cum le rezolvă Istio, fără să schimbăm codul aplicațiilor: timeout și circuit breaker, mTLS, reguli de acces, gateway, teste de haos, canary, trafic extern și observabilitate.",en:"An online shop has dozens of microservices written in Java, Go and Python. One Black Friday evening a slow service takes the whole shop down, and an audit shows any pod can charge money. We look at the problems that appear when services talk to each other directly and how Istio solves them without changing the apps' code: timeouts and circuit breaking, mTLS, access rules, a gateway, chaos tests, canaries, outbound traffic and observability."},
+meta:[{ro:"≈ 30 minute",en:"≈ 30 minutes"},{ro:"13 pași",en:"13 steps"},{ro:"8 întrebări",en:"8 questions"},{ro:"Intermediar",en:"Intermediate"}],
+goals:[{ro:"De ce apare nevoia unui service mesh: probleme reale, nu teorie",en:"Why the need for a service mesh appears: real problems, not theory"},{ro:"Cum se instalează Istio și ce face sidecar-ul Envoy",en:"How Istio is installed and what the Envoy sidecar does"},{ro:"Timeout, retry, circuit breaker, mTLS STRICT și AuthorizationPolicy",en:"Timeouts, retries, circuit breaking, STRICT mTLS and AuthorizationPolicy"},{ro:"Gateway, fault injection, canary, egress și când NU merită un mesh",en:"Gateways, fault injection, canaries, egress and when a mesh is NOT worth it"}],
+foot:{ro:"Nume de servicii și domenii fictive. Lecția „Service mesh: o cerere între două microservicii” arată în detaliu drumul unei cereri prin Envoy.",en:"Fictional service names and domains. The lesson \"Service mesh: a request between two microservices\" shows a request's path through Envoy in detail."},
+ui:{frameT:{ro:"Cererea (live)",en:"The request (live)"},refT:{ro:"Resurse Istio și comenzi",en:"Istio resources and commands"},refLead:{ro:"YAML-ul folosit în lecție și comenzile de zi cu zi.",en:"The YAML used in the lesson and the everyday commands."}},
+tryT:{ro:"Încearcă (pe un cluster de test)",en:"Try it (on a test cluster)"},
+legend:[["lg-app","HTTP",{ro:"text simplu, fără mesh",en:"plain text, no mesh"}],["lg-ip","mTLS",{ro:"criptat de Envoy",en:"encrypted by Envoy"}],["lg-tcp","ERR",{ro:"eroare / respins",en:"error / denied"}],["lg-arp","ISTIO",{ro:"configurație și telemetrie",en:"configuration and telemetry"}]],
+
+nodes:{
+  usr:{type:"user",name:{ro:"Client",en:"Customer"},lines:[]},
+  gw:{type:"svc",name:"ingress gateway",lines:["Envoy"]},
+  web:{type:"pod",name:"web",lines:["Node.js"]},
+  chk:{type:"pod",name:"checkout",lines:["Java"]},
+  pay:{type:"pod",name:"payments",lines:["Go"]},
+  reco:{type:"pod",name:"recommendations",lines:["Python"]},
+  job:{type:"pod",name:{ro:"job rapoarte",en:"reports job"},lines:[{ro:"altă echipă",en:"another team"}]},
+  ist:{type:"box",name:"istiod",lines:[{ro:"plan de control",en:"control plane"}]},
+  ext:{type:"globe",name:"api.psp.example.com",lines:[{ro:"procesator plăți",en:"payment processor"}]}
+},
+links:[["usr","gw"],["gw","web"],["web","chk"],["chk","pay"],["chk","reco"],["job","pay"],["pay","ext"],["ist","web","virt"],["ist","chk","virt"]],
+layouts:{
+  wide:{vb:[0,0,1000,520],n:{usr:[60,270],gw:[210,270],web:[380,270],chk:[570,270],pay:[780,150],reco:[780,400],job:[650,100],ist:[470,80],ext:[935,150]},
+    zones:[{x:140,y:30,w:730,h:470,top:true,cls:"virt",l:{ro:"Cluster · namespace shop",en:"Cluster · namespace shop"}}]},
+  narrow:{vb:[0,0,360,820],n:{usr:[60,50],ist:[300,60],gw:[60,175],web:[180,305],chk:[180,450],job:[60,450],pay:[80,600],reco:[280,610],ext:[80,745]},
+    side:{usr:"right",gw:"right"}}
+},
+groups:[
+  {id:"h",color:"l7",fields:["req","hdr","status"],name:"HTTP",short:"HTTP",grow:3},
+  {id:"n",color:"l3",fields:["from","to","tls","id"],name:{ro:"Conexiune și identitate",en:"Connection and identity"},short:{ro:"Conexiune",en:"Connection"},grow:3},
+  {id:"c",color:"l2",fields:["xds","cert"],name:{ro:"Trimis de istiod",en:"Sent by istiod"},short:"istiod",grow:3},
+  {id:"o",color:"l4",fields:["metric","span"],name:{ro:"Telemetrie",en:"Telemetry"},short:{ro:"Telemetrie",en:"Telemetry"},grow:3},
+  {id:"d",color:"arp",fields:["rule","result"],name:{ro:"Regula și efectul",en:"The rule and its effect"},short:{ro:"Regula",en:"Rule"},grow:3}
+],
+fieldLabels:{req:{ro:"Cerere",en:"Request"},hdr:{ro:"Antet",en:"Header"},status:"Status",from:{ro:"De la",en:"From"},to:{ro:"Către",en:"To"},tls:{ro:"Criptare",en:"Encryption"},id:{ro:"Identitate (SPIFFE)",en:"Identity (SPIFFE)"},xds:{ro:"Configurație (xDS)",en:"Configuration (xDS)"},cert:{ro:"Certificat",en:"Certificate"},metric:{ro:"Metrică",en:"Metric"},span:"Trace",rule:{ro:"Regula",en:"Rule"},result:{ro:"Efect",en:"Effect"}},
+pdu:f=>{const s=E(f.status);
+  if(f.metric)return {badge:{ro:"Telemetrie Envoy",en:"Envoy telemetry"},tok:["METRICS","k-arp"]};
+  if(f.xds)return {badge:{ro:"Configurație + certificat",en:"Configuration + certificate"},tok:["xDS","k-arp"]};
+  if(/^(403|504)/.test(s))return {badge:{ro:"Oprit de Envoy",en:"Stopped by Envoy"},tok:[s.slice(0,3),"k-tcp"]};
+  if(/no answer/.test(s))return {badge:{ro:"Cerere blocată",en:"Stuck request"},tok:["⏳ 30 s","k-tcp"]};
+  if(/^(GET|POST) https/.test(f.req||""))return {badge:{ro:"Cerere HTTPS",en:"HTTPS request"},tok:["TLS","k-ip"]};
+  if(/mTLS/.test(E(f.tls)))return {badge:{ro:"Cerere criptată (mTLS)",en:"Encrypted request (mTLS)"},tok:["mTLS","k-ip"]};
+  return {badge:{ro:"Cerere HTTP",en:"HTTP request"},tok:["HTTP","k-app"]}},
+
+init:{},
+tables:{
+  why:{title:{ro:"Unde pui logica de rețea?",en:"Where does the network logic live?"},cols:[{ro:"Nevoie",en:"Need"},{ro:"Fără mesh: în codul fiecărui serviciu",en:"No mesh: in every service's code"},{ro:"Cu Istio: în proxy, configurat central",en:"With Istio: in the proxy, configured centrally"}],plain:[0,1,2],
+    rows:()=>[[{ro:"Timeout, retry, circuit breaker",en:"Timeouts, retries, circuit breaking"},{ro:"altă bibliotecă în fiecare limbaj, setări diferite (sau lipsă)",en:"a different library per language, different settings (or none)"},{ro:"VirtualService + DestinationRule",en:"VirtualService + DestinationRule"}],
+      [{ro:"Criptare între servicii",en:"Encryption between services"},{ro:"certificate gestionate de mână, de obicei deloc",en:"certificates managed by hand, usually none at all"},{ro:"mTLS automat, certificate reînnoite zilnic",en:"automatic mTLS, certificates renewed daily"}],
+      [{ro:"Cine are voie să apeleze pe cine",en:"Who may call whom"},{ro:"oricine din cluster",en:"anyone in the cluster"},{ro:"AuthorizationPolicy pe identitatea serviciului",en:"AuthorizationPolicy on the service identity"}],
+      [{ro:"Vizibilitate",en:"Visibility"},{ro:"fiecare echipă cu metricile ei",en:"each team with its own metrics"},{ro:"aceleași metrici și trace-uri pentru toți",en:"the same metrics and traces for everyone"}],
+      [{ro:"Lansări graduale",en:"Gradual releases"},{ro:"totul sau nimic",en:"all or nothing"},{ro:"procente sau antete",en:"percentages or headers"}]]},
+  arch:{title:{ro:"Cele două planuri ale lui Istio",en:"Istio's two planes"},cols:[{ro:"Parte",en:"Part"},{ro:"Ce face",en:"What it does"}],plain:[1],
+    rows:()=>[["istiod",{ro:"plan de control: citește resursele Istio, trimite configurația (xDS) și emite certificatele",en:"control plane: reads the Istio resources, sends configuration (xDS) and issues certificates"}],["istio-proxy (Envoy)",{ro:"plan de date: lângă fiecare pod, prin el trece tot traficul",en:"data plane: next to every pod, all traffic goes through it"}],["istio-ingressgateway",{ro:"un Envoy la marginea clusterului, pentru traficul care intră",en:"an Envoy at the cluster's edge, for incoming traffic"}],["istio-egressgateway",{ro:"opțional: un Envoy pentru traficul care iese",en:"optional: an Envoy for outgoing traffic"}]]},
+  gw:{title:{ro:"Rutele de la intrare (VirtualService shop)",en:"Entry routes (VirtualService shop)"},cols:[{ro:"Host și cale",en:"Host and path"},{ro:"Destinație",en:"Destination"}],
+    rows:()=>[["shop.example.com /api/checkout","checkout:8080"],["shop.example.com /","web:8080"]]},
+  modes:{title:{ro:"Modurile PeerAuthentication",en:"PeerAuthentication modes"},cols:[{ro:"Mod",en:"Mode"},{ro:"Acceptă",en:"Accepts"},{ro:"Când îl folosești",en:"When to use it"}],plain:[1,2],
+    rows:()=>[["PERMISSIVE",{ro:"mTLS și text simplu",en:"mTLS and plain text"},{ro:"în timpul migrării (implicit)",en:"during migration (the default)"}],["STRICT",{ro:"doar mTLS",en:"mTLS only"},{ro:"după ce toți clienții sunt în mesh",en:"once every client is in the mesh"}],["DISABLE",{ro:"doar text simplu",en:"plain text only"},{ro:"rar, pentru depanare",en:"rarely, for debugging"}]]},
+  authz:{title:{ro:"Cine are voie la payments",en:"Who may call payments"},cols:[{ro:"Identitate",en:"Identity"},{ro:"Cerere",en:"Request"},{ro:"Rezultat",en:"Result"}],plain:[2],
+    rows:()=>[["sa/checkout","POST /v1/charge",{ro:"permis",en:"allowed"}],["sa/reports","POST /v1/charge",{ro:"403 RBAC: access denied",en:"403 RBAC: access denied"}],["sa/web","GET /v1/charges",{ro:"403 RBAC: access denied",en:"403 RBAC: access denied"}]]},
+  res:{title:{ro:"Reziliența pentru recommendations",en:"Resilience for recommendations"},cols:[{ro:"Setare",en:"Setting"},{ro:"Valoare",en:"Value"},{ro:"Efect",en:"Effect"}],plain:[2],
+    rows:()=>[["timeout","1s",{ro:"nu mai aștepți 30 s",en:"no more 30 s waits"}],["retries","2 · perTryTimeout 400ms",{ro:"o eroare scurtă e ascunsă",en:"a brief error is hidden"}],["http1MaxPendingRequests","50",{ro:"peste limită: 503 imediat (circuit breaker)",en:"over the limit: an instant 503 (circuit breaker)"}],["outlierDetection","5 × 5xx → 30s",{ro:"podul bolnav e scos din rotație",en:"the sick pod is taken out of rotation"}]]},
+  canary:{title:{ro:"Rutele pentru payments",en:"Routes for payments"},cols:[{ro:"Potrivire",en:"Match"},{ro:"Destinație",en:"Destination"},{ro:"Pondere",en:"Weight"}],plain:[0],
+    rows:()=>[[{ro:"antet x-canary: true",en:"header x-canary: true"},"payments · v2","100 %"],[{ro:"orice altă cerere",en:"any other request"},"payments · v1","95 %"],[{ro:"orice altă cerere",en:"any other request"},"payments · v2","5 %"]]},
+  cost:{title:{ro:"Merită un mesh?",en:"Is a mesh worth it?"},cols:["",{ro:"Probabil nu",en:"Probably not"},{ro:"Probabil da",en:"Probably yes"}],plain:[0,1,2],
+    rows:()=>[[{ro:"Servicii",en:"Services"},{ro:"câteva, o singură echipă",en:"a few, one team"},{ro:"zeci, multe echipe",en:"dozens, many teams"}],[{ro:"Limbaje",en:"Languages"},{ro:"unul, cu o bibliotecă bună",en:"one, with a good library"},{ro:"mai multe",en:"several"}],[{ro:"Cerințe de securitate",en:"Security needs"},{ro:"rețea internă de încredere",en:"a trusted internal network"},{ro:"zero trust, audit, date de card",en:"zero trust, audits, card data"}],[{ro:"Echipa de platformă",en:"Platform team"},{ro:"nu există",en:"doesn't exist"},{ro:"există și poate opera Istio",en:"exists and can run Istio"}]]}
+},
+log:{title:{ro:"Jurnalul cererilor",en:"Request log"},lead:{ro:"Aceeași aplicație, aceleași cereri; se schimbă doar ce decide mesh-ul.",en:"The same app, the same requests; only what the mesh decides changes."},first:{ro:"Pas",en:"Step"},minWidth:600,
+  cols:[{h:{ro:"Cerere",en:"Request"},v:f=>f.req||f.rule||"",cls:"mac"},{h:"Status",v:f=>f.status||"",cls:"ip"},{h:{ro:"Efect",en:"Effect"},v:f=>f.result||"",cls:""}]},
+
+steps:[
+{at:["web","chk","pay","reco"],frame:null,kind:"none",tables:["why"],who:{ro:"Problema",en:"The problem"},
+ title:{ro:"De ce: 40 de servicii, 3 limbaje, nicio regulă comună",en:"Why: 40 services, 3 languages, no common rules"},
+ body:{ro:`<p>Magazinul a pornit ca o singură aplicație. Acum are <strong>40 de microservicii</strong>: web în Node.js, checkout în Java, payments în Go, recommendations în Python. Fiecare apelează altele prin rețea.</p>
+<p>Fiecare apel prin rețea poate fi lent, poate eșua sau poate fi interceptat. Deci fiecare serviciu ar trebui să aibă <strong>timeout, retry, criptare, verificarea cine îl apelează și metrici</strong>. Fără mesh, toate astea se scriu în cod, de fiecare echipă, în fiecare limbaj. În practică, unele echipe le fac bine, altele deloc.</p>
+<p class="key">Un service mesh scoate logica de rețea din cod și o pune într-un proxy lângă fiecare serviciu, configurat la fel pentru toți.</p>`,
+ en:`<p>The shop started as a single app. Now it has <strong>40 microservices</strong>: web in Node.js, checkout in Java, payments in Go, recommendations in Python. Each one calls others over the network.</p>
+<p>Every network call can be slow, fail or be intercepted. So every service should have <strong>timeouts, retries, encryption, a check on who's calling and metrics</strong>. Without a mesh, all of that is written in code, by every team, in every language. In practice some teams do it well and others not at all.</p>
+<p class="key">A service mesh takes the network logic out of the code and puts it in a proxy next to every service, configured the same way for everyone.</p>`}},
+
+{at:"chk",frame:F1,kind:"r",move:[[["web","chk"]],[["chk","reco"]]],marks:{reco:{k:"drop",t:{ro:"lent: 30 s",en:"slow: 30 s"}},chk:{k:"drop",t:{ro:"blocat",en:"stuck"}}},log:{ro:"incidentul de Black Friday",en:"the Black Friday incident"},who:{ro:"Incidentul",en:"The incident"},
+ title:{ro:"Black Friday, 20:14: un serviciu lent oprește tot magazinul",en:"Black Friday, 20:14: one slow service takes the whole shop down"},
+ body:{ro:`<p>Baza de date a lui <strong>recommendations</strong> e supraîncărcată și răspunde în 30 de secunde. Recomandările nu sunt importante: magazinul ar putea merge și fără ele.</p>
+<p>Dar <strong>checkout</strong> le cere fără niciun timeout. Fiecare client care deschide coșul ține ocupat un fir de execuție al lui checkout timp de 30 s. În două minute, toate cele 200 de fire așteaptă, iar checkout nu mai răspunde nimănui. Web-ul afișează erori. Nimeni nu mai poate plăti.</p>
+<p class="key">Aceasta e o <strong>cădere în cascadă</strong>: problema unui serviciu neimportant s-a propagat până la cel mai important.</p>`,
+ en:`<p>The <strong>recommendations</strong> database is overloaded and answers in 30 seconds. Recommendations aren't important: the shop could work without them.</p>
+<p>But <strong>checkout</strong> calls them with no timeout. Every customer opening their cart ties up one of checkout's threads for 30 s. Within two minutes all 200 threads are waiting, and checkout stops answering anyone. The web shows errors. Nobody can pay any more.</p>
+<p class="key">This is a <strong>cascading failure</strong>: the problem in an unimportant service spread all the way to the most important one.</p>`},
+ more:{ro:`<p>Și reîncercările pot agrava lucrurile: dacă fiecare strat reîncearcă de 3 ori, o cerere a clientului poate deveni 3 × 3 × 3 = 27 de cereri spre serviciul deja supraîncărcat (o <em>furtună de retry-uri</em>). De aceea retry-ul trebuie configurat cu grijă, cu limite, în același loc pentru toți.</p>`,
+  en:`<p>Retries can make it worse too: if every layer retries 3 times, one customer request can become 3 × 3 × 3 = 27 requests to the already overloaded service (a <em>retry storm</em>). That's why retries must be configured carefully, with limits, in one place for everyone.</p>`}},
+
+{at:"pay",frame:F2,kind:"r",move:[[["job","pay"]]],marks:{pay:{k:"drop",t:{ro:"deschis tuturor",en:"open to all"}}},log:{ro:"auditul de securitate",en:"the security audit"},who:{ro:"Auditul",en:"The audit"},
+ title:{ro:"Auditul: orice pod poate încasa bani",en:"The audit: any pod can charge money"},
+ body:{ro:`<p>O săptămână mai târziu, auditul de securitate (obligatoriu pentru plățile cu cardul) găsește două probleme:</p>
+<ul><li>Traficul dintre servicii e <strong>HTTP simplu</strong>. Cine ajunge pe un nod poate vedea cu <code>tcpdump</code> tokenurile de card.</li>
+<li><strong>Orice pod</strong> din cluster poate apela <code>POST /v1/charge</code> pe payments. Un job de rapoarte al altei echipe a făcut-o din greșeală, într-un test.</li></ul>
+<p>Rețeaua din cluster e tratată ca o zonă de încredere. Dacă un singur pod e compromis, atacatorul poate vorbi cu orice.</p>`,
+ en:`<p>A week later, the security audit (mandatory for card payments) finds two problems:</p>
+<ul><li>Traffic between services is <strong>plain HTTP</strong>. Anyone who gets onto a node can see card tokens with <code>tcpdump</code>.</li>
+<li><strong>Any pod</strong> in the cluster can call <code>POST /v1/charge</code> on payments. Another team's reporting job did it by mistake, in a test.</li></ul>
+<p>The cluster network is treated as a trusted zone. If a single pod is compromised, the attacker can talk to anything.</p>`},
+ more:{ro:`<p>Un <em>NetworkPolicy</em> Kubernetes ajută parțial: poate bloca pe IP și port. Dar nu criptează, nu știe ce metodă HTTP sau ce cale se cere și nu verifică o identitate criptografică, doar adrese.</p>`,
+  en:`<p>A Kubernetes <em>NetworkPolicy</em> helps partly: it can block by IP and port. But it doesn't encrypt, doesn't know which HTTP method or path is requested and doesn't check a cryptographic identity, only addresses.</p>`}},
+
+{at:"ist",frame:F3,kind:"x",move:[[["ist","web"],["ist","chk"]]],tables:["arch"],log:{ro:"Istio instalat, sidecar-e injectate",en:"Istio installed, sidecars injected"},who:{ro:"Instalarea",en:"Installing"},
+ title:{ro:"Instalăm Istio: un Envoy lângă fiecare pod",en:"Installing Istio: an Envoy next to every pod"},
+ body:{ro:`<p>Echipa de platformă instalează Istio. Apar două lucruri:</p>
+<ul><li><strong>istiod</strong>, planul de control: un singur serviciu care știe toate regulile;</li>
+<li>după <code>istio-injection=enabled</code> pe namespace și o repornire, fiecare pod primește un al doilea container, <strong>istio-proxy</strong> (Envoy). Tot traficul care intră și iese din pod trece prin el.</li></ul>
+<p>istiod trimite fiecărui Envoy configurația (prin protocolul <strong>xDS</strong>) și un <strong>certificat</strong> cu identitatea podului, legată de ServiceAccount-ul lui.</p>
+<p class="key">Codul aplicațiilor nu se schimbă. Checkout încă face un GET simplu spre recommendations; Envoy se ocupă de rest.</p>`,
+ en:`<p>The platform team installs Istio. Two things appear:</p>
+<ul><li><strong>istiod</strong>, the control plane: a single service that knows all the rules;</li>
+<li>after <code>istio-injection=enabled</code> on the namespace and a restart, every pod gets a second container, <strong>istio-proxy</strong> (Envoy). All traffic in and out of the pod goes through it.</li></ul>
+<p>istiod sends every Envoy its configuration (over the <strong>xDS</strong> protocol) and a <strong>certificate</strong> with the pod's identity, tied to its ServiceAccount.</p>
+<p class="key">The apps' code doesn't change. Checkout still makes a plain GET to recommendations; Envoy handles the rest.</p>`},
+ more:{ro:`<p>Istio are și un mod fără sidecar, <strong>ambient</strong>: un proxy pe fiecare nod (ztunnel) face mTLS, iar un proxy opțional pe namespace (waypoint) face regulile HTTP. Consumă mai puține resurse. Lecția „Service mesh” arată pas cu pas drumul unei cereri prin sidecar.</p>`,
+  en:`<p>Istio also has a sidecar-less mode, <strong>ambient</strong>: a per-node proxy (ztunnel) does mTLS, and an optional per-namespace proxy (waypoint) applies the HTTP rules. It uses fewer resources. The "Service mesh" lesson shows a request's path through a sidecar step by step.</p>`},
+ try:[{cmd:"istioctl install --set profile=default -y",d:{ro:"Instalează istiod și ingress gateway-ul.",en:"Installs istiod and the ingress gateway."}},{cmd:"kubectl label namespace shop istio-injection=enabled",d:{ro:"Podurile noi din shop primesc sidecar-ul.",en:"New pods in shop get the sidecar."}},{cmd:"kubectl rollout restart deploy -n shop",d:{ro:"Repornește podurile existente ca să-l primească și ele.",en:"Restarts existing pods so they get it too."}}]},
+
+{at:"gw",frame:F4,kind:"r",move:[[["usr","gw"]],[["gw","web"]]],tables:["gw"],hl:{gw:"shop.example.com /"},log:{ro:"clientul intră prin gateway",en:"the customer enters through the gateway"},who:"Ingress gateway",
+ title:{ro:"Intrarea în magazin: ingress gateway",en:"The shop's front door: the ingress gateway"},
+ body:{ro:`<p>Clienții intră acum prin <strong>istio-ingressgateway</strong>, un Envoy la marginea clusterului, în spatele load balancer-ului din cloud.</p>
+<ul><li>Resursa <strong>Gateway</strong> spune: ascultă pe 443 pentru <code>shop.example.com</code>, cu certificatul din secretul <code>shop-tls</code>.</li>
+<li>Resursa <strong>VirtualService</strong> spune unde merge fiecare cale: <code>/api/checkout</code> la checkout, restul la web.</li></ul>
+<p>Avantajul: aceleași reguli (timeout, retry, canary, autorizare) se aplică și la intrare, nu doar între servicii.</p>`,
+ en:`<p>Customers now come in through <strong>istio-ingressgateway</strong>, an Envoy at the cluster's edge, behind the cloud load balancer.</p>
+<ul><li>The <strong>Gateway</strong> resource says: listen on 443 for <code>shop.example.com</code>, with the certificate from the <code>shop-tls</code> secret.</li>
+<li>The <strong>VirtualService</strong> resource says where each path goes: <code>/api/checkout</code> to checkout, everything else to web.</li></ul>
+<p>The benefit: the same rules (timeouts, retries, canaries, authorization) apply at the entrance too, not just between services.</p>`},
+ more:{ro:`<p>Kubernetes are și un standard nou pentru intrare, <strong>Gateway API</strong> (<code>HTTPRoute</code>). Istio îl suportă și e direcția recomandată pentru instalări noi; ideea e aceeași.</p>`,
+  en:`<p>Kubernetes also has a newer standard for ingress, the <strong>Gateway API</strong> (<code>HTTPRoute</code>). Istio supports it and it's the recommended direction for new setups; the idea is the same.</p>`}},
+
+{at:"chk",frame:F5,kind:"r",move:[[["web","chk"]]],tables:["modes"],hl:{modes:"STRICT"},log:{ro:"mTLS STRICT între servicii",en:"STRICT mTLS between services"},who:"mTLS",
+ title:{ro:"Prima problemă de audit rezolvată: mTLS peste tot",en:"First audit problem solved: mTLS everywhere"},
+ body:{ro:`<p>Web trimite <code>POST /api/checkout</code> ca înainte, în text simplu, dar doar până la propriul Envoy, în interiorul podului. Envoy-ul lui web deschide spre Envoy-ul lui checkout o conexiune <strong>mTLS</strong>: amândoi își arată certificatele.</p>
+<p>Checkout știe sigur că cererea vine de la <code>${ID("web")}</code>, nu doar de la un IP.</p>
+<p>Migrarea se face în doi pași: întâi <strong>PERMISSIVE</strong> (acceptă și text simplu, ca serviciile încă fără sidecar să meargă), apoi <strong>STRICT</strong>. După STRICT, jobul de rapoarte (încă fără sidecar) nu mai poate vorbi deloc cu serviciile din shop.</p>`,
+ en:`<p>Web sends <code>POST /api/checkout</code> as before, in plain text, but only as far as its own Envoy, inside the pod. Web's Envoy opens an <strong>mTLS</strong> connection to checkout's Envoy: both show their certificates.</p>
+<p>Checkout knows for sure the request comes from <code>${ID("web")}</code>, not just from an IP.</p>
+<p>The migration happens in two steps: first <strong>PERMISSIVE</strong> (also accepts plain text, so services still without a sidecar keep working), then <strong>STRICT</strong>. After STRICT, the reports job (still without a sidecar) can't talk to the shop services at all.</p>`},
+ try:[{cmd:"istioctl x describe pod deploy/checkout -n shop",d:{ro:"Arată ce reguli Istio se aplică podului, inclusiv mTLS.",en:"Shows which Istio rules apply to the pod, including mTLS."}}]},
+
+{at:"pay",frame:F6,kind:"r",move:[[["job","pay"]]],marks:{job:{k:"drop",t:"403"}},tables:["authz"],hl:{authz:"sa/reports"},log:{ro:"AuthorizationPolicy oprește jobul",en:"AuthorizationPolicy stops the job"},who:"AuthorizationPolicy",
+ title:{ro:"A doua problemă rezolvată: cine are voie la payments",en:"Second problem solved: who may call payments"},
+ body:{ro:`<p>Echipa Rapoarte intră și ea în mesh, deci jobul are acum identitatea <code>sa/reports</code>. Asta nu-i dă voie la orice: pe payments se pune o <strong>AuthorizationPolicy</strong>:</p>
+<p><em>permite doar identitatea <code>sa/checkout</code>, doar <code>POST /v1/charge</code></em>.</p>
+<p>Jobul încearcă din nou. Envoy-ul lui payments vede identitatea din certificat, nu găsește nicio regulă care s-o permită și răspunde <strong>403 RBAC: access denied</strong>. Aplicația payments nici nu află de cerere.</p>
+<p class="key">Accesul se dă pe identitate criptografică, nu pe IP. Podurile se mută, IP-urile se schimbă; identitatea rămâne.</p>`,
+ en:`<p>The Reports team joins the mesh too, so the job now has the identity <code>sa/reports</code>. That doesn't give it access to everything: an <strong>AuthorizationPolicy</strong> is put on payments:</p>
+<p><em>allow only the <code>sa/checkout</code> identity, only <code>POST /v1/charge</code></em>.</p>
+<p>The job tries again. Payments' Envoy sees the identity in the certificate, finds no rule allowing it and answers <strong>403 RBAC: access denied</strong>. The payments app never hears about the request.</p>
+<p class="key">Access is granted on a cryptographic identity, not an IP. Pods move and IPs change; the identity stays.</p>`}},
+
+{at:"chk",frame:F7,kind:"r",move:[[["chk","reco"]],[["reco","chk"]]],marks:{reco:{k:"drop",t:{ro:"încă lent",en:"still slow"}},chk:{k:"ok",t:"OK"}},tables:["res"],hl:{res:"timeout"},log:{ro:"timeout + circuit breaker",en:"timeout + circuit breaker"},who:{ro:"Reziliența",en:"Resilience"},
+ title:{ro:"Incidentul nu se mai repetă: timeout și circuit breaker",en:"The incident can't repeat: timeouts and circuit breaking"},
+ body:{ro:`<p>Pentru recommendations se configurează o singură dată, în Istio:</p>
+<ul><li><strong>VirtualService</strong>: timeout 1 s, 2 reîncercări a câte 400 ms, doar pentru erori 5xx și conexiuni rupte;</li>
+<li><strong>DestinationRule</strong>: maximum 50 de cereri în așteptare (peste, Envoy răspunde imediat cu 503: <em>circuit breaker</em>) și scoaterea din rotație a podurilor care dau 5 erori la rând (<em>outlier detection</em>).</li></ul>
+<p>Rejucăm seara de Black Friday: recommendations e la fel de lent, dar Envoy-ul lui checkout renunță după 1 s cu <strong>504</strong>. Checkout prinde eroarea și afișează coșul fără recomandări. Firele nu se mai blochează, iar plățile merg.</p>`,
+ en:`<p>For recommendations it's configured once, in Istio:</p>
+<ul><li><strong>VirtualService</strong>: 1 s timeout, 2 retries of 400 ms each, only for 5xx errors and dropped connections;</li>
+<li><strong>DestinationRule</strong>: at most 50 pending requests (beyond that, Envoy answers instantly with 503: a <em>circuit breaker</em>), and pods returning 5 errors in a row are taken out of rotation (<em>outlier detection</em>).</li></ul>
+<p>We replay Black Friday evening: recommendations is just as slow, but checkout's Envoy gives up after 1 s with a <strong>504</strong>. Checkout catches the error and shows the cart without recommendations. Threads no longer get stuck, and payments go through.</p>`},
+ more:{ro:`<p>Mesh-ul nu înlocuiește complet codul: el face ca eroarea să vină <strong>repede</strong>, dar aplicația tot trebuie să decidă ce face cu ea (aici: afișează pagina fără recomandări). Asta se numește <em>degradare grațioasă</em>.</p>`,
+  en:`<p>The mesh doesn't fully replace code: it makes the error arrive <strong>fast</strong>, but the app still has to decide what to do with it (here: show the page without recommendations). That's called <em>graceful degradation</em>.</p>`}},
+
+{at:"reco",frame:F8,kind:"r",move:[[["chk","reco"]]],marks:{reco:{k:"drop",t:{ro:"+5 s (test)",en:"+5 s (test)"}}},log:{ro:"test de haos în staging",en:"chaos test in staging"},who:"Fault injection",
+ title:{ro:"Verificăm înainte de următorul Black Friday: fault injection",en:"Checking before the next Black Friday: fault injection"},
+ body:{ro:`<p>Cum știi că protecția chiar funcționează? O testezi. Istio poate <strong>injecta defecte</strong> fără să atingi serviciile:</p>
+<ul><li><code>delay</code>: Envoy întârzie răspunsul cu 5 s;</li>
+<li><code>abort</code>: Envoy răspunde direct cu o eroare (de exemplu 503).</li></ul>
+<p>În staging, echipa aplică o întârziere de 5 s doar cererilor cu antetul <code>x-test: chaos</code>. Checkout răspunde în 1,1 s, fără recomandări. Testul trece. Fără mesh, ar fi trebuit să strici de-a binelea baza de date ca să vezi asta.</p>`,
+ en:`<p>How do you know the protection actually works? You test it. Istio can <strong>inject faults</strong> without touching the services:</p>
+<ul><li><code>delay</code>: Envoy holds the response for 5 s;</li>
+<li><code>abort</code>: Envoy answers straight away with an error (for example 503).</li></ul>
+<p>In staging, the team adds a 5 s delay only to requests with the header <code>x-test: chaos</code>. Checkout answers in 1.1 s, without recommendations. The test passes. Without a mesh, you'd have had to really break the database to see this.</p>`}},
+
+{at:"pay",frame:F9,kind:"r",move:[[["chk","pay"]]],tables:["canary"],log:{ro:"canary pentru payments v2",en:"canary for payments v2"},who:"Canary",
+ title:{ro:"payments v2: lansare graduală, fără risc mare",en:"payments v2: a gradual release, without a big risk"},
+ body:{ro:`<p>Echipa Plăți are o versiune nouă. Nu vrea s-o dea dintr-odată tuturor clienților. Cu un <strong>VirtualService</strong> și un <strong>DestinationRule</strong> (care definește subseturile v1 și v2 după eticheta <code>version</code>):</p>
+<ul><li>cererile cu <code>x-canary: true</code> (ale testerilor interni) merg mereu la v2;</li>
+<li>restul: <strong>95% la v1, 5% la v2</strong>.</li></ul>
+<p>Dacă metricile lui v2 arată bine, ponderea crește la 25%, 50%, 100%. Dacă nu, ponderea revine la 0 într-o secundă. Unelte ca <em>Argo Rollouts</em> sau <em>Flagger</em> pot face asta automat, după metrici.</p>`,
+ en:`<p>The Payments team has a new version. They don't want to give it to every customer at once. With a <strong>VirtualService</strong> and a <strong>DestinationRule</strong> (which defines subsets v1 and v2 by the <code>version</code> label):</p>
+<ul><li>requests with <code>x-canary: true</code> (from internal testers) always go to v2;</li>
+<li>the rest: <strong>95% to v1, 5% to v2</strong>.</li></ul>
+<p>If v2's metrics look good, the weight goes up to 25%, 50%, 100%. If not, it goes back to 0 within a second. Tools such as <em>Argo Rollouts</em> or <em>Flagger</em> can do this automatically, based on metrics.</p>`},
+ more:{ro:`<p>Fără mesh, Kubernetes împarte traficul după numărul de poduri: pentru 5% ai avea nevoie de 1 pod v2 la 19 poduri v1. Cu Istio, procentul nu depinde de numărul de poduri.</p>`,
+  en:`<p>Without a mesh, Kubernetes splits traffic by pod count: for 5% you'd need 1 v2 pod for every 19 v1 pods. With Istio, the percentage doesn't depend on the number of pods.</p>`}},
+
+{at:"pay",frame:F10,kind:"r",move:[[["pay","ext"]]],log:{ro:"trafic extern permis explicit",en:"outbound traffic allowed explicitly"},who:"Egress",
+ title:{ro:"Traficul care iese: doar spre destinații cunoscute",en:"Outbound traffic: only to known destinations"},
+ body:{ro:`<p>Payments trebuie să apeleze procesatorul de plăți <code>api.psp.example.com</code>. Implicit, Istio lasă podurile să iasă oriunde. Echipa schimbă asta:</p>
+<ul><li><code>outboundTrafficPolicy: REGISTRY_ONLY</code>: un pod poate ieși doar spre destinații cunoscute de mesh;</li>
+<li>un <strong>ServiceEntry</strong> declară <code>api.psp.example.com:443</code> ca destinație cunoscută.</li></ul>
+<p>Dacă un pod compromis încearcă să trimită date spre un domeniu necunoscut, Envoy blochează conexiunea. Iar apelurile spre procesator apar în aceleași metrici ca traficul intern.</p>`,
+ en:`<p>Payments has to call the payment processor <code>api.psp.example.com</code>. By default, Istio lets pods go out anywhere. The team changes that:</p>
+<ul><li><code>outboundTrafficPolicy: REGISTRY_ONLY</code>: a pod can only go out to destinations the mesh knows about;</li>
+<li>a <strong>ServiceEntry</strong> declares <code>api.psp.example.com:443</code> as a known destination.</li></ul>
+<p>If a compromised pod tries to send data to an unknown domain, Envoy blocks the connection. And calls to the processor show up in the same metrics as internal traffic.</p>`},
+ more:{ro:`<p>Dacă partenerul permite doar anumite IP-uri, traficul poate fi trecut printr-un <strong>egress gateway</strong>: toate apelurile ies prin câteva poduri dedicate, cu IP-uri fixe, iar acolo se pot aplica reguli și loguri suplimentare.</p>`,
+  en:`<p>If the partner only allows certain IPs, the traffic can be routed through an <strong>egress gateway</strong>: all calls leave through a few dedicated pods with fixed IPs, where extra rules and logging can be applied.</p>`}},
+
+{at:["chk","reco","ist"],frame:F11,kind:"t",move:[[["chk","ist"]]],log:{ro:"metrici și verificare",en:"metrics and checks"},who:{ro:"Observabilitate",en:"Observability"},
+ title:{ro:"Vezi tot: metrici, trace-uri, graful serviciilor",en:"See everything: metrics, traces, the service graph"},
+ body:{ro:`<p>Fiecare Envoy raportează pentru fiecare cerere: sursa, destinația, codul de răspuns și durata. Toate serviciile, în orice limbaj, au acum <strong>aceleași metrici</strong> (<code>istio_requests_total</code>, <code>istio_request_duration_milliseconds</code>) în Prometheus.</p>
+<ul><li><strong>Kiali</strong> desenează graful serviciilor, cu procentul de erori pe fiecare săgeată: 504-urile spre recommendations se văd imediat;</li>
+<li>trace-urile (Jaeger, Tempo) arată unde se pierde timpul, dacă aplicațiile transmit mai departe antetele de trace;</li>
+<li><code>istioctl analyze</code> găsește greșelile de configurare înainte să ajungă în producție.</li></ul>`,
+ en:`<p>Every Envoy reports for every request: the source, the destination, the response code and the duration. Every service, in any language, now has <strong>the same metrics</strong> (<code>istio_requests_total</code>, <code>istio_request_duration_milliseconds</code>) in Prometheus.</p>
+<ul><li><strong>Kiali</strong> draws the service graph, with the error rate on every arrow: the 504s to recommendations stand out straight away;</li>
+<li>traces (Jaeger, Tempo) show where time goes, as long as the apps pass the trace headers along;</li>
+<li><code>istioctl analyze</code> finds configuration mistakes before they reach production.</li></ul>`},
+ try:[{cmd:"istioctl analyze -n shop",d:{ro:"Verifică resursele Istio din namespace.",en:"Checks the Istio resources in the namespace."}},{cmd:"istioctl proxy-status",d:{ro:"Arată dacă fiecare Envoy are ultima configurație.",en:"Shows whether every Envoy has the latest configuration."}},{cmd:"istioctl dashboard kiali",d:{ro:"Deschide graful serviciilor.",en:"Opens the service graph."}}]},
+
+{at:["gw","web","chk","pay","reco","ist"],frame:null,kind:"none",tables:["cost"],summary:true,
+ title:{ro:"Cât costă, când NU merită și recapitulare",en:"What it costs, when it's NOT worth it, and a recap"},
+ body:{ro:`<p>Un mesh nu e gratuit: fiecare sidecar consumă memorie și CPU, adaugă ~1 ms de latență pe apel și trebuie actualizat. Istio e un sistem în plus de operat. Pentru câteva servicii într-un singur limbaj, o bibliotecă bună poate fi suficientă. Alternative mai simple: <strong>Linkerd</strong>, <strong>Cilium</strong> sau Istio în modul <strong>ambient</strong>.</p>
+<ul><li>Fără mesh, fiecare echipă scrie în cod timeout, retry, criptare și metrici, de obicei inegal.</li>
+<li>Istio pune un <strong>Envoy</strong> lângă fiecare pod; <strong>istiod</strong> îi dă configurația și certificatele.</li>
+<li><strong>VirtualService + DestinationRule</strong>: timeout, retry, circuit breaker, canary, fault injection.</li>
+<li><strong>PeerAuthentication STRICT</strong>: mTLS peste tot; <strong>AuthorizationPolicy</strong>: acces pe identitate.</li>
+<li><strong>Gateway</strong> la intrare, <strong>ServiceEntry + REGISTRY_ONLY</strong> la ieșire, aceleași metrici pentru toți.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Mergi la laborator ↓</button></p>`,
+ en:`<p>A mesh isn't free: every sidecar uses memory and CPU, adds ~1 ms of latency per call and has to be upgraded. Istio is one more system to run. For a few services in a single language, a good library can be enough. Simpler alternatives: <strong>Linkerd</strong>, <strong>Cilium</strong>, or Istio in <strong>ambient</strong> mode.</p>
+<ul><li>Without a mesh, every team writes timeouts, retries, encryption and metrics in code, usually unevenly.</li>
+<li>Istio puts an <strong>Envoy</strong> next to every pod; <strong>istiod</strong> gives them configuration and certificates.</li>
+<li><strong>VirtualService + DestinationRule</strong>: timeouts, retries, circuit breaking, canaries, fault injection.</li>
+<li><strong>PeerAuthentication STRICT</strong>: mTLS everywhere; <strong>AuthorizationPolicy</strong>: access by identity.</li>
+<li>A <strong>Gateway</strong> at the entrance, <strong>ServiceEntry + REGISTRY_ONLY</strong> on the way out, the same metrics for everyone.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Go to the lab ↓</button></p>`}}
+],
+
+reference:(T,lang)=>{
+  const ro=lang==="ro";
+  return `<div class="ref-grid"><section class="card refcard"><h2>${ro?"Reziliență și canary":"Resilience and canary"}</h2>
+<pre class="yaml">apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata: { name: recommendations, namespace: shop }
+spec:
+  hosts: [recommendations]
+  http:
+  - timeout: 1s
+    retries: { attempts: 2, perTryTimeout: 400ms, retryOn: 5xx,reset }
+    route: [{ destination: { host: recommendations } }]
+---
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata: { name: recommendations, namespace: shop }
+spec:
+  host: recommendations
+  trafficPolicy:
+    connectionPool: { http: { http1MaxPendingRequests: 50 } }
+    outlierDetection: { consecutive5xxErrors: 5, interval: 10s, baseEjectionTime: 30s }
+---
+<span class="c"># payments: x-canary → v2, apoi 95 / 5</span>
+  http:
+  - match: [{ headers: { x-canary: { exact: "true" } } }]
+    route: [{ destination: { host: payments, subset: v2 } }]
+  - route:
+    - { destination: { host: payments, subset: v1 }, weight: 95 }
+    - { destination: { host: payments, subset: v2 }, weight: 5 }</pre></section>
+<section class="card refcard"><h2>${ro?"Securitate":"Security"}</h2>
+<pre class="yaml">apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata: { name: default, namespace: shop }
+spec:
+  mtls: { mode: STRICT }
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata: { name: payments-allow, namespace: shop }
+spec:
+  selector: { matchLabels: { app: payments } }
+  action: ALLOW
+  rules:
+  - from: [{ source: { principals: ["cluster.local/ns/shop/sa/checkout"] } }]
+    to: [{ operation: { methods: ["POST"], paths: ["/v1/charge"] } }]
+---
+apiVersion: networking.istio.io/v1
+kind: ServiceEntry
+metadata: { name: psp, namespace: shop }
+spec:
+  hosts: [api.psp.example.com]
+  ports: [{ number: 443, name: tls, protocol: TLS }]
+  resolution: DNS
+  location: MESH_EXTERNAL</pre>
+<h3>${ro?"Comenzi":"Commands"}</h3>
+<pre class="yaml">istioctl install --set profile=default -y
+kubectl label ns shop istio-injection=enabled
+istioctl analyze -n shop        <span class="c"># ${ro?"greșeli de configurare":"config mistakes"}</span>
+istioctl proxy-status           <span class="c"># ${ro?"Envoy-uri sincronizate?":"Envoys in sync?"}</span>
+istioctl proxy-config routes deploy/checkout -n shop</pre></section></div>`;
+},
+
+gloss:[
+ ["Service mesh",null,{ro:"Un strat de infrastructură care preia comunicarea dintre servicii: rutare, criptare, reziliență, telemetrie.",en:"An infrastructure layer that takes over communication between services: routing, encryption, resilience, telemetry."}],
+ ["Istio",null,{ro:"Cel mai cunoscut service mesh, construit pe proxy-ul Envoy.",en:"The best-known service mesh, built on the Envoy proxy."}],
+ ["Envoy",null,{ro:"Proxy-ul prin care trece traficul fiecărui pod în Istio.",en:"The proxy every pod's traffic goes through in Istio."}],
+ ["Sidecar",null,{ro:"Un container în plus în pod, lângă aplicație (aici istio-proxy).",en:"An extra container in the pod, next to the app (here istio-proxy)."}],
+ ["istiod",null,{ro:"Planul de control Istio: configurație și certificate pentru toți proxy-ii.",en:"Istio's control plane: configuration and certificates for every proxy."}],
+ ["mTLS",null,{ro:"TLS în care și clientul, și serverul își arată certificatul.",en:"TLS in which both the client and the server show a certificate."}],
+ ["VirtualService",null,{ro:"Regulile de rutare: unde merge o cerere, timeout, retry, defecte injectate.",en:"Routing rules: where a request goes, timeouts, retries, injected faults."}],
+ ["DestinationRule",null,{ro:"Ce se întâmplă la destinație: subseturi v1/v2, limite de conexiuni, outlier detection.",en:"What happens at the destination: v1/v2 subsets, connection limits, outlier detection."}],
+ ["AuthorizationPolicy",null,{ro:"Cine are voie să apeleze un serviciu, ce metode și ce căi.",en:"Who may call a service, which methods and which paths."}],
+ [{ro:"Circuit breaker",en:"Circuit breaker"},null,{ro:"Oprește rapid cererile spre un serviciu supraîncărcat, în loc să le lase să aștepte.",en:"Quickly rejects requests to an overloaded service instead of letting them wait."}],
+ [{ro:"Cădere în cascadă",en:"Cascading failure"},null,{ro:"Problema unui serviciu care se propagă la cele care îl apelează.",en:"One service's problem spreading to the services that call it."}],
+ ["ServiceEntry",null,{ro:"Declară o destinație din afara mesh-ului, de exemplu un API extern.",en:"Declares a destination outside the mesh, such as an external API."}],
+ ["Kiali",null,{ro:"Consola Istio care desenează graful serviciilor și erorile dintre ele.",en:"Istio's console that draws the service graph and the errors between services."}]
+],
+glossEx:{
+ "Circuit breaker":{ro:"peste 50 de cereri în așteptare spre recommendations, Envoy răspunde imediat 503.",en:"over 50 pending requests to recommendations, Envoy answers 503 straight away."},
+ "AuthorizationPolicy":{ro:"doar sa/checkout poate face POST /v1/charge pe payments.",en:"only sa/checkout may POST /v1/charge on payments."}
+},
+
+quiz:[
+ {q:{ro:"Care e motivul principal pentru un service mesh?",en:"What's the main reason for a service mesh?"},o:[{ro:"Face aplicațiile mai rapide",en:"It makes apps faster"},{ro:"Scoate logica de rețea (retry, mTLS, metrici) din codul fiecărui serviciu și o configurează central",en:"It takes network logic (retries, mTLS, metrics) out of every service's code and configures it centrally"},{ro:"Înlocuiește Kubernetes",en:"It replaces Kubernetes"},{ro:"Înlocuiește baza de date",en:"It replaces the database"}],a:1,e:{ro:"Aceleași reguli pentru toate serviciile, în orice limbaj.",en:"The same rules for every service, in any language."}},
+ {q:{ro:"recommendations răspunde în 30 s, iar checkout îl apelează fără timeout. Ce se întâmplă?",en:"recommendations answers in 30 s, and checkout calls it with no timeout. What happens?"},o:[{ro:"Nimic grav, recomandările nu sunt importante",en:"Nothing serious, recommendations aren't important"},{ro:"Kubernetes repornește recommendations",en:"Kubernetes restarts recommendations"},{ro:"Firele lui checkout se blochează și cade și checkout: o cădere în cascadă",en:"Checkout's threads get stuck and checkout goes down too: a cascading failure"},{ro:"Cererile merg automat la alt serviciu",en:"Requests automatically go to another service"}],a:2,e:{ro:"Un serviciu neimportant a oprit plățile.",en:"An unimportant service stopped payments."}},
+ {q:{ro:"Ce face istiod?",en:"What does istiod do?"},o:[{ro:"Trimite configurația și certificatele către toți proxy-ii Envoy",en:"Sends configuration and certificates to every Envoy proxy"},{ro:"Trece prin el tot traficul dintre servicii",en:"All traffic between services goes through it"},{ro:"Rulează aplicațiile",en:"Runs the apps"},{ro:"Stochează imaginile",en:"Stores the images"}],a:0,e:{ro:"Traficul trece prin Envoy (planul de date), nu prin istiod.",en:"Traffic goes through Envoy (the data plane), not istiod."}},
+ {q:{ro:"Ce mod PeerAuthentication folosești în timpul migrării, cât unele servicii nu au încă sidecar?",en:"Which PeerAuthentication mode do you use during migration, while some services have no sidecar yet?"},o:["STRICT","DISABLE","PERMISSIVE",{ro:"Nu contează",en:"It doesn't matter"}],a:2,e:{ro:"PERMISSIVE acceptă și mTLS, și text simplu; apoi treci la STRICT.",en:"PERMISSIVE accepts both mTLS and plain text; then you switch to STRICT."}},
+ {q:{ro:"Jobul de rapoarte (sa/reports) face POST /v1/charge pe payments, care permite doar sa/checkout. Ce primește?",en:"The reports job (sa/reports) sends POST /v1/charge to payments, which only allows sa/checkout. What does it get?"},o:["200 OK","504 Gateway Timeout",{ro:"Conexiune refuzată la nivel TCP",en:"A refused TCP connection"},"403 RBAC: access denied"],a:3,e:{ro:"Envoy-ul lui payments verifică identitatea din certificat.",en:"Payments' Envoy checks the identity in the certificate."}},
+ {q:{ro:"Unde configurezi timeout-ul și reîncercările pentru recommendations?",en:"Where do you configure the timeout and retries for recommendations?"},o:["VirtualService","PeerAuthentication","ServiceEntry",{ro:"În Dockerfile",en:"In the Dockerfile"}],a:0,e:{ro:"Limitele de conexiuni și outlier detection sunt în DestinationRule.",en:"Connection limits and outlier detection are in the DestinationRule."}},
+ {q:{ro:"La ce folosește fault injection?",en:"What is fault injection for?"},o:[{ro:"Repară automat erorile",en:"Automatically fixes errors"},{ro:"Testează că sistemul rezistă la întârzieri și erori, fără să strici serviciile reale",en:"Testing that the system copes with delays and errors, without breaking the real services"},{ro:"Criptează traficul",en:"Encrypts traffic"},{ro:"Blochează atacatorii",en:"Blocks attackers"}],a:1,e:{ro:"Envoy întârzie sau respinge cererile, intenționat.",en:"Envoy delays or rejects requests, on purpose."}},
+ {q:{ro:"Când probabil NU merită Istio?",en:"When is Istio probably NOT worth it?"},o:[{ro:"Zeci de servicii în mai multe limbaje",en:"Dozens of services in several languages"},{ro:"Cerințe de zero trust pentru date de card",en:"Zero-trust requirements for card data"},{ro:"Câteva servicii, o echipă, un limbaj cu o bibliotecă bună",en:"A few services, one team, one language with a good library"},{ro:"Multe lansări canary",en:"Many canary releases"}],a:2,e:{ro:"Un mesh are costuri: resurse, latență, încă un sistem de operat.",en:"A mesh has costs: resources, latency, one more system to run."}}
+]
+};
+})();
+</script>
+<script src="../assets/engine.js?v=3"></script>
+<script src="../assets/labs-data.js?v=5"></script>
+<script src="../assets/lab.js?v=1"></script>
+<script type="module" src="../assets/auth.js?v=11"></script>
+</body>
+</html>

@@ -60,7 +60,7 @@ h1{font:700 clamp(1.5rem,4vw,2.2rem) var(--head);margin:0 0 6px}
   </div>
 </main>
 
-<script type="module" src="../assets/auth.js?v=10"></script>
+<script type="module" src="../assets/auth.js?v=11"></script>
 <script type="module">
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
 let lang=store.get("cadru-lang")==="en"?"en":"ro";
@@ -69,7 +69,7 @@ const T=v=>Array.isArray(v)?v[lang==="en"?1:0]:v;
 const UI={brand:["Rețea pas cu pas","Network step by step"],home:["← Lecții","← Lessons"],games:["🎮 Jocuri","🎮 Games"],title:["🎡 Ce învăț azi?","🎡 What do I learn today?"],
   lead:["Nu știi cu ce să începi? Învârte roata: alege o lecție și îți dă o mică provocare pentru azi.","Not sure where to start? Spin the wheel: it picks a lesson and gives you a small challenge for today."],
   spin:["🎡 Învârte roata","🎡 Spin the wheel"],spinning:["Se învârte…","Spinning…"],again:["🎡 Încă o dată","🎡 Spin again"],skip:["Sari peste lecțiile la care am deja testul trecut (≥ 75%)","Skip lessons whose quiz I've already passed (≥ 75%)"],
-  idle:["Roata are toate cele 25 de lecții. Apasă „Învârte roata” sau atinge centrul.","The wheel has all 25 lessons. Press \"Spin the wheel\" or tap the centre."],
+  idle:["Roata are toate cele 26 de lecții. Apasă „Învârte roata” sau atinge centrul.","The wheel has all 26 lessons. Press \"Spin the wheel\" or tap the centre."],
   today:["Lecția de azi","Today's lesson"],go:["▶ Începe lecția","▶ Start the lesson"],lab:["🧪 Laboratorul","🧪 The lab"],quiz:["✎ Testul","✎ The quiz"],
   allDone:["Ai trecut deja toate testele. Bravo! Debifează opțiunea ca să învârți din toate.","You've passed every quiz already. Well done! Untick the option to spin among all lessons."],
   hist:["Ultimele alegeri: ","Recent picks: "]};
@@ -86,6 +86,7 @@ const LS=[
  ["gke-retea","GKE",["Rețeaua pod-urilor în GKE","Pod networking on GKE"],["Intermediar","Intermediate"],25],
  ["k8s-intrare",["Pachet K8s","K8s packet"],["Viața unui pachet care intră în Kubernetes","The life of a packet entering Kubernetes"],["Avansat","Advanced"],30],
  ["service-mesh","Mesh",["Service mesh: o cerere între două microservicii","Service mesh: a request between two microservices"],["Avansat","Advanced"],25],
+ ["istio","Istio",["Istio: de ce un service mesh","Istio: why a service mesh"],["Intermediar","Intermediate"],30],
  ["observabilitate",["Observab.","Observab."],["Observabilitate: de ce e lent checkout-ul?","Observability: why is checkout slow?"],["Intermediar","Intermediate"],25],
  ["tomcat","Tomcat",["Tomcat: viața unei cereri","Tomcat: the life of a request"],["Intermediar","Intermediate"],25],
  ["microservicii",["Microserv.","Microserv."],["Microservicii pe Tomcat în producție","Microservices on Tomcat in production"],["Intermediar","Intermediate"],25],

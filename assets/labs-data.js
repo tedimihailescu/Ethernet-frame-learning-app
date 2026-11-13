@@ -305,6 +305,18 @@ artifactory: { title: "Artifactory", tasks: [
  { type: "order", name: B("Viața unei imagini", "An image's life"), q: B("Ordonează drumul imaginii orders-api până în producție.", "Order the orders-api image's path to production."),
    items: [B("Dependențele vin prin maven-virtual (din cache)", "Dependencies come through maven-virtual (from the cache)"), B("CI face docker push în docker-dev-local", "CI pushes to docker-dev-local"), B("CI publică build info", "CI publishes build info"), B("Xray scanează imaginea: curat", "Xray scans the image: clean"), B("Build-ul e promovat în docker-prod-local", "The build is promoted to docker-prod-local"), B("Kubernetes descarcă imaginea cu un token de citire", "Kubernetes pulls the image with a read-only token")],
    hint: B("Promovarea vine după scanare.", "Promotion comes after the scan.") }
+]},
+
+istio: { title: "Istio", tasks: [
+ { type: "term", name: B("Injectarea sidecar-ului", "Sidecar injection"), q: B("Pune eticheta care face ca podurile noi din namespace-ul shop să primească sidecar-ul Envoy.", "Add the label that makes new pods in the shop namespace get the Envoy sidecar."),
+   prompt: "$", need: ["kubectl", "label", ["namespace", "ns"], "shop", "istio-injection=enabled"], sol: "kubectl label namespace shop istio-injection=enabled",
+   out: "namespace/shop labeled",
+   hint: B("kubectl label namespace <nume> istio-injection=enabled", "kubectl label namespace <name> istio-injection=enabled"), why: B("Apoi repornești podurile existente: kubectl rollout restart deploy -n shop.", "Then restart the existing pods: kubectl rollout restart deploy -n shop.") },
+ { type: "input", name: B("mTLS obligatoriu", "Mandatory mTLS"), q: B("Ce mod PeerAuthentication respinge orice trafic în text simplu? (un cuvânt)", "Which PeerAuthentication mode rejects all plain-text traffic? (one word)"),
+   ans: ["strict"], hint: B("PERMISSIVE, STRICT sau DISABLE?", "PERMISSIVE, STRICT or DISABLE?"), why: B("PERMISSIVE e pentru migrare; STRICT acceptă doar mTLS.", "PERMISSIVE is for migration; STRICT accepts mTLS only.") },
+ { type: "order", name: B("Adoptarea Istio", "Adopting Istio"), q: B("Ordonează pașii prin care magazinul adoptă Istio în siguranță.", "Order the steps for the shop to adopt Istio safely."),
+   items: [B("Instalezi istiod cu istioctl install", "Install istiod with istioctl install"), B("Pui istio-injection=enabled pe namespace", "Label the namespace istio-injection=enabled"), B("Repornești podurile: primesc sidecar-ul", "Restart the pods: they get the sidecar"), B("PeerAuthentication PERMISSIVE cât migrezi", "PeerAuthentication PERMISSIVE while migrating"), B("Treci la STRICT când toți sunt în mesh", "Switch to STRICT once everyone is in the mesh"), B("Adaugi AuthorizationPolicy pe payments", "Add an AuthorizationPolicy on payments")],
+   hint: B("STRICT doar după ce toate serviciile au sidecar.", "STRICT only after every service has a sidecar.") }
 ]}
 };
 })();
