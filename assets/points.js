@@ -18,5 +18,5 @@ export async function balance(db, uid, fs) {
   ]);
   const earned = rs.docs.filter(d => qualifies(d.data())).length * PER_TEST;
   const net = u.exists() && typeof u.data().roulette === "number" ? u.data().roulette : 0;
-  return { start: START, earned, net, total: Math.max(0, START + earned + net) };
+  return { start: START, earned, net, total: Math.max(0, START + earned + net), results: rs.docs.map(d => d.data()) };
 }

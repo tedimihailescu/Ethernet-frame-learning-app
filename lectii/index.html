@@ -18,7 +18,7 @@ h1{font:700 clamp(1.6rem,4vw,2.4rem) var(--head);margin:0 0 6px}
 .chip{border:2px solid var(--text);background:var(--surface);color:var(--text);border-radius:999px;padding:6px 12px;font:600 .88rem var(--sans);cursor:pointer}
 .chip[aria-pressed="true"]{background:var(--accent);color:var(--accent-text)}
 .search{flex:1 1 220px;min-width:0;font:500 .95rem var(--sans);padding:9px 12px;border:2px solid var(--text);border-radius:10px;background:var(--surface);color:var(--text)}
-.cat-h{display:flex;align-items:baseline;gap:10px;margin:28px 0 12px}
+.cat-h{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 10px;margin:28px 0 12px}
 .cat-h h2{font:700 1.3rem var(--head);margin:0}
 .cat-h p{margin:0;color:var(--muted);font-size:.92rem}
 .path{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
@@ -42,8 +42,19 @@ h1{font:700 clamp(1.6rem,4vw,2.4rem) var(--head);margin:0 0 6px}
 .ill-tok{fill:var(--l2bg);stroke:var(--l2);stroke-width:1.4}
 .ill-dns{fill:var(--arpbg);stroke:var(--arp);stroke-width:1.4}
 .ill-txt{font:700 9px var(--sans)}
+.pg{display:flex;flex-wrap:wrap;gap:6px}
+.pg span{font:600 .74rem var(--mono);padding:3px 8px;border-radius:999px;border:1px dashed var(--border);color:var(--muted)}
+.pg span.on{border:1px solid var(--ok);color:var(--ok);background:var(--surface2)}
+.lesson.complete{border-color:var(--ok);box-shadow:inset 0 0 0 1px var(--ok)}
+.lesson .done-b{font:700 .7rem var(--mono);padding:2px 8px;border-radius:999px;background:var(--ok);color:var(--surface)}
+.cat-h .cnt{margin-left:auto;font:600 .8rem var(--mono);color:var(--muted);white-space:nowrap}
+.prog{border:2px solid var(--text);border-radius:12px;background:var(--surface);padding:12px 14px;margin:0 0 16px;max-width:720px}
+.prog b{font:700 1rem var(--head)}
+.prog .bar{height:10px;border-radius:999px;background:var(--surface2);border:1px solid var(--border);overflow:hidden;margin:8px 0}
+.prog .bar i{display:block;height:100%;background:var(--ok);border-radius:999px}
+.prog small{color:var(--muted);font-size:.84rem}
 @media (max-width:980px){.path{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media (max-width:640px){.path{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:640px){.path{grid-template-columns:minmax(0,1fr)}.cat-h p{order:3;flex-basis:100%}}
 @media (prefers-reduced-motion:reduce){.lesson{transition:none}.lesson:hover{transform:none}}
 </style>
 </head>
@@ -57,14 +68,15 @@ h1{font:700 clamp(1.6rem,4vw,2.4rem) var(--head);margin:0 0 6px}
 <main class="page">
   <h1 data-t="title"></h1>
   <p class="lead" data-t="lead"></p>
+  <div class="prog" id="prog"></div>
   <div class="filters" id="chips"></div>
   <div class="filters"><input class="search" id="q" type="search" autocomplete="off"></div>
   <div id="list"></div>
 </main>
 <footer class="foot"><div class="foot-in"><p data-t="foot"></p></div></footer>
 
-<script src="../assets/catalog.js?v=3"></script>
-<script src="../assets/menu.js?v=1"></script>
+<script src="../assets/catalog.js?v=4"></script>
+<script src="../assets/menu.js?v=2"></script>
 <script>
 (function(){
 "use strict";
@@ -76,10 +88,28 @@ const UI={brand:{ro:"Rețea pas cu pas",en:"Network step by step"},title:{ro:"To
   lead:{ro:"Alege un subiect sau caută. Fiecare lecție: simulare pas cu pas, laborator și test (peste 80% = 🪙 5 puncte).",en:"Pick a topic or search. Every lesson: a step-by-step simulation, a lab and a quiz (over 80% = 🪙 5 points)."},
   all:{ro:"Toate",en:"All"},ph:{ro:"Caută: Kafka, certificat, DNS…",en:"Search: Kafka, certificate, DNS…"},none:{ro:"Nicio lecție nu se potrivește.",en:"No lesson matches."},
   lesson:{ro:"LECȚIA",en:"LESSON"},start:{ro:"Începe lecția →",en:"Start the lesson →"},nw:{ro:"NOU",en:"NEW"},
+  read:{ro:"📖 Citit",en:"📖 Read"},stepN:{ro:"📖 Pasul",en:"📖 Step"},lab:{ro:"🧪 Laborator",en:"🧪 Lab"},quiz:{ro:"✅ Test",en:"✅ Quiz"},doneB:{ro:"✓ TERMINAT",en:"✓ DONE"},
+  cont:{ro:"Continuă de la pasul",en:"Continue from step"},again:{ro:"Recapitulează →",en:"Review it →"},
+  pT:{ro:"Progresul tău",en:"Your progress"},pOf:{ro:"din",en:"of"},pDone:{ro:"lecții terminate",en:"lessons finished"},pStarted:{ro:"începute",en:"in progress"},
+  pHow:{ro:"O lecție e terminată când ai: 📖 parcurs toți pașii · 🧪 terminat laboratorul · ✅ luat peste 80% la test.",en:"A lesson is finished when you have: 📖 gone through every step · 🧪 finished the lab · ✅ scored over 80% on the quiz."},
+  pSync:{ro:"Pașii se țin minte pe acest dispozitiv; testele și laboratoarele vin și din contul tău.",en:"Steps are remembered on this device; quizzes and labs also come from your account."},
   foot:{ro:"Proiect educațional. Adresele și numele din lecții sunt exemple.",en:"An educational project. Addresses and names in the lessons are examples."}};
 let cat=(location.hash||"").slice(1),q="";
 const fold=s=>String(s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
-function card(l,n){return `<a class="lesson" href="../${l.href}"><div class="top"><span class="num">${T(UI.lesson)} ${String(n).padStart(2,"0")}</span>${NEW.includes(l.id)?`<span class="new">${T(UI.nw)}</span>`:`<span class="lvl">${T(l.lvl)}</span>`}</div>${C.ILL[l.ill]||""}<h3>${T(l.t)}</h3><p>${T(l.d)}</p><ul>${l.topics.map(t=>`<li>${T(t)}</li>`).join("")}</ul><span class="stats">${T(l.stats)}</span><span class="go">${T(UI.start)}</span></a>`}
+function pills(p){
+  const rd=p.read?`<span class="on">${T(UI.read)} ✓</span>`:p.steps>1&&p.n?`<span>${T(UI.stepN)} ${p.steps}/${p.n}</span>`:`<span>${T(UI.read)}</span>`;
+  const lb=`<span class="${p.lab?"on":""}">${T(UI.lab)}${p.lab?" ✓":""}</span>`;
+  const qz=p.quiz?`<span class="${p.quiz.pass?"on":""}">${T(UI.quiz)} ${p.quiz.best}/${p.quiz.total}${p.quiz.pass?" ✓":""}</span>`:`<span>${T(UI.quiz)}</span>`;
+  return `<div class="pg">${rd}${lb}${qz}</div>`;
+}
+function card(l,n){const p=C.progress(l.id);
+  const badge=p.complete?`<span class="done-b">${T(UI.doneB)}</span>`:NEW.includes(l.id)?`<span class="new">${T(UI.nw)}</span>`:`<span class="lvl">${T(l.lvl)}</span>`;
+  const resume=!p.complete&&!p.read&&p.steps>1;
+  const href=`../${l.href}${resume?"#step-"+p.steps:""}`;
+  const go=p.complete?T(UI.again):resume?`${T(UI.cont)} ${p.steps} →`:T(UI.start);
+  return `<a class="lesson${p.complete?" complete":""}" href="${href}"><div class="top"><span class="num">${T(UI.lesson)} ${String(n).padStart(2,"0")}</span>${badge}</div>${C.ILL[l.ill]||""}<h3>${T(l.t)}</h3><p>${T(l.d)}</p><ul>${l.topics.map(t=>`<li>${T(t)}</li>`).join("")}</ul><span class="stats">${T(l.stats)}</span>${pills(p)}<span class="go">${go}</span></a>`}
+function renderProg(){const s=C.summary(),pct=Math.round(s.parts/(s.total*3)*100);
+  document.getElementById("prog").innerHTML=`<b>${T(UI.pT)}: ${s.complete} ${T(UI.pOf)} ${s.total} ${T(UI.pDone)}</b>${s.started?` <small>· ${s.started} ${T(UI.pStarted)}</small>`:""}<div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="width:${pct}%"></i></div><small>${T(UI.pHow)} ${T(UI.pSync)}</small>`}
 function render(){
   document.documentElement.lang=lang;document.title=T(UI.title);
   document.querySelectorAll("[data-t]").forEach(e=>{e.textContent=T(UI[e.dataset.t])});
@@ -89,12 +119,16 @@ function render(){
   const f=fold(q.trim());let n=0,h="",shown=0;
   C.CATS.forEach(c=>{const items=c.list.map(id=>[C.byId(id),++n]).filter(([l])=>!f||fold(T(l.t)+" "+T(l.d)+" "+l.topics.map(T).join(" ")+" "+l.id).includes(f));
     if((cat&&cat!==c.id)||!items.length)return;shown+=items.length;
-    h+=`<section id="${c.id}"><div class="cat-h"><h2>${c.icon} ${T(c.t)}</h2><p>${T(c.d)}</p></div><div class="path">${items.map(([l,i])=>card(l,i)).join("")}</div></section>`});
+    const cs=C.summary(c.list);
+    h+=`<section id="${c.id}"><div class="cat-h"><h2>${c.icon} ${T(c.t)}</h2><p>${T(c.d)}</p><span class="cnt">${cs.complete}/${cs.total} ✓</span></div><div class="path">${items.map(([l,i])=>card(l,i)).join("")}</div></section>`});
   document.getElementById("list").innerHTML=shown?h:`<p class="none">${T(UI.none)}</p>`;
+  renderProg();
   document.querySelectorAll("[data-lang]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.lang===lang?"true":"false"));
 }
 document.getElementById("chips").addEventListener("click",e=>{const b=e.target.closest(".chip");if(!b)return;cat=b.dataset.c;history.replaceState(null,"",cat?"#"+cat:location.pathname);render()});
 document.getElementById("q").addEventListener("input",e=>{q=e.target.value;render()});
+window.addEventListener("progress:changed",render);
+window.addEventListener("pageshow",e=>{if(e.persisted)render()});
 window.addEventListener("hashchange",()=>{cat=location.hash.slice(1);render();scrollTo(0,0)});
 document.querySelectorAll("[data-lang]").forEach(b=>b.onclick=()=>{lang=b.dataset.lang;store.set("cadru-lang",lang);render();window.dispatchEvent(new Event("cadru:lang"))});
 const saved=store.get("cadru-theme");if(saved==="light"||saved==="dark")document.documentElement.dataset.theme=saved;
@@ -102,6 +136,6 @@ document.getElementById("theme").onclick=()=>{const r=document.documentElement,d
 render();
 })();
 </script>
-<script type="module" src="../assets/auth.js?v=9"></script>
+<script type="module" src="../assets/auth.js?v=10"></script>
 </body>
 </html>

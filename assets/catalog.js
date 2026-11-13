@@ -151,5 +151,12 @@ const GAMES=[
  {href:"roata/index.html",icon:"🎡",t:{ro:"Ce învăț azi?",en:"What do I learn today?"}}
 ];
 const ALL=[...LESSONS,...PROD,...EXTRA,...NEW].map(l=>Object.assign({id:l.href.split("/")[0]},l));
-window.CATALOG={ILL,CATS,GAMES,ALL,byId:id=>ALL.find(l=>l.id===id)};
+/* Progress per lesson, kept in localStorage "cadru-progress" (written by engine.js on lesson pages,
+   topped up from saved results by auth.js): {id:{s:steps reached,n:steps,q:best quiz,qt:quiz total,l:lab score,lt:lab total}} */
+const PKEY="cadru-progress";
+function pAll(){try{return JSON.parse(localStorage.getItem(PKEY)||"{}")||{}}catch(e){return {}}}
+function progress(id){const p=pAll()[id]||{};const read=!!p.n&&p.s>=p.n,lab=!!p.lt,quiz=p.qt?{best:p.q|0,total:p.qt,pass:(p.q|0)/p.qt>0.8}:null;
+  const done=(read?1:0)+(lab?1:0)+(quiz&&quiz.pass?1:0);return {read,lab,quiz,done,complete:done===3,started:!!(p.s>1||p.lt||p.qt),steps:p.s|0,n:p.n|0}}
+function summary(ids){ids=ids||ALL.map(l=>l.id);const ps=ids.map(progress);return {total:ids.length,complete:ps.filter(p=>p.complete).length,started:ps.filter(p=>p.started&&!p.complete).length,parts:ps.reduce((a,p)=>a+p.done,0)}}
+window.CATALOG={ILL,CATS,GAMES,ALL,byId:id=>ALL.find(l=>l.id===id),progress,summary};
 })();

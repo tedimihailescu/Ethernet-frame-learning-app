@@ -10,7 +10,7 @@ async function boot() {
     import("./firebase.js?v=5"),
     import("https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js"),
     import("https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js"),
-    import("./points.js?v=5")
+    import("./points.js?v=6")
   ]);
   // firebase.js is already forwarding .web.app visitors to firebaseapp.com; don't race it.
   if (location.hostname.endsWith(".web.app")) return;
@@ -42,7 +42,26 @@ async function boot() {
     if (el) el.textContent = n;
   }
   async function refreshPoints(user) {
-    try { showPoints((await pts.balance(db, user.uid, fs)).total); } catch (e) { console.warn("points", e); }
+    try { const b = await pts.balance(db, user.uid, fs); showPoints(b.total); mergeProgress(b.results); } catch (e) { console.warn("points", e); }
+  }
+  // Copy the best saved quiz / lab scores into the local progress, so the checkmarks
+  // on the lessons page also show what was done on another device.
+  function mergeProgress(results) {
+    if (!Array.isArray(results)) return;
+    let all = {};
+    try { all = JSON.parse(localStorage.getItem("cadru-progress") || "{}") || {}; } catch (e) {}
+    let changed = false;
+    results.forEach(r => {
+      if (!r || !r.total) return;
+      const ls = String(r.lesson), lab = /-lab$/.test(ls), id = lab ? ls.slice(0, -4) : ls;
+      if (!pts.TESTS.includes(id)) return;
+      const p = all[id] = all[id] || {};
+      if (lab) { if (!p.lt || (r.score | 0) > (p.l | 0)) { p.l = Math.max(p.l | 0, r.score | 0); p.lt = r.total; changed = true; } }
+      else if (!p.qt || (r.score | 0) > (p.q | 0)) { p.q = Math.max(p.q | 0, r.score | 0); p.qt = r.total; changed = true; }
+    });
+    if (!changed) return;
+    try { localStorage.setItem("cadru-progress", JSON.stringify(all)); } catch (e) {}
+    window.dispatchEvent(new Event("progress:changed"));
   }
   window.addEventListener("points:changed", e => showPoints(e.detail.total));
 

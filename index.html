@@ -22,8 +22,16 @@
 .resume{display:none;margin:20px 0 0;align-items:center;gap:10px;flex-wrap:wrap;border:2px dashed var(--text);border-radius:12px;padding:10px 14px;background:var(--surface2);max-width:640px}
 .resume.on{display:flex}
 .resume a{font-weight:700;color:var(--text)}
+.myprog{display:none;margin:12px 0 0;max-width:640px}
+.myprog.on{display:block}
+.myprog a{display:flex;align-items:center;gap:12px;flex-wrap:wrap;border:2px solid var(--text);border-radius:12px;padding:10px 14px;background:var(--surface);color:var(--text);text-decoration:none}
+.myprog .bar{flex:1 1 140px;height:10px;border-radius:999px;background:var(--surface2);border:1px solid var(--border);overflow:hidden}
+.myprog .bar i,.tile .mini i{display:block;height:100%;background:var(--ok);border-radius:999px}
+.myprog .pc{font:600 .82rem var(--mono)}
+.tile .mini{display:block;height:5px;border-radius:999px;background:var(--surface2);overflow:hidden}
+.tile .ok{color:var(--ok)}
 h2.sh{font:700 1.25rem var(--head);margin:36px 0 12px}
-.topics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
+.topics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
 .topic{position:relative;min-width:0}
 .tile{display:flex;flex-direction:column;gap:6px;height:100%;box-sizing:border-box;border:2px solid var(--text);border-radius:14px;padding:16px;background:var(--surface);color:var(--text);text-decoration:none;transition:transform .15s,box-shadow .15s}
 .tile .ic{font-size:1.9rem;line-height:1}
@@ -57,6 +65,7 @@ h2.sh{font:700 1.25rem var(--head);margin:36px 0 12px}
     <p data-t="sub"></p>
     <div class="ctas"><a class="cta main" href="ethernet/index.html" data-t="start"></a><a class="cta" href="lectii/index.html" data-t="all"></a><a class="cta" href="teste/index.html" data-t="tests"></a></div>
     <p class="resume" id="resume"></p>
+    <p class="myprog" id="progress"></p>
   </section>
 
   <h2 class="sh" data-t="topicsT"></h2>
@@ -67,8 +76,8 @@ h2.sh{font:700 1.25rem var(--head);margin:36px 0 12px}
 </main>
 <footer class="foot"><div class="foot-in"><p data-t="foot"></p><p><a href="https://github.com/tedimihailescu/Ethernet-frame-learning-app" data-t="src"></a></p></div></footer>
 
-<script src="assets/catalog.js?v=3"></script>
-<script src="assets/menu.js?v=1"></script>
+<script src="assets/catalog.js?v=4"></script>
+<script src="assets/menu.js?v=2"></script>
 <script>
 (function(){
 "use strict";
@@ -84,12 +93,15 @@ const UI={brand:{ro:"Rețea pas cu pas",en:"Network step by step"},
   topicsT:{ro:"Alege un subiect",en:"Pick a topic"},gamesT:{ro:"Pauză de joacă",en:"Play break"},
   n:{ro:"lecții",en:"lessons"},one:{ro:"lecție",en:"lesson"},
   resume:{ro:"Continuă de unde ai rămas:",en:"Pick up where you left off:"},step:{ro:"pasul",en:"step"},
+  pT:{ro:"Progresul tău",en:"Your progress"},pDone:{ro:"lecții terminate",en:"lessons finished"},
   foot:{ro:"Proiect educațional. Adresele și numele din lecții sunt exemple.",en:"An educational project. Addresses and names in the lessons are examples."},
   src:{ro:"Codul sursă pe GitHub ↗",en:"Source code on GitHub ↗"},theme:{ro:"Comută tema luminoasă / întunecată",en:"Toggle light / dark theme"}};
 function render(){
   document.documentElement.lang=lang;document.title=lang==="ro"?"Rețea pas cu pas":"Network Step by Step";
   document.querySelectorAll("[data-t]").forEach(e=>{e.textContent=T(UI[e.dataset.t])});
-  document.getElementById("topics").innerHTML=C.CATS.map(c=>`<div class="topic"><a class="tile" href="lectii/index.html#${c.id}"><span class="ic" aria-hidden="true">${c.icon}</span><b>${T(c.t)}</b><span class="d">${T(c.d)}</span><small>${c.list.length} ${T(c.list.length===1?UI.one:UI.n)}</small></a><div class="pop">${c.list.map(id=>{const l=C.byId(id);return `<a href="${l.href}">${T(l.t)}</a>`}).join("")}</div></div>`).join("");
+  document.getElementById("topics").innerHTML=C.CATS.map(c=>{const cs=C.summary(c.list);return `<div class="topic"><a class="tile" href="lectii/index.html#${c.id}"><span class="ic" aria-hidden="true">${c.icon}</span><b>${T(c.t)}</b><span class="d">${T(c.d)}</span><small>${c.list.length} ${T(c.list.length===1?UI.one:UI.n)}${cs.complete?` · <span class="ok">${cs.complete} ✓</span>`:""}</small><span class="mini" aria-hidden="true"><i style="width:${Math.round(cs.parts/(cs.total*3)*100)}%"></i></span></a><div class="pop">${c.list.map(id=>{const l=C.byId(id);return `<a href="${l.href}">${C.progress(id).complete?"✓ ":""}${T(l.t)}</a>`}).join("")}</div></div>`}).join("");
+  const s=C.summary(),pct=Math.round(s.parts/(s.total*3)*100),pr=document.getElementById("progress");
+  if(s.parts){pr.innerHTML=`<a href="lectii/index.html"><b>${T(UI.pT)}: ${s.complete} / ${s.total} ${T(UI.pDone)}</b><span class="bar"><i style="width:${pct}%"></i></span><span class="pc">${pct}%</span></a>`;pr.classList.add("on")}else pr.classList.remove("on");
   document.getElementById("games").innerHTML=C.GAMES.map(g=>`<a href="${g.href}">${g.icon} ${T(g.t)}</a>`).join("");
   let last=null;try{last=JSON.parse(store.get("cadru-last")||"null")}catch(e){}
   const r=document.getElementById("resume"),l=last&&C.byId(last.id);
@@ -97,12 +109,14 @@ function render(){
   const th=document.getElementById("theme");th.setAttribute("aria-label",T(UI.theme));th.title=T(UI.theme);
   document.querySelectorAll("[data-lang]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.lang===lang?"true":"false"));
 }
+window.addEventListener("progress:changed",render);
+window.addEventListener("pageshow",e=>{if(e.persisted)render()});
 document.querySelectorAll("[data-lang]").forEach(b=>b.onclick=()=>{lang=b.dataset.lang;store.set("cadru-lang",lang);render();window.dispatchEvent(new Event("cadru:lang"))});
 const saved=store.get("cadru-theme");if(saved==="light"||saved==="dark")document.documentElement.dataset.theme=saved;
 document.getElementById("theme").onclick=()=>{const r=document.documentElement,d=r.dataset.theme?r.dataset.theme==="dark":matchMedia("(prefers-color-scheme: dark)").matches;const nt=d?"light":"dark";r.dataset.theme=nt;store.set("cadru-theme",nt)};
 render();
 })();
 </script>
-<script type="module" src="assets/auth.js?v=9"></script>
+<script type="module" src="assets/auth.js?v=10"></script>
 </body>
 </html>

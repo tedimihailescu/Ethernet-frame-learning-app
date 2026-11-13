@@ -35,7 +35,7 @@ nav[data-menu]{overflow:visible;gap:2px}
   document.head.appendChild(css);
 
   function build() {
-    const cats = C.CATS.map(c => `<div class="dd-col"><h4><a href="${ROOT}lectii/index.html#${c.id}">${c.icon} ${T(c.t)}</a></h4>${c.list.map(id => { const l = C.byId(id); return l ? `<a class="it" href="${ROOT}${l.href}">${T(l.t)}</a>` : ""; }).join("")}</div>`).join("");
+    const cats = C.CATS.map(c => `<div class="dd-col"><h4><a href="${ROOT}lectii/index.html#${c.id}">${c.icon} ${T(c.t)}</a></h4>${c.list.map(id => { const l = C.byId(id); if (!l) return ""; const p = C.progress ? C.progress(id) : null; return `<a class="it" href="${ROOT}${l.href}">${p && p.complete ? "✓ " : ""}${T(l.t)}</a>`; }).join("")}</div>`).join("");
     nav.innerHTML =
       `<div class="dd"><button type="button" aria-expanded="false">📚 ${L("Lecții", "Lessons")}</button><div class="dd-menu dd-mega">${cats}<div class="all"><a href="${ROOT}lectii/index.html">${L("Toate lecțiile, cu descrieri →", "All lessons, with descriptions →")}</a></div></div></div>` +
       `<div class="dd"><button type="button" aria-expanded="false">🎮 ${L("Jocuri", "Games")}</button><div class="dd-menu dd-games">${C.GAMES.map(g => `<a class="it" href="${ROOT}${g.href}">${g.icon} ${T(g.t)}</a>`).join("")}</div></div>`;
@@ -50,4 +50,5 @@ nav[data-menu]{overflow:visible;gap:2px}
   document.addEventListener("keydown", e => { if (e.key === "Escape") { nav.querySelectorAll(".dd.open").forEach(x => x.classList.remove("open")); if (document.activeElement && nav.contains(document.activeElement)) document.activeElement.blur(); } });
   build();
   window.addEventListener("cadru:lang", build);
+  window.addEventListener("progress:changed", build);
 })();

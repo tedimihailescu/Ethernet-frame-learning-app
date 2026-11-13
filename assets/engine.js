@@ -284,9 +284,12 @@ function renderControls(){
   [...d.children].forEach((b,i)=>{b.className=i===cur?"cur":i<cur?"done":"";b.setAttribute("aria-label",`${T(UI.step)} ${i+1}: ${T(S[i].title)}`);b.title=`${i+1}. ${T(S[i].title)}`;b.setAttribute("aria-current",i===cur?"step":"false")});
   $("#outlineList").innerHTML=S.map((s,i)=>`<li class="${i===cur?"cur":i<cur?"done":""}"><button type="button" data-i="${i}">${i<cur?"✓ ":""}${T(s.title)}</button></li>`).join("");
   const sb=$("#b-simple");sb.textContent=T(simple?UI.simpleOn:UI.simple);sb.setAttribute("aria-pressed",simple?"true":"false");sb.title=T(UI.simpleTip);
-  try{store.set("cadru-last",JSON.stringify({id:LESSON_ID,step:cur,n:N}));if(history.replaceState&&(!location.hash||/^#step-\d+$/.test(location.hash)))history.replaceState(null,"",cur?"#step-"+(cur+1):location.pathname+location.search)}catch(e){}
+  try{store.set("cadru-last",JSON.stringify({id:LESSON_ID,step:cur,n:N}));saveProg(p=>{p.n=N;p.s=Math.max(p.s|0,cur+1)});if(history.replaceState&&(!location.hash||/^#step-\d+$/.test(location.hash)))history.replaceState(null,"",cur?"#step-"+(cur+1):location.pathname+location.search)}catch(e){}
 }
 const LESSON_ID=location.pathname.split("/").filter(Boolean).slice(-2)[0]||"lesson";
+// Per-lesson progress for the checkmarks on the lessons page: steps reached, best quiz, lab finished.
+function saveProg(fn){try{const a=JSON.parse(store.get("cadru-progress")||"{}")||{};fn(a[LESSON_ID]=a[LESSON_ID]||{});store.set("cadru-progress",JSON.stringify(a))}catch(e){}}
+window.addEventListener("quiz:complete",e=>{const d=e.detail||{};if(!d.total)return;const k=String(d.lesson);if(k===LESSON_ID+"-lab")saveProg(p=>{p.l=Math.max(p.l|0,d.score|0);p.lt=d.total});else if(k===LESSON_ID)saveProg(p=>{p.q=Math.max(p.q|0,d.score|0);p.qt=d.total})});
 let simple=store.get("cadru-simple")==="1";
 function applySimple(){document.body.classList.toggle("simple",simple)}
 function renderStatic(){
