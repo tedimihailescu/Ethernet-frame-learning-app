@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>GitOps cu Argo CD</title>
+<meta name="description" content="Lecție interactivă: o schimbare ajunge în producție prin GitOps: repo de configurare, pull request, Argo CD, sync, drift, self-heal, rollback cu git revert, medii și secrete. / Interactive lesson: a change reaches production through GitOps.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<script>
+(function(){
+const IMG="registry.example.com/orders-api:1.8.0";
+const C1={commit:{ro:"a41f9c2 · feat: reducere la livrare",en:"a41f9c2 · feat: delivery discount"},file:"src/…/Pricing.java",image:IMG,info:{ro:"CI: teste trecute, imagine construită și publicată",en:"CI: tests passed, image built and pushed"}};
+const C2={commit:"7d02e1b · prod: orders-api 1.7.3 → 1.8.0",file:"apps/orders/overlays/prod/kustomization.yaml",diff:"- newTag: 1.7.3\n+ newTag: 1.8.0",image:IMG,info:{ro:"pull request deschis în repo-ul de configurare",en:"pull request opened in the config repo"}};
+const C3={...C2,info:{ro:"aprobat de 2 colegi, testele de politici trecute, merge în main",en:"approved by 2 colleagues, policy checks passed, merged into main"}};
+const C4={commit:"7d02e1b (main)",app:"orders-prod",image:IMG,sync:"OutOfSync",health:"Healthy",info:{ro:"Git spune 1.8.0, clusterul rulează 1.7.3",en:"Git says 1.8.0, the cluster runs 1.7.3"}};
+const C5={...C4,sync:"Synced",health:{ro:"Progressing → Healthy",en:"Progressing → Healthy"},info:{ro:"rolling update: pod-urile noi pornesc, cele vechi se opresc",en:"rolling update: new pods start, old ones stop"}};
+const C6={commit:"7d02e1b (main)",app:"orders-prod",diff:{ro:"replicas: Git = 3, cluster = 1 (kubectl scale manual)",en:"replicas: Git = 3, cluster = 1 (manual kubectl scale)"},sync:{ro:"OutOfSync → Synced (self-heal)",en:"OutOfSync → Synced (self-heal)"},health:"Healthy",info:{ro:"schimbarea manuală a fost anulată în câteva secunde",en:"the manual change was undone within seconds"}};
+const C7={commit:"7d02e1b (main)",app:"orders-prod",image:IMG,sync:"Synced",health:"Degraded",info:{ro:"erori 500 după 1.8.0: o coloană lipsă în baza de date",en:"500 errors after 1.8.0: a missing database column"}};
+const C8={commit:"c93a0f4 · Revert \"prod: orders-api 1.7.3 → 1.8.0\"",file:"apps/orders/overlays/prod/kustomization.yaml",diff:"- newTag: 1.8.0\n+ newTag: 1.7.3",app:"orders-prod",image:"registry.example.com/orders-api:1.7.3",sync:"Synced",health:"Healthy",info:{ro:"rollback = un commit nou; istoricul rămâne",en:"rollback = a new commit; the history stays"}};
+
+window.LESSON={
+docTitle:{ro:"GitOps cu Argo CD",en:"GitOps with Argo CD"},
+eyebrow:{ro:"Lecție interactivă · Livrare software",en:"Interactive lesson · Software delivery"},
+title:{ro:"GitOps: o schimbare ajunge în producție printr-un commit",en:"GitOps: a change reaches production through a commit"},
+sub:{ro:"Echipa Comenzi vrea să lanseze versiunea 1.8.0 a serviciului orders-api. Nimeni nu rulează kubectl în producție: tot ce trebuie să ruleze e scris în Git, iar Argo CD aduce clusterul la starea din Git. Urmărim schimbarea de la build la pull request, sync, o modificare manuală anulată automat, un rollback cu git revert, mediile și secretele.",en:"The Orders team wants to release version 1.8.0 of the orders-api service. Nobody runs kubectl in production: everything that should run is written in Git, and Argo CD brings the cluster to the state in Git. We follow the change from build to pull request, sync, a manual change undone automatically, a rollback with git revert, environments and secrets."},
+meta:[{ro:"≈ 25 minute",en:"≈ 25 minutes"},{ro:"11 pași",en:"11 steps"},{ro:"8 întrebări",en:"8 questions"},{ro:"Intermediar",en:"Intermediate"}],
+goals:[{ro:"Ce înseamnă GitOps: Git ca sursă unică a adevărului",en:"What GitOps means: Git as the single source of truth"},{ro:"Modelul pull: Argo CD compară Git cu clusterul și sincronizează",en:"The pull model: Argo CD compares Git with the cluster and syncs"},{ro:"Drift, self-heal și rollback cu git revert",en:"Drift, self-heal and rollback with git revert"},{ro:"Medii cu Kustomize și secrete fără parole în Git",en:"Environments with Kustomize, and secrets without passwords in Git"}],
+foot:{ro:"Nume de servicii și repo-uri fictive. Lecția se leagă de Kubernetes și Artifactory.",en:"Fictional service and repo names. This lesson links to Kubernetes and Artifactory."},
+ui:{frameT:{ro:"Schimbarea (live)",en:"The change (live)"},refT:{ro:"Fișiere și comenzi",en:"Files and commands"},refLead:{ro:"Structura repo-ului de configurare, o aplicație Argo CD și comenzile de zi cu zi.",en:"The config repo layout, an Argo CD Application and the everyday commands."}},
+tryT:{ro:"Încearcă (pe un cluster de test cu Argo CD)",en:"Try it (on a test cluster with Argo CD)"},
+legend:[["lg-app","GIT",{ro:"commit / pull request",en:"commit / pull request"}],["lg-arp","SYNC",{ro:"Argo CD aplică în cluster",en:"Argo CD applies to the cluster"}]],
+
+nodes:{
+  dev:{type:"user",name:"dev",lines:[{ro:"echipa Comenzi",en:"Orders team"}]},
+  ci:{type:"server",name:"CI",lines:[{ro:"build + teste",en:"build + tests"}]},
+  reg:{type:"db",name:"registry",lines:[{ro:"imagini",en:"images"}]},
+  git:{type:"box",name:"config repo",lines:["Git"]},
+  argo:{type:"pod",name:"Argo CD",lines:[{ro:"în cluster",en:"in the cluster"}]},
+  k8s:{type:"svc",name:"orders-api",lines:[{ro:"producție",en:"production"}]}
+},
+links:[["dev","ci"],["ci","reg"],["ci","git"],["dev","git"],["git","argo"],["argo","k8s"],["reg","k8s"]],
+layouts:{
+  wide:{vb:[0,0,1000,480],n:{dev:[90,120],ci:[330,120],reg:[620,120],git:[330,340],argo:[620,340],k8s:[890,340]},
+    texts:[{x:475,y:325,t:{ro:"pull: Argo CD citește",en:"pull: Argo CD reads"}}]},
+  narrow:{vb:[0,0,360,780],n:{dev:[180,50],ci:[90,200],reg:[270,200],git:[90,400],argo:[180,560],k8s:[270,710]}}
+},
+groups:[
+  {id:"git",color:"l7",fields:["commit","file","diff"],name:{ro:"În Git",en:"In Git"},short:"Git",grow:3},
+  {id:"app",color:"l3",fields:["app","image"],name:{ro:"Aplicația",en:"The application"},short:"App",grow:2},
+  {id:"st",color:"arp",fields:["sync","health"],name:{ro:"Starea în Argo CD",en:"State in Argo CD"},short:"Argo",grow:2},
+  {id:"info",color:"l4",fields:["info"],name:{ro:"Ce se întâmplă",en:"What happens"},short:"Info",grow:2}
+],
+fieldLabels:{commit:"Commit",file:{ro:"Fișier",en:"File"},diff:"Diff",app:{ro:"Aplicație Argo CD",en:"Argo CD app"},image:{ro:"Imagine",en:"Image"},sync:"Sync",health:"Health",info:{ro:"Ce se întâmplă",en:"What happens"}},
+pdu:f=>{const h=typeof f.health==="object"?f.health.en:f.health;return h==="Degraded"?{badge:{ro:"Versiune cu probleme",en:"Faulty release"},tok:["DEGRADED","k-tcp"]}:f.sync?{badge:{ro:"Reconciliere Argo CD",en:"Argo CD reconciliation"},tok:["SYNC","k-arp"]}:f.diff?{badge:{ro:"Pull request",en:"Pull request"},tok:["PR","k-app"]}:{badge:{ro:"Build CI",en:"CI build"},tok:["BUILD","k-data"]}},
+
+init:{},
+tables:{
+  push:{title:{ro:"Push clasic vs. GitOps (pull)",en:"Classic push vs GitOps (pull)"},cols:["",{ro:"Pipeline care face deploy (push)",en:"Pipeline that deploys (push)"},"GitOps (pull)"],plain:[0,1,2],
+    rows:()=>[[{ro:"Cine schimbă clusterul",en:"Who changes the cluster"},{ro:"CI-ul, cu acces de admin",en:"CI, with admin access"},{ro:"Argo CD, din interiorul clusterului",en:"Argo CD, from inside the cluster"}],[{ro:"Ce rulează acum?",en:"What runs now?"},{ro:"te uiți în cluster și speri",en:"look in the cluster and hope"},{ro:"ce scrie în Git",en:"what's in Git"}],[{ro:"Schimbare manuală",en:"Manual change"},{ro:"rămâne, nimeni nu știe",en:"stays, nobody knows"},{ro:"detectată și anulată",en:"detected and undone"}],[{ro:"Rollback",en:"Rollback"},{ro:"re-rulezi un pipeline vechi",en:"re-run an old pipeline"},"git revert"]]},
+  principles:{title:{ro:"Cele 4 principii GitOps (OpenGitOps)",en:"The 4 GitOps principles (OpenGitOps)"},cols:[{ro:"Principiu",en:"Principle"},{ro:"Pe scurt",en:"In short"}],plain:[0,1],
+    rows:()=>[[{ro:"Declarativ",en:"Declarative"},{ro:"descrii ce vrei, nu pașii",en:"describe what you want, not the steps"}],[{ro:"Versionat și imuabil",en:"Versioned and immutable"},{ro:"starea dorită stă în Git, cu istoric",en:"the desired state lives in Git, with history"}],[{ro:"Tras automat",en:"Pulled automatically"},{ro:"un agent o citește singur",en:"an agent reads it on its own"}],[{ro:"Reconciliat continuu",en:"Continuously reconciled"},{ro:"diferențele sunt corectate mereu",en:"differences are always corrected"}]]},
+  status:{title:{ro:"Stările unei aplicații Argo CD",en:"An Argo CD app's states"},cols:[{ro:"Stare",en:"State"},{ro:"Înseamnă",en:"Means"}],plain:[1],
+    rows:()=>[["Synced",{ro:"clusterul = Git",en:"cluster = Git"}],["OutOfSync",{ro:"clusterul ≠ Git",en:"cluster ≠ Git"}],["Progressing",{ro:"resursele pornesc",en:"resources are starting"}],["Healthy",{ro:"totul funcționează",en:"everything works"}],["Degraded",{ro:"ceva a eșuat (pod-uri în crash, erori)",en:"something failed (crashing pods, errors)"}]]},
+  envs:{title:{ro:"Medii în același repo",en:"Environments in the same repo"},cols:[{ro:"Folder",en:"Folder"},{ro:"Imagine",en:"Image"},"Replicas",{ro:"Sync",en:"Sync"}],plain:[3],
+    rows:()=>[["overlays/dev","1.9.0-rc1","1",{ro:"automat",en:"automatic"}],["overlays/staging","1.8.0","2",{ro:"automat",en:"automatic"}],["overlays/prod","1.7.3","3",{ro:"automat, după PR aprobat",en:"automatic, after an approved PR"}]]}
+},
+log:{title:{ro:"Istoricul schimbării",en:"The change's history"},lead:{ro:"Fiecare pas lasă o urmă: un commit, un PR sau un eveniment Argo CD.",en:"Every step leaves a trace: a commit, a PR or an Argo CD event."},first:{ro:"Pas",en:"Step"},minWidth:560,
+  cols:[{h:"Commit",v:f=>f.commit||"",cls:"mac"},{h:"Sync / Health",v:f=>f.sync?[f.sync,f.health].map(x=>typeof x==="object"?x:{ro:x,en:x}).reduce((a,b)=>({ro:a.ro+" · "+b.ro,en:a.en+" · "+b.en})):"",cls:"ip"},{h:{ro:"Ce se întâmplă",en:"What happens"},v:f=>f.info||"",cls:""}]},
+
+steps:[
+{at:["git","argo"],frame:null,kind:"none",tables:["push","principles"],who:{ro:"Ideea",en:"The idea"},
+ title:{ro:"Ce e GitOps: Git spune ce trebuie să ruleze",en:"What GitOps is: Git says what should run"},
+ body:{ro:`<p>Fără GitOps, o lansare înseamnă ca cineva (sau un pipeline) să ruleze <code>kubectl apply</code> sau <code>helm upgrade</code> în producție. După câteva luni, nimeni nu mai știe sigur ce rulează și de ce.</p>
+<p>Cu <strong>GitOps</strong>, tot ce trebuie să ruleze în cluster (Deployment-uri, Service-uri, configurări) e descris în fișiere YAML într-un <strong>repo Git de configurare</strong>. Un agent din cluster, aici <strong>Argo CD</strong>, compară mereu Git cu clusterul și le aduce la fel.</p>
+<p class="key">Vrei să schimbi producția? Faci un commit. Vrei să știi ce rulează? Te uiți în Git.</p>`,
+ en:`<p>Without GitOps, a release means someone (or a pipeline) runs <code>kubectl apply</code> or <code>helm upgrade</code> against production. After a few months, nobody is quite sure what's running or why.</p>
+<p>With <strong>GitOps</strong>, everything that should run in the cluster (Deployments, Services, config) is described in YAML files in a <strong>Git config repo</strong>. An agent in the cluster, here <strong>Argo CD</strong>, keeps comparing Git with the cluster and makes them match.</p>
+<p class="key">Want to change production? Make a commit. Want to know what's running? Look in Git.</p>`}},
+
+{at:"ci",frame:C1,kind:"c",move:[[["dev","ci"]],[["ci","reg"]]],log:{ro:"build și imagine",en:"build and image"},who:"CI",
+ title:{ro:"Codul nou devine o imagine",en:"The new code becomes an image"},
+ body:{ro:`<p>Un programator face merge în repo-ul de <strong>cod</strong> al lui orders-api. Pipeline-ul CI rulează testele, construiește imaginea de container și o publică în registry cu un tag fix: <code>orders-api:1.8.0</code>.</p>
+<p>Observă ce <strong>nu</strong> face CI-ul: nu se conectează la clusterul de producție. Nu are nici măcar acces acolo. Treaba lui se termină cu o imagine publicată.</p>`,
+ en:`<p>A developer merges into orders-api's <strong>code</strong> repo. The CI pipeline runs the tests, builds the container image and pushes it to the registry with a fixed tag: <code>orders-api:1.8.0</code>.</p>
+<p>Note what CI does <strong>not</strong> do: it doesn't connect to the production cluster. It doesn't even have access there. Its job ends with a published image.</p>`},
+ more:{ro:`<p>De obicei sunt <strong>două repo-uri</strong>: unul de cod (aplicația) și unul de configurare (ce rulează unde). Așa, o schimbare de configurare nu declanșează un build, iar drepturile pot fi diferite.</p>`,
+  en:`<p>There are usually <strong>two repos</strong>: one for code (the app) and one for config (what runs where). That way a config change doesn't trigger a build, and permissions can differ.</p>`}},
+
+{at:"git",frame:C2,kind:"c",move:[[["ci","git"]]],log:{ro:"pull request de configurare",en:"config pull request"},who:{ro:"Pull request",en:"Pull request"},
+ title:{ro:"Lansarea e un pull request de o linie",en:"The release is a one-line pull request"},
+ body:{ro:`<p>Ca 1.8.0 să ajungă în producție, cineva schimbă <strong>o singură linie</strong> în repo-ul de configurare: tag-ul imaginii din <code>overlays/prod/kustomization.yaml</code>.</p>
+<p>Poate fi un om sau un robot (CI-ul, ori <em>Argo CD Image Updater</em>), dar schimbarea vine mereu ca <strong>pull request</strong>: se vede exact ce se schimbă, <code>1.7.3 → 1.8.0</code>.</p>`,
+ en:`<p>For 1.8.0 to reach production, someone changes <strong>a single line</strong> in the config repo: the image tag in <code>overlays/prod/kustomization.yaml</code>.</p>
+<p>It can be a person or a bot (CI, or <em>Argo CD Image Updater</em>), but the change always arrives as a <strong>pull request</strong>: you see exactly what changes, <code>1.7.3 → 1.8.0</code>.</p>`}},
+
+{at:"git",frame:C3,kind:"c",move:[[["dev","git"]]],log:{ro:"review și merge",en:"review and merge"},who:"Review",
+ title:{ro:"Review și merge: aprobarea e în Git",en:"Review and merge: the approval lives in Git"},
+ body:{ro:`<p>Doi colegi aprobă PR-ul, iar verificările automate trec (YAML valid, fără imagini <code>latest</code>, limite de resurse puse). Apoi <strong>merge în main</strong>.</p>
+<p>Acel merge <em>este</em> cererea de lansare. Nu există un tichet separat și o parolă de producție: <strong>cine, ce, când și cine a aprobat</strong> rămân în istoricul Git pentru totdeauna, gata pentru un audit.</p>`,
+ en:`<p>Two colleagues approve the PR, and automated checks pass (valid YAML, no <code>latest</code> images, resource limits set). Then it's <strong>merged into main</strong>.</p>
+<p>That merge <em>is</em> the release request. There's no separate ticket and production password: <strong>who, what, when and who approved</strong> stay in Git history forever, ready for an audit.</p>`}},
+
+{at:"argo",frame:C4,kind:"s",move:[[["git","argo"]]],tables:["status"],hl:{status:"OutOfSync"},log:{ro:"Argo CD vede diferența",en:"Argo CD sees the difference"},who:"Argo CD",
+ title:{ro:"Argo CD observă: OutOfSync",en:"Argo CD notices: OutOfSync"},
+ body:{ro:`<p>Argo CD rulează <strong>în cluster</strong> și citește repo-ul de configurare (la câteva minute sau imediat, printr-un webhook). Pentru aplicația <code>orders-prod</code> generează YAML-ul final din folderul <code>overlays/prod</code> și îl compară cu ce rulează.</p>
+<p>Git spune <code>1.8.0</code>, clusterul are <code>1.7.3</code>: aplicația devine <strong>OutOfSync</strong>.</p>
+<p class="key">Acesta e modelul <strong>pull</strong>: clusterul își ia singur starea din Git. Nimeni din afară nu are nevoie de acces la cluster.</p>`,
+ en:`<p>Argo CD runs <strong>inside the cluster</strong> and reads the config repo (every few minutes, or straight away via a webhook). For the <code>orders-prod</code> application it renders the final YAML from the <code>overlays/prod</code> folder and compares it with what's running.</p>
+<p>Git says <code>1.8.0</code>, the cluster has <code>1.7.3</code>: the app becomes <strong>OutOfSync</strong>.</p>
+<p class="key">This is the <strong>pull</strong> model: the cluster fetches its own state from Git. Nobody outside needs access to the cluster.</p>`},
+ try:[{cmd:"argocd app diff orders-prod",d:{ro:"Arată exact diferența dintre Git și cluster.",en:"Shows exactly how Git and the cluster differ."}}]},
+
+{at:"argo",frame:C5,kind:"s",move:[[["argo","k8s"]],[["reg","k8s"]]],tables:["status"],hl:{status:"Healthy"},log:{ro:"sync și rolling update",en:"sync and rolling update"},who:"Sync",
+ title:{ro:"Sync: clusterul ajunge ca în Git",en:"Sync: the cluster catches up with Git"},
+ body:{ro:`<p>Cu <strong>sync automat</strong> pornit, Argo CD aplică diferența: Deployment-ul primește imaginea nouă. Kubernetes face un <strong>rolling update</strong>: nodurile descarcă <code>orders-api:1.8.0</code> din registry, pornesc pod-uri noi, iar cele vechi se opresc doar după ce cele noi sunt gata.</p>
+<p>În Argo CD, aplicația trece prin <strong>Synced · Progressing</strong> și ajunge la <strong>Synced · Healthy</strong>. Lansarea s-a terminat fără ca cineva să atingă clusterul.</p>`,
+ en:`<p>With <strong>automated sync</strong> enabled, Argo CD applies the difference: the Deployment gets the new image. Kubernetes performs a <strong>rolling update</strong>: the nodes pull <code>orders-api:1.8.0</code> from the registry, start new pods, and stop the old ones only once the new ones are ready.</p>
+<p>In Argo CD, the app goes through <strong>Synced · Progressing</strong> and ends at <strong>Synced · Healthy</strong>. The release finished without anyone touching the cluster.</p>`}},
+
+{at:"k8s",frame:C6,kind:"s",move:[[["argo","k8s"]]],marks:{k8s:{k:"drop",t:{ro:"modificat manual",en:"changed by hand"}}},log:{ro:"drift anulat",en:"drift undone"},who:"Self-heal",
+ title:{ro:"Drift: o modificare manuală e anulată",en:"Drift: a manual change is undone"},
+ body:{ro:`<p>Noaptea, cineva rulează <code>kubectl scale deploy/orders-api --replicas=1</code> „ca să economisească resurse”. Clusterul nu mai corespunde cu Git: acesta e <strong>drift</strong>.</p>
+<p>Argo CD îl vede imediat (OutOfSync). Cu <strong>selfHeal</strong> pornit, readuce numărul de replici la 3, cum scrie în Git. Schimbarea corectă era un PR.</p>
+<p class="key">În GitOps, singura cale durabilă de a schimba ceva e prin Git.</p>`,
+ en:`<p>At night, someone runs <code>kubectl scale deploy/orders-api --replicas=1</code> "to save resources". The cluster no longer matches Git: that's <strong>drift</strong>.</p>
+<p>Argo CD sees it straight away (OutOfSync). With <strong>selfHeal</strong> on, it puts the replicas back to 3, as Git says. The right way to make that change was a PR.</p>
+<p class="key">In GitOps, the only lasting way to change something is through Git.</p>`}},
+
+{at:"k8s",frame:C7,kind:"s",marks:{k8s:{k:"drop",t:"Degraded"}},tables:["status"],hl:{status:"Degraded"},log:{ro:"versiunea are o problemă",en:"the release has a problem"},who:"Degraded",
+ title:{ro:"1.8.0 are o problemă",en:"1.8.0 has a problem"},
+ body:{ro:`<p>A doua zi dimineață, alertele arată erori 500: versiunea 1.8.0 caută o coloană care nu există încă în baza de date. Pod-urile repornesc, iar Argo CD arată aplicația <strong>Degraded</strong>.</p>
+<p>Atenție: aplicația e încă <strong>Synced</strong>. Clusterul face exact ce scrie în Git; problema e chiar ce scrie în Git. Deci și reparația trebuie să vină tot prin Git.</p>`,
+ en:`<p>Next morning, alerts show 500 errors: version 1.8.0 looks for a column that doesn't exist in the database yet. The pods restart, and Argo CD shows the app as <strong>Degraded</strong>.</p>
+<p>Note: the app is still <strong>Synced</strong>. The cluster does exactly what Git says; the problem is what Git says. So the fix has to come through Git as well.</p>`}},
+
+{at:"git",frame:C8,kind:"c",move:[[["dev","git"]],[["git","argo"]],[["argo","k8s"]]],log:{ro:"rollback cu git revert",en:"rollback with git revert"},who:"Rollback",
+ title:{ro:"Rollback: git revert",en:"Rollback: git revert"},
+ body:{ro:`<p>Rollback-ul e un commit nou: <code>git revert 7d02e1b</code> pune la loc <code>newTag: 1.7.3</code>. După merge, Argo CD vede diferența și revine la 1.7.3 în câteva minute; aplicația redevine <strong>Healthy</strong>.</p>
+<p>Istoricul arată tot: când a intrat 1.8.0, când a fost scoasă și de cine. Când coloana e adăugată, echipa face un PR nou cu 1.8.1.</p>`,
+ en:`<p>The rollback is a new commit: <code>git revert 7d02e1b</code> puts back <code>newTag: 1.7.3</code>. After merging, Argo CD sees the difference and returns to 1.7.3 within minutes; the app is <strong>Healthy</strong> again.</p>
+<p>The history shows everything: when 1.8.0 went in, when it was pulled and by whom. Once the column is added, the team opens a new PR with 1.8.1.</p>`},
+ more:{ro:`<p>Argo CD are și un buton de rollback la o versiune anterioară, util în urgență, dar el oprește temporar sync-ul automat: Git și clusterul nu mai coincid până faci revert-ul.</p>`,
+  en:`<p>Argo CD also has a rollback button to an earlier revision, handy in an emergency, but it temporarily disables auto-sync: Git and the cluster don't match until you make the revert.</p>`}},
+
+{at:["git","argo"],frame:null,kind:"none",tables:["envs"],who:{ro:"Medii și secrete",en:"Environments and secrets"},
+ title:{ro:"Medii, promovare și secrete",en:"Environments, promotion and secrets"},
+ body:{ro:`<p><strong>Mediile</strong> sunt foldere în același repo: o <em>bază</em> comună și câte un <em>overlay</em> (Kustomize) pentru dev, staging și prod, cu diferențele lor (tag, replici, resurse). Fiecare are aplicația ei în Argo CD.</p>
+<p><strong>Promovarea</strong> = un PR care copiază tag-ul testat din staging în prod. Aceeași imagine, verificată deja.</p>
+<p><strong>Secretele</strong> nu se pun niciodată în clar în Git. Variante:</p>
+<ul><li><strong>Sealed Secrets</strong>: în Git e o versiune criptată, pe care doar clusterul o poate decripta;</li>
+<li><strong>External Secrets Operator</strong>: în Git e doar o referință; valoarea vine din Vault sau din managerul de secrete al cloud-ului.</li></ul>`,
+ en:`<p><strong>Environments</strong> are folders in the same repo: a shared <em>base</em> and one <em>overlay</em> (Kustomize) each for dev, staging and prod, with their differences (tag, replicas, resources). Each has its own Argo CD application.</p>
+<p><strong>Promotion</strong> = a PR that copies the tested tag from staging to prod. The same image, already verified.</p>
+<p><strong>Secrets</strong> never go into Git in plain text. Options:</p>
+<ul><li><strong>Sealed Secrets</strong>: Git holds an encrypted version that only the cluster can decrypt;</li>
+<li><strong>External Secrets Operator</strong>: Git holds only a reference; the value comes from Vault or the cloud's secret manager.</li></ul>`}},
+
+{at:["git","argo","k8s"],frame:null,kind:"none",summary:true,
+ title:{ro:"Argo CD sau Flux? Și recapitulare",en:"Argo CD or Flux? And a recap"},
+ body:{ro:`<p><strong>Argo CD</strong> și <strong>Flux</strong> sunt cele două unelte GitOps populare (ambele proiecte CNCF). Argo CD are o interfață web bogată; Flux e mai minimalist, configurat doar prin resurse Kubernetes. Ideea e aceeași.</p>
+<ul><li>Starea dorită stă în <strong>Git</strong>; clusterul e adus la ea de un agent din cluster (<strong>pull</strong>).</li>
+<li>CI construiește și publică imaginea; <strong>nu</strong> face deploy.</li>
+<li>Lansare = <strong>PR</strong> care schimbă tag-ul; aprobarea și istoricul rămân în Git.</li>
+<li><strong>OutOfSync</strong> = Git ≠ cluster; <strong>selfHeal</strong> anulează modificările manuale.</li>
+<li>Rollback = <strong>git revert</strong>; medii = overlay-uri; secrete = Sealed / External Secrets.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Mergi la laborator ↓</button></p>`,
+ en:`<p><strong>Argo CD</strong> and <strong>Flux</strong> are the two popular GitOps tools (both CNCF projects). Argo CD has a rich web UI; Flux is more minimal, configured only through Kubernetes resources. The idea is the same.</p>
+<ul><li>The desired state lives in <strong>Git</strong>; an agent in the cluster brings the cluster to it (<strong>pull</strong>).</li>
+<li>CI builds and pushes the image; it does <strong>not</strong> deploy.</li>
+<li>Release = a <strong>PR</strong> that changes the tag; approval and history stay in Git.</li>
+<li><strong>OutOfSync</strong> = Git ≠ cluster; <strong>selfHeal</strong> undoes manual changes.</li>
+<li>Rollback = <strong>git revert</strong>; environments = overlays; secrets = Sealed / External Secrets.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Go to the lab ↓</button></p>`}}
+],
+
+reference:(T,lang)=>{
+  const ro=lang==="ro";
+  return `<div class="ref-grid"><section class="card refcard"><h2>${ro?"Repo-ul de configurare":"The config repo"}</h2>
+<pre class="yaml">apps/orders/
+  base/            <span class="c"># deployment.yaml, service.yaml</span>
+  overlays/
+    dev/kustomization.yaml
+    staging/kustomization.yaml
+    prod/kustomization.yaml
+
+<span class="c"># overlays/prod/kustomization.yaml</span>
+resources: [../../base]
+images:
+  - name: registry.example.com/orders-api
+    newTag: 1.8.0
+replicas:
+  - name: orders-api
+    count: 3</pre></section>
+<section class="card refcard"><h2>${ro?"Aplicația Argo CD":"The Argo CD Application"}</h2>
+<pre class="yaml">apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata: { name: orders-prod, namespace: argocd }
+spec:
+  project: orders
+  source:
+    repoURL: https://git.example.com/platform/config.git
+    targetRevision: main
+    path: apps/orders/overlays/prod
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: orders
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }</pre>
+<h3>${ro?"Comenzi":"Commands"}</h3>
+<pre class="yaml">argocd app get orders-prod      <span class="c"># sync + health</span>
+argocd app diff orders-prod     <span class="c"># Git vs cluster</span>
+argocd app history orders-prod
+git revert 7d02e1b &amp;&amp; git push   <span class="c"># rollback</span></pre></section></div>`;
+},
+
+gloss:[
+ ["GitOps",null,{ro:"Mod de operare în care starea dorită a sistemului stă în Git și e aplicată automat.",en:"A way of operating where the system's desired state lives in Git and is applied automatically."}],
+ ["Argo CD",null,{ro:"Unealtă GitOps care rulează în Kubernetes și sincronizează clusterul cu Git.",en:"A GitOps tool that runs in Kubernetes and syncs the cluster with Git."}],
+ ["Flux",null,{ro:"Altă unealtă GitOps, configurată prin resurse Kubernetes.",en:"Another GitOps tool, configured through Kubernetes resources."}],
+ [{ro:"Repo de configurare",en:"Config repo"},null,{ro:"Repo Git cu YAML-ul a ce trebuie să ruleze, separat de codul aplicației.",en:"A Git repo with the YAML of what should run, separate from the app's code."}],
+ [{ro:"Stare dorită",en:"Desired state"},null,{ro:"Ce ar trebui să ruleze, așa cum e descris în Git.",en:"What should be running, as described in Git."}],
+ ["Sync",null,{ro:"Aplicarea în cluster a diferențelor față de Git.",en:"Applying the differences from Git to the cluster."}],
+ ["OutOfSync",null,{ro:"Clusterul nu corespunde cu Git.",en:"The cluster doesn't match Git."}],
+ ["Drift",null,{ro:"Diferență apărută prin modificări făcute direct în cluster.",en:"A difference caused by changes made directly in the cluster."}],
+ ["Self-heal",null,{ro:"Argo CD anulează automat drift-ul.",en:"Argo CD automatically undoes drift."}],
+ ["Kustomize",null,{ro:"Unealtă care combină o bază YAML cu overlay-uri per mediu.",en:"A tool that combines a YAML base with per-environment overlays."}],
+ ["Overlay",null,{ro:"Diferențele unui mediu (dev, prod) față de bază.",en:"An environment's (dev, prod) differences from the base."}],
+ ["Sealed Secrets",null,{ro:"Secrete criptate care pot sta în Git; doar clusterul le decriptează.",en:"Encrypted secrets that can live in Git; only the cluster decrypts them."}]
+],
+glossEx:{
+ "Drift":{ro:"cineva a rulat kubectl scale --replicas=1, Git spune 3.",en:"someone ran kubectl scale --replicas=1, Git says 3."},
+ "Sync":{ro:"Argo CD schimbă imaginea din 1.7.3 în 1.8.0.",en:"Argo CD changes the image from 1.7.3 to 1.8.0."}
+},
+
+quiz:[
+ {q:{ro:"Ce e sursa adevărului în GitOps?",en:"What's the source of truth in GitOps?"},o:[{ro:"Clusterul",en:"The cluster"},{ro:"Repo-ul Git de configurare",en:"The Git config repo"},{ro:"Pipeline-ul CI",en:"The CI pipeline"},{ro:"Documentația",en:"The documentation"}],a:1,e:{ro:"Ce rulează = ce scrie în Git.",en:"What runs = what's in Git."}},
+ {q:{ro:"În modelul pull, cine aplică schimbările în cluster?",en:"In the pull model, who applies changes to the cluster?"},o:[{ro:"CI-ul, cu acces de admin",en:"CI, with admin access"},{ro:"Programatorul, cu kubectl",en:"The developer, with kubectl"},{ro:"Un agent din cluster (Argo CD) care citește Git",en:"An agent in the cluster (Argo CD) that reads Git"},{ro:"Registry-ul",en:"The registry"}],a:2,e:{ro:"Nimeni din afară nu are nevoie de acces la cluster.",en:"Nobody outside needs cluster access."}},
+ {q:{ro:"Cum lansezi orders-api 1.8.0 în producție?",en:"How do you release orders-api 1.8.0 to production?"},o:[{ro:"Un PR care schimbă tag-ul imaginii în overlays/prod",en:"A PR that changes the image tag in overlays/prod"},{ro:"kubectl set image în producție",en:"kubectl set image in production"},{ro:"Ștergi pod-urile",en:"Delete the pods"},{ro:"Repornești Argo CD",en:"Restart Argo CD"}],a:0,e:{ro:"Merge-ul PR-ului e cererea de lansare.",en:"Merging the PR is the release request."}},
+ {q:{ro:"Cineva a scalat manual Deployment-ul la 1 replică; Git spune 3. Ce face Argo CD cu selfHeal?",en:"Someone manually scaled the Deployment to 1 replica; Git says 3. What does Argo CD do with selfHeal?"},o:[{ro:"Actualizează Git la 1",en:"Updates Git to 1"},{ro:"Nimic",en:"Nothing"},{ro:"Șterge aplicația",en:"Deletes the app"},{ro:"Readuce replicile la 3",en:"Brings the replicas back to 3"}],a:3,e:{ro:"Drift-ul e anulat; Git câștigă.",en:"Drift is undone; Git wins."}},
+ {q:{ro:"Aplicația e Synced, dar Degraded. Ce înseamnă?",en:"The app is Synced but Degraded. What does it mean?"},o:[{ro:"Argo CD e defect",en:"Argo CD is broken"},{ro:"Clusterul face ce scrie în Git, dar ce scrie în Git nu funcționează",en:"The cluster does what Git says, but what Git says doesn't work"},{ro:"Git e indisponibil",en:"Git is down"},{ro:"Cineva a făcut drift",en:"Someone caused drift"}],a:1,e:{ro:"Reparația vine tot prin Git.",en:"The fix also comes through Git."}},
+ {q:{ro:"Care e rollback-ul GitOps corect?",en:"What's the proper GitOps rollback?"},o:[{ro:"kubectl rollout undo",en:"kubectl rollout undo"},{ro:"Ștergi commit-ul din istoric cu force push",en:"Delete the commit from history with a force push"},{ro:"git revert pe commit-ul cu tag-ul nou",en:"git revert on the commit with the new tag"},{ro:"Reinstalezi clusterul",en:"Reinstall the cluster"}],a:2,e:{ro:"Un commit nou, istoricul rămâne.",en:"A new commit; the history stays."}},
+ {q:{ro:"Cum ții o parolă de bază de date în modelul GitOps?",en:"How do you keep a database password in the GitOps model?"},o:[{ro:"Sealed Secrets sau External Secrets, niciodată în clar în Git",en:"Sealed Secrets or External Secrets, never in plain text in Git"},{ro:"În clar în values.yaml",en:"In plain text in values.yaml"},{ro:"În mesajul commit-ului",en:"In the commit message"},{ro:"În imaginea de container",en:"In the container image"}],a:0,e:{ro:"Git poate fi citit de mulți oameni.",en:"Many people can read Git."}},
+ {q:{ro:"Cum promovezi o versiune din staging în prod?",en:"How do you promote a version from staging to prod?"},o:[{ro:"Reconstruiești imaginea pentru prod",en:"Rebuild the image for prod"},{ro:"Copiezi pod-urile",en:"Copy the pods"},{ro:"Schimbi branch-ul Argo CD",en:"Switch Argo CD's branch"},{ro:"Un PR care copiază tag-ul testat în overlay-ul de prod",en:"A PR that copies the tested tag into the prod overlay"}],a:3,e:{ro:"Aceeași imagine, deja verificată.",en:"The same image, already verified."}}
+]
+};
+})();
+</script>
+<script src="../assets/engine.js?v=2"></script>
+<script src="../assets/labs-data.js?v=4"></script>
+<script src="../assets/lab.js?v=1"></script>
+<script type="module" src="../assets/auth.js?v=9"></script>
+</body>
+</html>

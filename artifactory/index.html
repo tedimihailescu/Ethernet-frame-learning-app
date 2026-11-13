@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Artifactory</title>
+<meta name="description" content="Lecție interactivă: cum lucrează JFrog Artifactory: repo-uri locale, remote și virtuale, cache, checksum, imagini Docker, build info, scanare Xray, promovare fără rebuild și pull din Kubernetes. / Interactive lesson: how JFrog Artifactory works.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<script>
+(function(){
+const A1={art:"com.fasterxml.jackson.core:jackson-databind:2.17.1",repo:"maven-virtual → maven-remote",cache:{ro:"MISS: nu e în cache, o descarc din Maven Central",en:"MISS: not cached, fetching from Maven Central"},sha:"sha256: 9d1e…4c0a",info:{ro:"descărcat o dată, salvat în cache",en:"downloaded once, saved in the cache"}};
+const A2={...A1,cache:{ro:"HIT: servit din cache în 8 ms",en:"HIT: served from the cache in 8 ms"},info:{ro:"următoarele 400 de build-uri nu mai ies pe internet",en:"the next 400 builds don't go out to the internet"}};
+const A3={art:"com.example:orders-api:1.8.0 (jar)",repo:"libs-release-local",sha:"sha256: 51ab…e7f3",build:"orders-api #412 · commit a41f9c2",info:{ro:"publicat; versiunea 1.8.0 nu mai poate fi suprascrisă",en:"published; version 1.8.0 can no longer be overwritten"}};
+const A4={art:"orders-api:1.8.0 (Docker)",repo:"docker-dev-local",sha:"digest sha256:c0f7…19be",layers:{ro:"5 straturi: 4 existau deja (baza Java), 1 nou (12 MB)",en:"5 layers: 4 already existed (the Java base), 1 new (12 MB)"},build:"orders-api #412",info:{ro:"încărcat doar stratul nou",en:"only the new layer was uploaded"}};
+const A5={...A4,build:{ro:"orders-api #412: 63 dependențe, commit a41f9c2, job CI, teste trecute",en:"orders-api #412: 63 dependencies, commit a41f9c2, CI job, tests passed"},info:{ro:"știm exact din ce e făcută imaginea",en:"we know exactly what the image is made of"}};
+delete A5.layers;
+const A6={art:"orders-api:1.8.0 (Docker)",repo:"docker-dev-local",sha:A4.sha,scan:{ro:"Xray: CVE critic într-o bibliotecă de logging → descărcare blocată",en:"Xray: critical CVE in a logging library → download blocked"},info:{ro:"politica de securitate nu lasă imaginea să plece",en:"the security policy won't let the image leave"}};
+const A7={art:"orders-api:1.8.1 (Docker)",repo:"docker-dev-local → docker-prod-local",sha:"digest sha256:7e22…a0d4",scan:{ro:"Xray: fără vulnerabilități critice",en:"Xray: no critical vulnerabilities"},build:{ro:"build #415, promovat cu status „released”",en:"build #415, promoted with status \"released\""},info:{ro:"aceiași bytes, același digest: fără rebuild",en:"the same bytes, the same digest: no rebuild"}};
+const A8={art:"orders-api:1.8.1 (Docker)",repo:"docker-virtual (→ docker-prod-local)",sha:A7.sha,info:{ro:"nodurile Kubernetes descarcă imaginea cu un token doar de citire",en:"Kubernetes nodes pull the image with a read-only token"}};
+
+window.LESSON={
+docTitle:{ro:"Artifactory",en:"Artifactory"},
+eyebrow:{ro:"Lecție interactivă · Livrare software",en:"Interactive lesson · Software delivery"},
+title:{ro:"Artifactory: depozitul de pachete al firmei",en:"Artifactory: the company's package store"},
+sub:{ro:"Fiecare build descarcă sute de biblioteci și produce un jar și o imagine Docker care trebuie păstrate, verificate și duse până în producție exact așa cum au fost testate. Urmărim build-ul orders-api prin JFrog Artifactory: repo-uri remote, locale și virtuale, cache, checksum, straturi Docker, build info, o vulnerabilitate oprită de Xray, promovarea fără rebuild și descărcarea în Kubernetes.",en:"Every build downloads hundreds of libraries and produces a jar and a Docker image that must be kept, checked and taken to production exactly as tested. We follow the orders-api build through JFrog Artifactory: remote, local and virtual repos, caching, checksums, Docker layers, build info, a vulnerability stopped by Xray, promotion without rebuilding and the pull from Kubernetes."},
+meta:[{ro:"≈ 25 minute",en:"≈ 25 minutes"},{ro:"11 pași",en:"11 steps"},{ro:"8 întrebări",en:"8 questions"},{ro:"Intermediar",en:"Intermediate"}],
+goals:[{ro:"Repo-uri locale, remote și virtuale: ce face fiecare",en:"Local, remote and virtual repos: what each one does"},{ro:"Cache, checksum și versiuni care nu se mai schimbă",en:"Caching, checksums and versions that never change"},{ro:"Imagini Docker, build info și scanarea Xray",en:"Docker images, build info and Xray scanning"},{ro:"Promovare fără rebuild și pull din Kubernetes",en:"Promotion without rebuilding and pulling from Kubernetes"}],
+foot:{ro:"Nume de repo-uri și servicii fictive. Lecția se leagă de GitOps și Kubernetes.",en:"Fictional repo and service names. This lesson links to GitOps and Kubernetes."},
+ui:{frameT:{ro:"Artefactul (live)",en:"The artifact (live)"},refT:{ro:"Configurare și comenzi",en:"Configuration and commands"},refLead:{ro:"Cum se leagă Maven, Docker și Kubernetes de Artifactory, plus JFrog CLI.",en:"How Maven, Docker and Kubernetes connect to Artifactory, plus the JFrog CLI."}},
+tryT:{ro:"Încearcă (pe un Artifactory de test)",en:"Try it (on a test Artifactory)"},
+legend:[["lg-app","PKG",{ro:"pachet / imagine",en:"package / image"}],["lg-arp","SCAN",{ro:"verificare de securitate",en:"security check"}]],
+
+nodes:{
+  ci:{type:"server",name:"CI",lines:[{ro:"build orders-api",en:"orders-api build"}]},
+  art:{type:"db",name:"Artifactory",lines:[{ro:"repo-uri",en:"repos"}]},
+  ext:{type:"globe",name:"Maven Central",lines:["Docker Hub"]},
+  xray:{type:"box",name:"Xray",lines:[{ro:"scanare",en:"scanning"}]},
+  k8s:{type:"svc",name:"Kubernetes",lines:[{ro:"producție",en:"production"}]}
+},
+links:[["ci","art"],["art","ext"],["art","xray"],["art","k8s"]],
+layouts:{
+  wide:{vb:[0,0,1000,460],n:{ci:[110,200],art:[450,200],ext:[850,90],xray:[450,390],k8s:[850,320]}},
+  narrow:{vb:[0,0,360,720],n:{ci:[180,60],art:[180,280],ext:[290,140],xray:[80,460],k8s:[260,640]}}
+},
+groups:[
+  {id:"pkg",color:"l7",fields:["art","sha","layers"],name:{ro:"Artefactul",en:"The artifact"},short:{ro:"Pachet",en:"Package"},grow:3},
+  {id:"where",color:"l3",fields:["repo","cache"],name:{ro:"Unde stă",en:"Where it lives"},short:"Repo",grow:2},
+  {id:"meta",color:"arp",fields:["build","scan"],name:{ro:"Metadate și verificări",en:"Metadata and checks"},short:"Meta",grow:2},
+  {id:"info",color:"l4",fields:["info"],name:{ro:"Ce se întâmplă",en:"What happens"},short:"Info",grow:2}
+],
+fieldLabels:{art:{ro:"Artefact",en:"Artifact"},sha:"Checksum",layers:{ro:"Straturi",en:"Layers"},repo:"Repo",cache:"Cache",build:"Build info",scan:"Xray",info:{ro:"Ce se întâmplă",en:"What happens"}},
+pdu:f=>{const s=f.scan&&(typeof f.scan==="object"?f.scan.en:f.scan);return s&&/blocked/.test(s)?{badge:{ro:"Descărcare blocată",en:"Download blocked"},tok:["BLOCKED","k-tcp"]}:f.scan?{badge:{ro:"Artefact verificat",en:"Checked artifact"},tok:["SCAN","k-arp"]}:f.cache?{badge:{ro:"Dependență",en:"Dependency"},tok:["DEP","k-data"]}:{badge:{ro:"Artefact publicat",en:"Published artifact"},tok:["PKG","k-app"]}},
+
+init:{},
+tables:{
+  types:{title:{ro:"Cele trei tipuri de repo",en:"The three repo types"},cols:[{ro:"Tip",en:"Type"},{ro:"Ce conține",en:"What it holds"},{ro:"Exemplu",en:"Example"}],plain:[0,1],
+    rows:()=>[[{ro:"Local",en:"Local"},{ro:"ce produce firma: jar-uri, imagini, pachete",en:"what the company builds: jars, images, packages"},"libs-release-local, docker-dev-local"],["Remote",{ro:"cache pentru un depozit public",en:"a cache for a public registry"},"maven-remote → Maven Central"],[{ro:"Virtual",en:"Virtual"},{ro:"o singură adresă peste mai multe repo-uri",en:"one address over several repos"},"maven-virtual = local + remote"]]},
+  repos:{title:{ro:"Repo-urile echipei",en:"The team's repos"},cols:["Repo",{ro:"Tip",en:"Type"},{ro:"Cine scrie",en:"Who writes"},{ro:"Cine citește",en:"Who reads"}],plain:[2,3],
+    rows:()=>[["maven-virtual",{ro:"virtual",en:"virtual"},"—",{ro:"toți dezvoltatorii, CI",en:"all developers, CI"}],["libs-release-local",{ro:"local",en:"local"},{ro:"doar CI",en:"CI only"},{ro:"toți",en:"everyone"}],["docker-dev-local",{ro:"local",en:"local"},{ro:"doar CI",en:"CI only"},{ro:"medii de test",en:"test environments"}],["docker-prod-local",{ro:"local",en:"local"},{ro:"doar promovare",en:"promotion only"},{ro:"producție",en:"production"}]]}
+},
+log:{title:{ro:"Jurnalul artefactelor",en:"Artifact log"},lead:{ro:"Totul trece prin Artifactory: ce intră de pe internet și ce iese spre producție.",en:"Everything goes through Artifactory: what comes in from the internet and what goes out to production."},first:{ro:"Pas",en:"Step"},minWidth:560,
+  cols:[{h:{ro:"Artefact",en:"Artifact"},v:f=>f.art||"",cls:"mac"},{h:"Repo",v:f=>f.repo||"",cls:"ip"},{h:{ro:"Ce se întâmplă",en:"What happens"},v:f=>f.info||"",cls:""}]},
+
+steps:[
+{at:"art",frame:null,kind:"none",tables:["types"],who:{ro:"Ideea",en:"The idea"},
+ title:{ro:"De ce un depozit de artefacte",en:"Why an artifact repository"},
+ body:{ro:`<p>Un build Java descarcă zeci sau sute de biblioteci de pe internet și produce un <strong>artefact</strong>: un jar, o imagine Docker, un pachet npm. Fără un loc central apar probleme:</p>
+<ul><li>fiecare build iese pe internet, iar dacă Maven Central e lent sau blocat, build-urile cad;</li>
+<li>artefactele stau „pe undeva”, pe serverul de CI sau pe laptopuri;</li>
+<li>producția primește uneori un pachet <em>reconstruit</em>, nu exact cel testat.</li></ul>
+<p><strong>JFrog Artifactory</strong> e depozitul central pentru toate tipurile de pachete. Are trei tipuri de repo: <strong>local</strong>, <strong>remote</strong> și <strong>virtual</strong>.</p>`,
+ en:`<p>A Java build downloads dozens or hundreds of libraries from the internet and produces an <strong>artifact</strong>: a jar, a Docker image, an npm package. Without a central place, problems appear:</p>
+<ul><li>every build goes out to the internet, and if Maven Central is slow or blocked, builds fail;</li>
+<li>artifacts live "somewhere", on the CI server or on laptops;</li>
+<li>production sometimes gets a <em>rebuilt</em> package, not exactly the tested one.</li></ul>
+<p><strong>JFrog Artifactory</strong> is the central store for every package type. It has three kinds of repo: <strong>local</strong>, <strong>remote</strong> and <strong>virtual</strong>.</p>`}},
+
+{at:"art",frame:A1,kind:"a",move:[[["ci","art"]],[["art","ext"]],[["ext","art"]]],log:{ro:"prima descărcare",en:"the first download"},who:{ro:"Repo remote",en:"Remote repo"},
+ title:{ro:"O dependență nouă: repo-ul remote o aduce",en:"A new dependency: the remote repo fetches it"},
+ body:{ro:`<p>Build-ul are nevoie de <code>jackson-databind 2.17.1</code>. Maven nu știe de Maven Central; în <code>settings.xml</code> are o singură adresă: <strong>maven-virtual</strong> din Artifactory.</p>
+<p>Repo-ul virtual caută întâi în repo-urile locale, apoi în <strong>maven-remote</strong>. Acolo nu e încă în cache (<strong>MISS</strong>), deci Artifactory îl descarcă din Maven Central, îi verifică <strong>checksum</strong>-ul și îl salvează.</p>`,
+ en:`<p>The build needs <code>jackson-databind 2.17.1</code>. Maven doesn't know about Maven Central; its <code>settings.xml</code> has a single address: <strong>maven-virtual</strong> in Artifactory.</p>
+<p>The virtual repo looks first in the local repos, then in <strong>maven-remote</strong>. It's not cached there yet (<strong>MISS</strong>), so Artifactory downloads it from Maven Central, checks its <strong>checksum</strong> and stores it.</p>`}},
+
+{at:"art",frame:A2,kind:"a",move:[[["ci","art"]],[["art","ci"]]],log:{ro:"din cache",en:"from the cache"},who:"Cache",
+ title:{ro:"A doua oară: din cache",en:"The second time: from the cache"},
+ body:{ro:`<p>Următorul build cere aceeași bibliotecă: <strong>HIT</strong>, servită din cache în câteva milisecunde. Cele 400 de build-uri pe zi ale firmei nu mai ies pe internet pentru ea.</p>
+<p>Bonus: dacă biblioteca dispare vreodată de pe internet, firma o are în continuare. Și pentru că serverele de build vorbesc doar cu Artifactory, firewall-ul poate bloca restul internetului.</p>`,
+ en:`<p>The next build asks for the same library: <strong>HIT</strong>, served from the cache in milliseconds. The company's 400 builds a day no longer go out to the internet for it.</p>
+<p>Bonus: if the library ever disappears from the internet, the company still has it. And since build servers only talk to Artifactory, the firewall can block the rest of the internet.</p>`},
+ try:[{cmd:"mvn -s settings.xml dependency:resolve",d:{ro:"Toate dependențele vin prin maven-virtual.",en:"Every dependency comes through maven-virtual."}}]},
+
+{at:"art",frame:A3,kind:"p",move:[[["ci","art"]]],tables:["repos"],hl:{repos:"libs-release-local"},log:{ro:"jar publicat",en:"jar published"},who:{ro:"Repo local",en:"Local repo"},
+ title:{ro:"Build-ul își publică jar-ul",en:"The build publishes its jar"},
+ body:{ro:`<p>Testele trec. <code>mvn deploy</code> urcă <code>orders-api-1.8.0.jar</code> în repo-ul <strong>local</strong> <code>libs-release-local</code>, cu checksum-urile lui (SHA-1, SHA-256).</p>
+<p>Regula esențială: o <strong>versiune de release nu se suprascrie</strong>. Dacă cineva încearcă să urce alt conținut sub 1.8.0, primește eroare. Așa, „1.8.0” înseamnă mereu exact aceiași bytes.</p>`,
+ en:`<p>Tests pass. <code>mvn deploy</code> uploads <code>orders-api-1.8.0.jar</code> to the <strong>local</strong> repo <code>libs-release-local</code>, with its checksums (SHA-1, SHA-256).</p>
+<p>The essential rule: a <strong>release version is never overwritten</strong>. If someone tries to upload different content under 1.8.0, they get an error. That way "1.8.0" always means exactly the same bytes.</p>`},
+ more:{ro:`<p>Artifactory stochează fișierele după <strong>checksum</strong>, nu după nume. Dacă același jar apare în cinci repo-uri, pe disc există o singură copie. De aceea copierea și mutarea între repo-uri sunt instantanee.</p>`,
+  en:`<p>Artifactory stores files by <strong>checksum</strong>, not by name. If the same jar appears in five repos, there's a single copy on disk. That's why copying and moving between repos is instant.</p>`}},
+
+{at:"art",frame:A4,kind:"p",move:[[["ci","art"]]],log:{ro:"imagine Docker",en:"Docker image"},who:"Docker",
+ title:{ro:"Imaginea Docker: doar stratul nou urcă",en:"The Docker image: only the new layer is uploaded"},
+ body:{ro:`<p>CI-ul construiește imaginea și face <code>docker push artifactory.example.com/docker-dev-local/orders-api:1.8.0</code>.</p>
+<p>O imagine e făcută din <strong>straturi</strong>. Patru (sistemul de bază și Java) există deja în Artifactory, de la alte imagini; urcă doar stratul nou, cu jar-ul (12 MB). Imaginea are un <strong>digest</strong> (sha256) care o identifică exact, indiferent de tag.</p>`,
+ en:`<p>CI builds the image and runs <code>docker push artifactory.example.com/docker-dev-local/orders-api:1.8.0</code>.</p>
+<p>An image is made of <strong>layers</strong>. Four (the base OS and Java) are already in Artifactory, from other images; only the new layer, with the jar (12 MB), is uploaded. The image has a <strong>digest</strong> (sha256) that identifies it exactly, whatever the tag.</p>`}},
+
+{at:"art",frame:A5,kind:"p",move:[[["ci","art"]]],log:{ro:"build info",en:"build info"},who:"Build info",
+ title:{ro:"Build info: rețeta imaginii",en:"Build info: the image's recipe"},
+ body:{ro:`<p>La final, CI-ul publică și <strong>build info</strong> (cu JFrog CLI: <code>jf rt build-publish</code>): ce dependențe au intrat (toate 63, cu checksum), ce artefacte au ieșit, din ce commit, din ce job CI și cu ce variabile.</p>
+<p>Peste un an, când cineva întreabă „imaginea din producție conține biblioteca X?”, răspunsul e o căutare, nu o arheologie.</p>`,
+ en:`<p>At the end, CI also publishes <strong>build info</strong> (with the JFrog CLI: <code>jf rt build-publish</code>): which dependencies went in (all 63, with checksums), which artifacts came out, from which commit, which CI job and with which variables.</p>
+<p>A year from now, when someone asks "does the production image contain library X?", the answer is a search, not archaeology.</p>`},
+ try:[{cmd:"jf rt build-publish orders-api 412",d:{ro:"Publică build info pentru build-ul 412.",en:"Publishes build info for build 412."}}]},
+
+{at:"xray",frame:A6,kind:"s",move:[[["art","xray"]],[["xray","art"]]],marks:{art:{k:"drop",t:{ro:"blocat",en:"blocked"}}},log:{ro:"Xray blochează",en:"Xray blocks"},who:"Xray",
+ title:{ro:"Xray găsește o vulnerabilitate critică",en:"Xray finds a critical vulnerability"},
+ body:{ro:`<p><strong>JFrog Xray</strong> scanează fiecare artefact nou, inclusiv straturile imaginii și dependențele din build info. Găsește o bibliotecă de logging cu un <strong>CVE critic</strong>.</p>
+<p>Politica firmei spune: artefactele cu vulnerabilități critice <strong>nu pot fi descărcate</strong>. Imaginea 1.8.0 rămâne în docker-dev-local, dar niciun cluster nu o poate lua. Echipa primește alerta cu versiunea care repară problema.</p>`,
+ en:`<p><strong>JFrog Xray</strong> scans every new artifact, including image layers and the dependencies listed in build info. It finds a logging library with a <strong>critical CVE</strong>.</p>
+<p>The company policy says: artifacts with critical vulnerabilities <strong>cannot be downloaded</strong>. Image 1.8.0 stays in docker-dev-local, but no cluster can pull it. The team gets an alert with the version that fixes the issue.</p>`}},
+
+{at:"art",frame:A7,kind:"s",move:[[["art","xray"]],[["xray","art"]]],tables:["repos"],hl:{repos:"docker-prod-local"},log:{ro:"promovare",en:"promotion"},who:{ro:"Promovare",en:"Promotion"},
+ title:{ro:"Promovarea: aceiași bytes, fără rebuild",en:"Promotion: the same bytes, no rebuild"},
+ body:{ro:`<p>Echipa actualizează biblioteca și scoate 1.8.1. Xray: curat. Testele din mediul de staging trec.</p>
+<p>Acum imaginea e <strong>promovată</strong>: mutată (sau copiată) din <code>docker-dev-local</code> în <code>docker-prod-local</code> (<code>jf rt build-promote</code>). Nu se reconstruiește nimic: <strong>digest-ul e identic</strong>, deci în producție ajunge exact ce a fost testat.</p>
+<p class="key">Repo-urile devin etape: dev → staging → prod. Doar procesul de promovare are voie să scrie în prod.</p>`,
+ en:`<p>The team updates the library and ships 1.8.1. Xray: clean. Staging tests pass.</p>
+<p>Now the image is <strong>promoted</strong>: moved (or copied) from <code>docker-dev-local</code> to <code>docker-prod-local</code> (<code>jf rt build-promote</code>). Nothing is rebuilt: <strong>the digest is identical</strong>, so production gets exactly what was tested.</p>
+<p class="key">Repos become stages: dev → staging → prod. Only the promotion process may write to prod.</p>`}},
+
+{at:"k8s",frame:A8,kind:"p",move:[[["art","k8s"]]],log:{ro:"pull în Kubernetes",en:"pull into Kubernetes"},who:"Kubernetes",
+ title:{ro:"Kubernetes descarcă imaginea",en:"Kubernetes pulls the image"},
+ body:{ro:`<p>În lecția GitOps, un PR schimbă tag-ul în 1.8.1. Nodurile Kubernetes descarcă imaginea din <code>artifactory.example.com/docker-virtual</code>, cu un <strong>imagePullSecret</strong> care conține un token <strong>doar de citire</strong>.</p>
+<p>Clusterul de producție vede numai imagini promovate și curate. Iar dacă vrei siguranță maximă, în manifest pui imaginea după <strong>digest</strong> (<code>@sha256:7e22…</code>), nu doar după tag.</p>`,
+ en:`<p>In the GitOps lesson, a PR changes the tag to 1.8.1. The Kubernetes nodes pull the image from <code>artifactory.example.com/docker-virtual</code>, with an <strong>imagePullSecret</strong> holding a <strong>read-only</strong> token.</p>
+<p>The production cluster sees only promoted, clean images. For maximum safety, the manifest references the image by <strong>digest</strong> (<code>@sha256:7e22…</code>), not just by tag.</p>`}},
+
+{at:"art",frame:null,kind:"none",tables:["repos"],who:{ro:"Administrare",en:"Administration"},
+ title:{ro:"Drepturi, token-uri și curățenie",en:"Permissions, tokens and cleanup"},
+ body:{ro:`<p>Câteva reguli care țin Artifactory sănătos:</p>
+<ul><li><strong>Drepturi pe repo</strong>: CI-ul scrie în dev, doar promovarea scrie în prod, toată lumea citește prin repo-urile virtuale.</li>
+<li><strong>Token-uri de acces</strong> cu durată limitată în loc de parole, câte unul pe sistem (CI, cluster), ușor de revocat.</li>
+<li><strong>Curățenie</strong>: snapshot-urile și imaginile de dev mai vechi de 30 de zile, nedescărcate, se șterg automat. Release-urile din prod rămân.</li>
+<li><strong>Același model pentru toate formatele</strong>: npm, PyPI, NuGet, Helm, Go: un remote pentru registry-ul public, un local, un virtual peste ele.</li></ul>`,
+ en:`<p>A few rules that keep Artifactory healthy:</p>
+<ul><li><strong>Per-repo permissions</strong>: CI writes to dev, only promotion writes to prod, everyone reads through the virtual repos.</li>
+<li><strong>Access tokens</strong> with a limited lifetime instead of passwords, one per system (CI, cluster), easy to revoke.</li>
+<li><strong>Cleanup</strong>: dev snapshots and images older than 30 days that nobody downloaded are deleted automatically. Prod releases stay.</li>
+<li><strong>The same model for every format</strong>: npm, PyPI, NuGet, Helm, Go: a remote for the public registry, a local, and a virtual on top.</li></ul>`}},
+
+{at:["ci","art","k8s"],frame:null,kind:"none",summary:true,tables:["types"],
+ title:{ro:"Recapitulare",en:"Recap"},
+ body:{ro:`<ul><li><strong>Remote</strong> = cache pentru internet; <strong>local</strong> = ce producem; <strong>virtual</strong> = o adresă peste ele.</li>
+<li>Build-urile vorbesc doar cu Artifactory; dependențele vin din cache după prima descărcare.</li>
+<li>Versiunile de release <strong>nu se suprascriu</strong>; fișierele sunt identificate prin <strong>checksum</strong> / <strong>digest</strong>.</li>
+<li><strong>Build info</strong> = ce a intrat și ce a ieșit dintr-un build.</li>
+<li><strong>Xray</strong> scanează și poate bloca descărcarea artefactelor vulnerabile.</li>
+<li><strong>Promovare</strong> între repo-uri, fără rebuild: în prod ajunge exact ce s-a testat.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Mergi la laborator ↓</button></p>`,
+ en:`<ul><li><strong>Remote</strong> = a cache for the internet; <strong>local</strong> = what we build; <strong>virtual</strong> = one address over them.</li>
+<li>Builds only talk to Artifactory; dependencies come from the cache after the first download.</li>
+<li>Release versions are <strong>never overwritten</strong>; files are identified by <strong>checksum</strong> / <strong>digest</strong>.</li>
+<li><strong>Build info</strong> = what went into and came out of a build.</li>
+<li><strong>Xray</strong> scans and can block downloads of vulnerable artifacts.</li>
+<li><strong>Promotion</strong> between repos, without rebuilding: prod gets exactly what was tested.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Go to the lab ↓</button></p>`}}
+],
+
+reference:(T,lang)=>{
+  const ro=lang==="ro";
+  return `<div class="ref-grid"><section class="card refcard"><h2>Maven: settings.xml</h2>
+<pre class="yaml">&lt;mirrors&gt;
+  &lt;mirror&gt;
+    &lt;id&gt;artifactory&lt;/id&gt;
+    &lt;mirrorOf&gt;*&lt;/mirrorOf&gt;
+    &lt;url&gt;https://artifactory.example.com/artifactory/maven-virtual&lt;/url&gt;
+  &lt;/mirror&gt;
+&lt;/mirrors&gt;
+<span class="c">&lt;!-- ${ro?"token-ul vine din variabila CI, nu din fișier":"the token comes from a CI variable, not the file"} --&gt;</span></pre>
+<h3>Docker</h3>
+<pre class="yaml">docker login artifactory.example.com
+docker push artifactory.example.com/docker-dev-local/orders-api:1.8.1</pre></section>
+<section class="card refcard"><h2>JFrog CLI</h2>
+<pre class="yaml">jf rt upload "target/*.jar" libs-release-local/com/example/orders-api/1.8.1/
+jf rt build-publish orders-api 415
+jf rt build-promote orders-api 415 docker-prod-local --status=released
+jf rt search "docker-prod-local/orders-api/*"</pre>
+<h3>Kubernetes</h3>
+<pre class="yaml">kubectl create secret docker-registry artifactory-pull \
+  --docker-server=artifactory.example.com \
+  --docker-username=k8s-prod-reader --docker-password=$TOKEN
+<span class="c"># ${ro?"în Deployment":"in the Deployment"}</span>
+imagePullSecrets: [{ name: artifactory-pull }]
+image: artifactory.example.com/docker-virtual/orders-api@sha256:7e22…a0d4</pre></section></div>`;
+},
+
+gloss:[
+ ["Artifactory","JFrog Artifactory",{ro:"Depozit central pentru pachete și imagini de toate tipurile.",en:"A central store for packages and images of every kind."}],
+ [{ro:"Artefact",en:"Artifact"},null,{ro:"Rezultatul unui build: jar, imagine Docker, pachet npm etc.",en:"A build's output: a jar, a Docker image, an npm package, etc."}],
+ [{ro:"Repo local",en:"Local repo"},null,{ro:"Repo în care firma își publică propriile artefacte.",en:"A repo where the company publishes its own artifacts."}],
+ [{ro:"Repo remote",en:"Remote repo"},null,{ro:"Cache pentru un depozit public (Maven Central, Docker Hub, npm).",en:"A cache for a public registry (Maven Central, Docker Hub, npm)."}],
+ [{ro:"Repo virtual",en:"Virtual repo"},null,{ro:"O singură adresă care caută în mai multe repo-uri, în ordine.",en:"A single address that searches several repos, in order."}],
+ ["Checksum",null,{ro:"Amprenta conținutului (SHA-256); același conținut, aceeași amprentă.",en:"A fingerprint of the content (SHA-256); same content, same fingerprint."}],
+ ["Digest",null,{ro:"Checksum-ul unei imagini Docker; o identifică exact, spre deosebire de tag.",en:"A Docker image's checksum; it identifies it exactly, unlike a tag."}],
+ [{ro:"Strat",en:"Layer"},"layer",{ro:"O parte a unei imagini Docker; straturile comune se stochează o singură dată.",en:"A part of a Docker image; shared layers are stored once."}],
+ ["Build info",null,{ro:"Metadatele unui build: dependențe, artefacte, commit, job.",en:"A build's metadata: dependencies, artifacts, commit, job."}],
+ ["Xray","JFrog Xray",{ro:"Scanează artefactele pentru vulnerabilități și licențe; poate bloca descărcarea.",en:"Scans artifacts for vulnerabilities and licences; can block downloads."}],
+ ["CVE",null,{ro:"Identificatorul public al unei vulnerabilități cunoscute.",en:"The public identifier of a known vulnerability."}],
+ [{ro:"Promovare",en:"Promotion"},null,{ro:"Mutarea unui artefact testat într-un repo de etapă următoare, fără rebuild.",en:"Moving a tested artifact to a next-stage repo, without rebuilding."}]
+],
+glossEx:{
+ "Digest":{ro:"orders-api@sha256:7e22…a0d4 e mereu aceeași imagine.",en:"orders-api@sha256:7e22…a0d4 is always the same image."}
+},
+
+quiz:[
+ {q:{ro:"Ce face un repo remote în Artifactory?",en:"What does a remote repo do in Artifactory?"},o:[{ro:"Ține artefactele firmei",en:"Holds the company's artifacts"},{ro:"E un cache pentru un depozit public, ca Maven Central",en:"It's a cache for a public registry like Maven Central"},{ro:"Scanează vulnerabilități",en:"Scans for vulnerabilities"},{ro:"Rulează build-uri",en:"Runs builds"}],a:1,e:{ro:"Descarcă o dată, servește din cache după.",en:"Downloads once, serves from the cache afterwards."}},
+ {q:{ro:"De ce are Maven o singură adresă, maven-virtual?",en:"Why does Maven have a single address, maven-virtual?"},o:[{ro:"Pentru că e mai ieftin",en:"Because it's cheaper"},{ro:"Pentru că Maven nu suportă mai multe",en:"Because Maven can't handle more"},{ro:"Repo-ul virtual caută în local și remote; poți schimba ce e în spate fără să atingi build-urile",en:"The virtual repo searches local and remote; you can change what's behind it without touching builds"},{ro:"Pentru criptare",en:"For encryption"}],a:2,e:{ro:"O adresă stabilă peste mai multe repo-uri.",en:"One stable address over several repos."}},
+ {q:{ro:"Cineva încearcă să urce alt conținut sub versiunea 1.8.0 deja publicată. Ce se întâmplă?",en:"Someone tries to upload different content under the already-published version 1.8.0. What happens?"},o:[{ro:"E respins: versiunile de release nu se suprascriu",en:"It's rejected: release versions aren't overwritten"},{ro:"Se suprascrie",en:"It's overwritten"},{ro:"Se creează 1.8.0-2",en:"1.8.0-2 is created"},{ro:"Xray îl scanează și îl acceptă",en:"Xray scans and accepts it"}],a:0,e:{ro:"1.8.0 înseamnă mereu aceiași bytes.",en:"1.8.0 always means the same bytes."}},
+ {q:{ro:"De ce la docker push urcă doar 12 MB dintr-o imagine de 300 MB?",en:"Why does docker push upload only 12 MB of a 300 MB image?"},o:[{ro:"Imaginea e comprimată",en:"The image is compressed"},{ro:"Restul se descarcă mai târziu",en:"The rest is downloaded later"},{ro:"E o eroare",en:"It's an error"},{ro:"Straturile comune (baza, Java) există deja în Artifactory",en:"The shared layers (base, Java) already exist in Artifactory"}],a:3,e:{ro:"Straturile sunt identificate prin checksum.",en:"Layers are identified by checksum."}},
+ {q:{ro:"Ce conține build info?",en:"What does build info contain?"},o:[{ro:"Doar numele build-ului",en:"Just the build's name"},{ro:"Dependențele, artefactele, commit-ul și job-ul CI ale unui build",en:"A build's dependencies, artifacts, commit and CI job"},{ro:"Parola Artifactory",en:"The Artifactory password"},{ro:"Codul sursă",en:"The source code"}],a:1,e:{ro:"Rețeta completă a artefactului.",en:"The artifact's full recipe."}},
+ {q:{ro:"Xray găsește un CVE critic în imaginea 1.8.0. Ce poate face politica?",en:"Xray finds a critical CVE in image 1.8.0. What can the policy do?"},o:[{ro:"Repară automat codul",en:"Fix the code automatically"},{ro:"Șterge repo-ul",en:"Delete the repo"},{ro:"Blochează descărcarea imaginii",en:"Block downloads of the image"},{ro:"Nimic, doar un raport",en:"Nothing, just a report"}],a:2,e:{ro:"Niciun cluster nu o mai poate lua.",en:"No cluster can pull it any more."}},
+ {q:{ro:"De ce promovezi imaginea în loc s-o reconstruiești pentru producție?",en:"Why promote the image instead of rebuilding it for production?"},o:[{ro:"Ca în prod să ajungă exact ce s-a testat (același digest)",en:"So prod gets exactly what was tested (the same digest)"},{ro:"Pentru că e mai mare",en:"Because it's bigger"},{ro:"Ca să aibă alt tag",en:"To get a different tag"},{ro:"Ca s-o scaneze Xray din nou",en:"So Xray scans it again"}],a:0,e:{ro:"Un rebuild poate aduce alte dependențe.",en:"A rebuild can pull in different dependencies."}},
+ {q:{ro:"Cu ce descarcă nodurile Kubernetes imaginea din Artifactory?",en:"What do the Kubernetes nodes use to pull the image from Artifactory?"},o:[{ro:"Cu parola de admin",en:"The admin password"},{ro:"Fără autentificare",en:"No authentication"},{ro:"Cu token-ul CI-ului",en:"The CI's token"},{ro:"Cu un imagePullSecret ce conține un token doar de citire",en:"An imagePullSecret holding a read-only token"}],a:3,e:{ro:"Drepturi minime, ușor de revocat.",en:"Least privilege, easy to revoke."}}
+]
+};
+})();
+</script>
+<script src="../assets/engine.js?v=2"></script>
+<script src="../assets/labs-data.js?v=4"></script>
+<script src="../assets/lab.js?v=1"></script>
+<script type="module" src="../assets/auth.js?v=9"></script>
+</body>
+</html>

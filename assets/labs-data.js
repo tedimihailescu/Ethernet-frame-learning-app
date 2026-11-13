@@ -281,6 +281,30 @@ xfb: { title: "XFB / Transfer CFT", tasks: [
  { type: "order", name: B("Drumul extraselor", "The statements' path"), q: B("Ordonează drumul fișierului STMT spre BANCA-P.", "Order the STMT file's path to BANCA-P."),
    items: [B("CFT CORE trimite STMT la Gateway prin PeSIT", "CFT CORE sends STMT to the Gateway via PeSIT"), B("Gateway-ul scrie fișierul pe disc (store)", "The Gateway writes the file to disk (store)"), B("Regula de rutare: PGP + redenumire", "The routing rule: PGP + rename"), B("SFTP spre BANCA-P: host key, cheie SSH, încărcare .part", "SFTP to BANCA-P: host key, SSH key, .part upload"), B("Redenumire la numele final în /inbox", "Rename to the final name in /inbox"), B("Gateway-ul ridică .ack din /outbox", "The Gateway picks up the .ack from /outbox")],
    hint: B("Store, apoi transformări, apoi forward.", "Store, then transformations, then forward.") }
+]},
+
+gitops: { title: "GitOps / Argo CD", tasks: [
+ { type: "term", name: B("Git vs. cluster", "Git vs the cluster"), q: B("Arată diferența dintre Git și cluster pentru aplicația Argo CD orders-prod.", "Show the difference between Git and the cluster for the orders-prod Argo CD app."),
+   prompt: "$", need: ["argocd", "app", "diff", "orders-prod"], sol: "argocd app diff orders-prod",
+   out: "===== apps/Deployment orders/orders-api ======\n-        image: registry.example.com/orders-api:1.7.3\n+        image: registry.example.com/orders-api:1.8.0",
+   hint: B("argocd app diff <nume aplicație>", "argocd app diff <app name>"), why: B("Exact asta va aplica sync-ul.", "This is exactly what the sync will apply.") },
+ { type: "input", name: B("Rollback-ul", "The rollback"), q: B("1.8.0 dă erori. Ce comandă git anulează commit-ul 7d02e1b printr-un commit nou? (comanda completă)", "1.8.0 is failing. Which git command undoes commit 7d02e1b with a new commit? (the full command)"),
+   ans: ["git revert 7d02e1b"], hint: B("Nu reset, nu force push.", "Not reset, not force push."), why: B("Argo CD vede tag-ul vechi în Git și revine la 1.7.3; istoricul rămâne.", "Argo CD sees the old tag in Git and goes back to 1.7.3; the history stays.") },
+ { type: "order", name: B("Drumul unei lansări", "A release's path"), q: B("Ordonează drumul lui orders-api 1.8.0 până în producție.", "Order orders-api 1.8.0's path to production."),
+   items: [B("CI construiește și publică imaginea 1.8.0", "CI builds and pushes image 1.8.0"), B("Un PR schimbă newTag în overlays/prod", "A PR changes newTag in overlays/prod"), B("PR-ul e aprobat și intră în main", "The PR is approved and merged into main"), B("Argo CD vede commit-ul: OutOfSync", "Argo CD sees the commit: OutOfSync"), B("Sync: rolling update în cluster", "Sync: a rolling update in the cluster"), B("Aplicația ajunge Synced · Healthy", "The app reaches Synced · Healthy")],
+   hint: B("CI nu atinge clusterul.", "CI doesn't touch the cluster.") }
+]},
+
+artifactory: { title: "Artifactory", tasks: [
+ { type: "term", name: B("Promovarea", "The promotion"), q: B("Cu JFrog CLI, promovează build-ul orders-api 415 în repo-ul docker-prod-local.", "With the JFrog CLI, promote build orders-api 415 to the docker-prod-local repo."),
+   prompt: "$", need: ["jf", "rt", ["build-promote", "bpr"], "orders-api", "415", "docker-prod-local"], sol: "jf rt build-promote orders-api 415 docker-prod-local --status=released",
+   out: "[Info] Promoting build...\n[Info] Promoted build orders-api/415 to: docker-prod-local",
+   hint: B("jf rt build-promote <build> <număr> <repo țintă>", "jf rt build-promote <build> <number> <target repo>"), why: B("Aceiași bytes ajung în prod, fără rebuild.", "The same bytes reach prod, without a rebuild.") },
+ { type: "input", name: B("Tipul de repo", "The repo type"), q: B("Ce tip de repo e un cache pentru Maven Central? (un cuvânt)", "Which repo type is a cache for Maven Central? (one word)"),
+   ans: ["remote"], hint: B("Local, remote sau virtual?", "Local, remote or virtual?"), why: B("Remote = cache pentru un depozit public; virtual = o adresă peste mai multe.", "Remote = a cache for a public registry; virtual = one address over several.") },
+ { type: "order", name: B("Viața unei imagini", "An image's life"), q: B("Ordonează drumul imaginii orders-api până în producție.", "Order the orders-api image's path to production."),
+   items: [B("Dependențele vin prin maven-virtual (din cache)", "Dependencies come through maven-virtual (from the cache)"), B("CI face docker push în docker-dev-local", "CI pushes to docker-dev-local"), B("CI publică build info", "CI publishes build info"), B("Xray scanează imaginea: curat", "Xray scans the image: clean"), B("Build-ul e promovat în docker-prod-local", "The build is promoted to docker-prod-local"), B("Kubernetes descarcă imaginea cu un token de citire", "Kubernetes pulls the image with a read-only token")],
+   hint: B("Promovarea vine după scanare.", "Promotion comes after the scan.") }
 ]}
 };
 })();
