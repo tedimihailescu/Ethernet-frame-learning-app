@@ -39,7 +39,7 @@ service cloud.firestore {
     }
     function userFieldsOk(keys) {
       let d = request.resource.data;
-      return keys.hasOnly(['name', 'email', 'lastSeen', 'online', 'page', 'path', 'created', 'roulette', 'lastSpin'])
+      return keys.hasOnly(['name', 'email', 'lastSeen', 'online', 'page', 'path', 'created', 'roulette', 'lastSpin', 'spinId'])
         && (!('name' in keys) || (d.name is string && d.name.size() <= 80))
         && (!('email' in keys) || ownEmail(d.email))
         && (!('lastSeen' in keys) || d.lastSeen == request.time)
@@ -49,7 +49,8 @@ service cloud.firestore {
             && d.path.matches('(/[A-Za-z0-9_.-]*)*/?') && !d.path.matches('//.*')))
         && (!('created' in keys) || (d.created is string && d.created.size() <= 40))
         && (!('roulette' in keys) || rouletteOk(d))
-        && (!('lastSpin' in keys) || ('roulette' in keys));
+        && (!('lastSpin' in keys) || ('roulette' in keys))
+        && (!('spinId' in keys) || (('roulette' in keys) && d.spinId is string && d.spinId.size() <= 40));
     }
     match /users/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || isAdmin());

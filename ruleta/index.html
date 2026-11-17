@@ -124,6 +124,8 @@ const LINES={
  broke:[["Ai rămas fără puncte. Mergi la teste și revino cu un pachet plin.","Out of points. Go take a quiz and come back with a full packet."]],
  noBet:[["Masa e goală. Nici eu nu rutez pachete fără destinație.","The table's empty. I don't route packets without a destination either."]],
  tooMuch:[["N-ai destule puncte pentru jetonul ăsta. Încearcă unul mai mic.","Not enough points for that chip. Try a smaller one."]],
+ saving:[["O clipă, salvez învârtirea de dinainte…","One moment, saving the previous spin…"]],
+ syncErr:[["Serverul n-a acceptat ultima învârtire; am reîncărcat punctele tale reale.","The server didn't accept the last spin; I reloaded your real points."]],
  limit:[["Miza maximă la masa asta e 100 de puncte pe o învârtire.","The table limit is 100 points per spin."]]
 };
 let cur=null;const lastI={};
@@ -203,20 +205,32 @@ function undo(){const s=stack.pop();if(!s)return;bets[s[0]]-=s[1];if(bets[s[0]]<
 function clearT(){bets={};stack=[];document.querySelectorAll(".cell.win").forEach(c=>c.classList.remove("win"));paintBets()}
 function rebet(){if(!lastBets)return;bets={...lastBets};stack=Object.entries(bets);paintBets()}
 
+// The outcome is drawn and saved the moment you press Spin, before the animation, so leaving
+// or reloading mid-spin can't lose (or dodge) the result. The change is first kept in this
+// browser as "pending" and re-sent until Firestore confirms it, also on the next visit.
+// Each spin has an id, stored with the points, so a retry is never counted twice.
+const PKEY="ruleta-pending",sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const pendingGet=()=>{try{return JSON.parse(store.get(PKEY)||"null")}catch(e){return null}};
+const pendingDel=()=>{try{localStorage.removeItem(PKEY)}catch(e){}};
+let flushing=null;
 function spin(){
   if(spinning)return;const bet=total();if(!bet){say("noBet");return}
+  if(ctx&&pendingGet()){say("saving");flush();return}
+  const outcome=new Uint32Array(1);crypto.getRandomValues(outcome);const n=outcome[0]%37;
+  let won=0,straight=false;
+  for(const [id,v] of Object.entries(bets)){if(BETS[id].test(n)){won+=v*(BETS[id].pay+1);if(BETS[id].pay===35)straight=true}}
+  const delta=won-bet;
+  if(delta){if(ctx){store.set(PKEY,JSON.stringify({id:Date.now().toString(36)+"-"+outcome[0].toString(36),uid:ctx.uid,delta}));flush()}else store.set("ruleta-demo",String(Math.max(0,bal+delta)))}
   spinning=true;lastBets={...bets};document.querySelectorAll(".cell.win").forEach(c=>c.classList.remove("win"));
   $("#res").textContent="";$("#ball").setAttribute("opacity","0");say("spin");paint();
-  const buf=new Uint32Array(1);crypto.getRandomValues(buf);const n=buf[0]%37,i=ORDER.indexOf(n),s=360/37;
+  const i=ORDER.indexOf(n),s=360/37;
   // bring pocket i to the pointer at the top
   const target=-(i*s)+(Math.random()-.5)*s*.6;let r=rot-(rot%360)+360*6+((target%360)+360)%360;if(r-rot<360*5)r+=360;rot=r;
   $("#rot").style.transform=`rotate(${rot}deg)`;
-  setTimeout(()=>settle(n,bet),Math.max(matchMedia("(prefers-reduced-motion: reduce)").matches?200:5400,lastSave+4600-Date.now()));
+  setTimeout(()=>settle(n,bet,won,delta,straight),matchMedia("(prefers-reduced-motion: reduce)").matches?200:5400);
 }
-async function settle(n,bet){
-  let won=0,straight=false;
-  for(const [id,v] of Object.entries(bets)){if(BETS[id].test(n)){won+=v*(BETS[id].pay+1);if(BETS[id].pay===35)straight=true}}
-  const delta=won-bet;bal=Math.max(0,bal+delta);
+function settle(n,bet,won,delta,straight){
+  bal=Math.max(0,bal+delta);
   hist.unshift(n);hist=hist.slice(0,12);
   $("#ball").setAttribute("opacity","1");
   $("#res").innerHTML=`<span class="n ${col(n)}">${n}</span>${won?L(`Câștigi ${won} (net ${delta>=0?"+":""}${delta})`,`You win ${won} (net ${delta>=0?"+":""}${delta})`):L(`Pierzi ${bet}`,`You lose ${bet}`)}`;
@@ -225,14 +239,35 @@ async function settle(n,bet){
   say(straight?"big":won?"win":n===0?"zero":"lose");
   bets={};stack=[];spinning=false;paintBets();
   if(bal<=0)setTimeout(()=>say("broke"),2200);
-  await saveDelta(delta);
+  if(ctx&&!pendingGet())window.dispatchEvent(new CustomEvent("points:changed",{detail:{total:bal}}));
 }
-async function saveDelta(delta){
-  if(!delta)return;
-  if(!ctx){store.set("ruleta-demo",String(bal));return}
-  try{await ctx.setDoc(ctx.doc(ctx.db,"users",ctx.uid),{roulette:ctx.increment(delta),lastSpin:ctx.now()},{merge:true});lastSave=Date.now()}
-  catch(e){console.error(e);try{bal=await ctx.reload();paint()}catch(e2){}}
-  window.dispatchEvent(new CustomEvent("points:changed",{detail:{total:bal}}));
+// Send the pending spin (if any) until it is confirmed. Returns true once nothing is pending.
+function flush(){
+  if(!flushing)flushing=(async()=>{
+    for(let attempt=0;;attempt++){
+      const p=pendingGet();if(!p||!ctx)return true;
+      if(p.uid!==ctx.uid){pendingDel();return true}
+      try{
+        const ref=ctx.doc(ctx.db,"users",ctx.uid),snap=await ctx.getDoc(ref);
+        if(!(snap.exists()&&snap.data().spinId===p.id)){
+          const wait=lastSave+4500-Date.now();if(wait>0)await sleep(wait); // the rules allow one spin per 4 s
+          await ctx.setDoc(ref,{roulette:ctx.increment(p.delta),lastSpin:ctx.now(),spinId:p.id},{merge:true});
+          lastSave=Date.now();
+        }
+        pendingDel();
+        if(!spinning)window.dispatchEvent(new CustomEvent("points:changed",{detail:{total:bal}}));
+        return true;
+      }catch(e){
+        console.warn("roulette save, attempt "+(attempt+1),e);
+        if(e&&e.code==="permission-denied"&&attempt>=2){
+          // The server refuses this change for good: drop it and show the real balance.
+          pendingDel();say("syncErr");try{bal=await ctx.reload();paint()}catch(e2){}return true;
+        }
+        await sleep(Math.min(30000,5000*(attempt+1)));
+      }
+    }
+  })().finally(()=>{flushing=null});
+  return flushing;
 }
 
 function render(){
@@ -255,7 +290,8 @@ if(location.protocol==="file:"||window.RULETA_DEMO){bal=+(store.get("ruleta-demo
 else{
   const [{auth,db},{onAuthStateChanged},fs,pts]=await Promise.all([import("../assets/firebase.js?v=5"),import("https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js"),import("https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js"),import("../assets/points.js?v=8")]);
   onAuthStateChanged(auth,async user=>{if(!user)return;
-    ctx={db,uid:user.uid,doc:fs.doc,setDoc:fs.setDoc,increment:fs.increment,now:fs.serverTimestamp,reload:async()=>(await pts.balance(db,user.uid,fs)).total};
+    ctx={db,uid:user.uid,doc:fs.doc,getDoc:fs.getDoc,setDoc:fs.setDoc,increment:fs.increment,now:fs.serverTimestamp,reload:async()=>(await pts.balance(db,user.uid,fs)).total};
+    try{await flush()}catch(e){}
     try{bal=(await pts.balance(db,user.uid,fs)).total}catch(e){console.error(e);bal=0}
     paint();if(bal<=0)say("broke")});
 }
