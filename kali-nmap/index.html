@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Scanarea porturilor cu nmap</title>
+<meta name="description" content="Lecție interactivă: scanarea porturilor unei ținte de laborator cu nmap: open, closed și filtered pe fir, SYN scan, toate porturile cu -p-, versiuni cu -sV, connect scan, UDP, scripturi NSE sigure, raport și reducerea suprafeței expuse. / Interactive lesson: port scanning with nmap in a lab.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/diagram.css?v=1">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<script>
+(function(){
+const RO="READ-ONLY",CH="LAB CHANGE",SC="ACTIVE SCAN";
+const T="10.0.50.20";
+const N2={q:{ro:"Ce porturi răspund pe web-lab?",en:"Which ports answer on web-lab?"},cmd:"sudo nmap "+T,mode:SC,out:"Not shown: 997 closed tcp ports (reset) · 22/tcp open ssh · 80/tcp open http · 8443/tcp filtered https-alt",proves:{ro:"din cele mai folosite 1000 de porturi: 2 deschise, 1 filtrat, restul închise; portul 50000 nici nu a fost verificat",en:"of the 1000 most common ports: 2 open, 1 filtered, the rest closed; port 50000 wasn't even checked"}};
+const N3={q:{ro:"Ce se întâmplă pe fir la un port deschis?",en:"What happens on the wire for an open port?"},cmd:"sudo tcpdump -ni eth0 host "+T+" and port 22",mode:RO,out:"10.0.50.10.48120 > "+T+".22: Flags [S] · "+T+".22 > 10.0.50.10.48120: Flags [S.] · 10.0.50.10.48120 > "+T+".22: Flags [R]",proves:{ro:"open = SYN-ACK; nmap răspunde cu RST în loc de ACK, deci conexiunea nu se termină niciodată (SYN scan)",en:"open = SYN-ACK; nmap replies with RST instead of ACK, so the connection is never completed (SYN scan)"}};
+const N4={q:{ro:"De ce e 3306 „closed”, deși MySQL rulează?",en:"Why is 3306 \"closed\" even though MySQL is running?"},cmd:"sudo nmap -p 3306 --reason "+T+" · ss -ltn \"sport = :3306\" (pe web-lab)",mode:SC,out:"3306/tcp closed mysql reset ttl 64 · LISTEN 0 151 127.0.0.1:3306",proves:{ro:"closed = RST: gazda e pornită, dar pe adresa scanată nu ascultă nimic; MySQL ascultă doar local, cum e corect",en:"closed = RST: the host is up, but nothing listens on the scanned address; MySQL listens only locally, as it should"}};
+const N5={q:{ro:"De ce e 8443 „filtered”?",en:"Why is 8443 \"filtered\"?"},cmd:"sudo nmap -p 8443 --reason "+T+" · sudo nft list chain inet filter input (pe web-lab)",mode:SC,out:"8443/tcp filtered https-alt no-response · tcp dport 8443 ip saddr != 10.0.40.0/24 drop",proves:{ro:"filtered = niciun răspuns: un firewall aruncă SYN-ul; panoul de admin acceptă doar rețeaua de administrare",en:"filtered = no answer: a firewall drops the SYN; the admin panel only accepts the management network"},bad:"FILTERED"};
+const N6={q:{ro:"Ce rămâne ascuns în afara celor 1000 de porturi?",en:"What's hiding outside the top 1000 ports?"},cmd:"sudo nmap -p- -T4 "+T,mode:SC,out:"22/tcp open ssh · 80/tcp open http · 8443/tcp filtered https-alt · 50000/tcp open ibm-db2",proves:{ro:"-p- verifică toate cele 65535 de porturi și găsește un serviciu pe 50000; numele „ibm-db2” e doar o ghicire după număr",en:"-p- checks all 65535 ports and finds a service on 50000; the name \"ibm-db2\" is just a guess from the number"},bad:":50000"};
+const N7={q:{ro:"Ce rulează de fapt pe fiecare port?",en:"What actually runs on each port?"},cmd:"sudo nmap -sV -p 22,80,50000 "+T,mode:SC,out:"22/tcp open ssh OpenSSH 9.2p1 Debian 2+deb12u3 · 80/tcp open http Apache httpd 2.4.62 ((Debian)) · 50000/tcp open http Werkzeug httpd 3.0.1 (Python 3.11.2)",proves:{ro:"-sV vorbește cu serviciile: 50000 nu e DB2, ci un server Python de dezvoltare, lăsat pornit după un test",en:"-sV talks to the services: 50000 isn't DB2, it's a Python development server left running after a test"},bad:"DEV SERVER"};
+const N8={q:{ro:"Ce se schimbă fără sudo?",en:"What changes without sudo?"},cmd:"nmap -sT -p 80 "+T,mode:SC,out:"80/tcp open http · pe fir: [S] · [S.] · [.] · [R.]",proves:{ro:"connect scan: conexiunea se termină complet, apoi e închisă; apare mai ușor în jurnalele serviciului",en:"connect scan: the connection completes fully, then is closed; it shows up more easily in the service's logs"}};
+const N9={q:{ro:"Ce servicii UDP are web-lab?",en:"Which UDP services does web-lab have?"},cmd:"sudo nmap -sU --top-ports 20 "+T,mode:SC,out:"123/udp open|filtered ntp · 161/udp open snmp · Not shown: 18 closed udp ports (port-unreach)",proves:{ro:"UDP n-are handshake: fără răspuns = open|filtered; closed doar la ICMP port unreachable; SNMP a răspuns, deci e sigur open",en:"UDP has no handshake: no reply = open|filtered; closed only on ICMP port unreachable; SNMP answered, so it's definitely open"}};
+const N10={q:{ro:"Ce mai afli în siguranță despre servicii?",en:"What else can you safely learn about the services?"},cmd:"sudo nmap -sC -p 22,80 "+T,mode:SC,out:"| ssh-hostkey: 256 SHA256:Xk3…q8 (ED25519) · | http-title: Lab Web - Login · | http-server-header: Apache/2.4.62 (Debian)",proves:{ro:"scripturile din categoria default adună informații fără să încerce parole sau atacuri",en:"scripts in the default category gather information without trying passwords or attacks"}};
+const N11={q:{ro:"Ce schimbăm după raport și cum dovedim?",en:"What do we change after the report, and how do we prove it?"},fix:{ro:"pe web-lab: serverul de pe 50000 oprit · SSH permis doar din 10.0.40.0/24",en:"on web-lab: the server on 50000 stopped · SSH allowed only from 10.0.40.0/24"},mode:CH,cmd:"sudo nmap -sV -p- -oA web-lab-2026-11-17 "+T,out:"22/tcp filtered ssh · 80/tcp open http Apache httpd 2.4.62 · 8443/tcp filtered https-alt · 50000/tcp closed",proves:{ro:"rescanarea dovedește că suprafața expusă din laborator a scăzut la un singur serviciu public",en:"the rescan proves the exposed surface from the lab shrank to a single public service"}};
+
+window.LESSON={
+docTitle:{ro:"Scanarea porturilor cu nmap",en:"Port scanning with nmap"},
+eyebrow:{ro:"Lecție interactivă · Securitate",en:"Interactive lesson · Security"},
+title:{ro:"Scanarea porturilor cu nmap: open, closed, filtered",en:"Port scanning with nmap: open, closed, filtered"},
+sub:{ro:"Ținta e web-lab (10.0.50.20), o mașină din laboratorul tău. Vrem să știm ce servicii vede rețeaua pe ea. Urmărim pe fir ce înseamnă open, closed și filtered, găsim un serviciu uitat pe un port neobișnuit, aflăm versiunile, încercăm UDP și scripturi sigure, apoi folosim raportul ca să reducem ce e expus și dovedim schimbarea cu o rescanare.",en:"The target is web-lab (10.0.50.20), a machine in your own lab. We want to know which services the network sees on it. We follow on the wire what open, closed and filtered mean, find a forgotten service on an unusual port, work out the versions, try UDP and safe scripts, then use the report to shrink what's exposed and prove the change with a rescan."},
+meta:[{ro:"≈ 30 minute",en:"≈ 30 minutes"},{ro:"12 pași",en:"12 steps"},{ro:"8 întrebări",en:"8 questions"},{ro:"Intermediar",en:"Intermediate"}],
+goals:[{ro:"Ce înseamnă open, closed și filtered, văzut în tcpdump",en:"What open, closed and filtered mean, seen in tcpdump"},{ro:"SYN scan vs. connect scan, top 1000 vs. -p-",en:"SYN scan vs connect scan, top 1000 vs -p-"},{ro:"-sV, UDP și scripturile NSE din categoria default",en:"-sV, UDP and the NSE default scripts"},{ro:"Raportul și reducerea suprafeței expuse",en:"The report and shrinking the exposed surface"}],
+foot:{ro:"Adrese și servicii fictive. Scanează doar mașini proprii sau cu acord scris; scripturile intrusive și încercările de parole nu fac parte din lecție.",en:"Fictional addresses and services. Scan only your own machines or with written approval; intrusive scripts and password attempts aren't part of this lesson."},
+ui:{frameT:{ro:"Scanarea (live)",en:"The scan (live)"},refT:{ro:"Opțiuni nmap",en:"nmap options"},refLead:{ro:"Opțiunile folosite în lecție și ce trimit în rețea.",en:"The options used in the lesson and what they send on the wire."}},
+tryT:{ro:"Încearcă (în laboratorul tău)",en:"Try it (in your lab)"},
+legend:[["lg-app","SCAN",{ro:"sonde active",en:"active probes"}],["lg-ip","READ",{ro:"doar citește",en:"read-only"}],["lg-arp","CHANGE",{ro:"modifică ținta",en:"changes the target"}],["lg-tcp","!",{ro:"de reținut",en:"worth noting"}]],
+
+nodes:{
+  kali:{type:"server",name:"kali",lines:["10.0.50.10"]},
+  fw:{type:"box",name:"nftables",lines:["web-lab"]},
+  p22:{type:"svc",name:":22",lines:["ssh"]},
+  p80:{type:"svc",name:":80",lines:["http"]},
+  p3306:{type:"svc",name:":3306",lines:["mysql · 127.0.0.1"]},
+  p8443:{type:"svc",name:":8443",lines:["admin"]},
+  p50k:{type:"svc",name:":50000",lines:[{ro:"uitat",en:"forgotten"}]}
+},
+links:[["kali","fw"],["fw","p22"],["fw","p80"],["fw","p3306"],["fw","p8443"],["fw","p50k"]],
+linkLabels:{"kali-fw":"TCP SYN","fw-p22":"open","fw-p80":"open","fw-p3306":"closed · RST","fw-p8443":"filtered · drop","fw-p50k":"open"},
+layouts:{
+  wide:{vb:[0,0,1000,520],n:{kali:[100,255],fw:[400,255],p22:[640,90],p80:[880,90],p3306:[640,420],p8443:[880,420],p50k:[880,255]},
+    zones:[{x:300,y:15,w:690,h:495,top:true,cls:"virt",l:"web-lab · 10.0.50.20"}]},
+  narrow:{vb:[0,0,360,860],n:{kali:[180,60],fw:[180,230],p22:[60,410],p80:[300,410],p50k:[180,540],p3306:[60,730],p8443:[300,730]},lpos:{"fw-p3306":.78,"fw-p8443":.78}}
+},
+groups:[
+  {id:"q",color:"l7",fields:["q"],name:{ro:"Întrebarea",en:"The question"},short:"Q",grow:2},
+  {id:"c",color:"l3",fields:["cmd","mode","out"],name:{ro:"Comanda și rezultatul",en:"Command and output"},short:"CMD",grow:4},
+  {id:"e",color:"arp",fields:["proves","fix"],name:{ro:"Dovada și remedierea",en:"Evidence and fix"},short:{ro:"Dovada",en:"Evidence"},grow:3}
+],
+fieldLabels:{q:{ro:"Întrebarea",en:"The question"},cmd:{ro:"Comanda",en:"Command"},mode:{ro:"Tip",en:"Type"},out:{ro:"Ce afișează",en:"Output"},proves:{ro:"Ce dovedește",en:"What it proves"},fix:{ro:"Remediere",en:"Fix"}},
+pdu:f=>f.mode===CH?{badge:{ro:"Schimbare pe țintă",en:"Change on the target"},tok:["CHANGE","k-arp"]}:f.bad?{badge:{ro:"De reținut",en:"Worth noting"},tok:[f.bad,"k-tcp"]}:f.mode===SC?{badge:{ro:"Scanare activă: doar în laborator",en:"Active scan: lab only"},tok:["SCAN","k-app"]}:{badge:{ro:"Doar citește",en:"Read-only"},tok:["READ","k-ip"]},
+
+init:{},
+tables:{
+  states:{title:{ro:"Stările unui port TCP",en:"A TCP port's states"},cols:[{ro:"Stare",en:"State"},{ro:"Răspunsul la SYN",en:"Reply to the SYN"},{ro:"Înseamnă",en:"Means"}],plain:[1,2],
+    rows:()=>[["open",{ro:"SYN-ACK",en:"SYN-ACK"},{ro:"un serviciu ascultă",en:"a service is listening"}],["closed",{ro:"RST",en:"RST"},{ro:"gazda e pornită, nimic nu ascultă",en:"the host is up, nothing listens"}],["filtered",{ro:"nimic sau ICMP unreachable",en:"nothing, or ICMP unreachable"},{ro:"un firewall aruncă sau respinge",en:"a firewall drops or rejects"}],["open|filtered",{ro:"nimic (UDP)",en:"nothing (UDP)"},{ro:"nmap nu poate deosebi",en:"nmap can't tell which"}]]},
+  scans:{title:{ro:"Tipuri de scanare",en:"Scan types"},cols:[{ro:"Opțiune",en:"Option"},{ro:"Cum lucrează",en:"How it works"},{ro:"Când",en:"When"}],plain:[1,2],
+    rows:()=>[["-sS",{ro:"SYN, apoi RST: conexiune neterminată",en:"SYN, then RST: an unfinished connection"},{ro:"implicit cu sudo",en:"the default with sudo"}],["-sT",{ro:"connect() complet prin sistem",en:"a full connect() through the OS"},{ro:"implicit fără sudo",en:"the default without sudo"}],["-sU",{ro:"datagrame UDP, așteaptă răspuns sau ICMP",en:"UDP datagrams, waits for a reply or ICMP"},{ro:"servicii UDP: DNS, NTP, SNMP",en:"UDP services: DNS, NTP, SNMP"}],["-sV",{ro:"vorbește cu serviciul și citește bannerul",en:"talks to the service and reads its banner"},{ro:"după ce știi ce e deschis",en:"once you know what's open"}]]},
+  ports:{idx:true,title:{ro:"Câte porturi verifici",en:"How many ports you check"},cols:[{ro:"Opțiune",en:"Option"},{ro:"Porturi",en:"Ports"},{ro:"Timp aici",en:"Time here"}],plain:[1,2],
+    rows:()=>[[{ro:"(implicit)",en:"(default)"},{ro:"cele mai folosite 1000",en:"the 1000 most common"},"0.4 s"],["-F",{ro:"cele mai folosite 100",en:"the 100 most common"},"0.1 s"],["-p 22,80,443",{ro:"doar cele date",en:"only those given"},"0.1 s"],["-p-",{ro:"toate 65535",en:"all 65535"},{ro:"≈ 8 s cu -T4",en:"≈ 8 s with -T4"}]]},
+  nse:{title:{ro:"Categorii de scripturi NSE",en:"NSE script categories"},cols:[{ro:"Categorie",en:"Category"},{ro:"Ce fac",en:"What they do"},{ro:"În lecție",en:"In this lesson"}],plain:[1,2],
+    rows:()=>[["default (-sC)",{ro:"informații utile, rapide, sigure",en:"useful, fast, safe information"},{ro:"da",en:"yes"}],["safe",{ro:"nu ar trebui să deranjeze serviciul",en:"shouldn't disturb the service"},{ro:"da",en:"yes"}],["intrusive",{ro:"pot încărca sau strica serviciul",en:"may load or break the service"},{ro:"nu",en:"no"}],["brute / exploit",{ro:"încearcă parole sau vulnerabilități",en:"try passwords or vulnerabilities"},{ro:"nu: doar cu acord explicit",en:"no: only with explicit approval"}]]}
+},
+log:{title:{ro:"Jurnalul scanării",en:"Scan log"},lead:{ro:"Fiecare scanare și ce a arătat.",en:"Every scan and what it showed."},first:{ro:"Pas",en:"Step"},minWidth:600,
+  cols:[{h:{ro:"Comanda",en:"Command"},v:f=>f.cmd||"",cls:"mac"},{h:{ro:"Ce dovedește",en:"What it proves"},v:f=>f.proves||"",cls:""}]},
+
+steps:[
+{at:["kali","fw"],frame:null,kind:"none",tables:["states"],who:{ro:"Ideea",en:"The idea"},
+ title:{ro:"Ideea: o întrebare pentru fiecare port",en:"The idea: one question for every port"},
+ body:{ro:`<p>Un serviciu de rețea ascultă pe un <strong>port</strong>: SSH pe 22, HTTP pe 80 și așa mai departe. A „scana porturile” înseamnă a întreba fiecare port: „e cineva aici?”.</p>
+<p>Pentru TCP, întrebarea e primul pas al unei conexiuni: un pachet <strong>SYN</strong>. Răspunsul spune starea:</p>
+<ul><li><strong>SYN-ACK</strong>: un serviciu ascultă → <em>open</em>;</li>
+<li><strong>RST</strong>: gazda e acolo, dar nimeni nu ascultă → <em>closed</em>;</li>
+<li><strong>nimic</strong> (sau un mesaj ICMP de interzicere): un firewall a intervenit → <em>filtered</em>.</li></ul>
+<p>Ținta e <code>web-lab</code>, din laboratorul tău, verificată ca în lecția „Kali Linux: un laborator sigur”.</p>`,
+ en:`<p>A network service listens on a <strong>port</strong>: SSH on 22, HTTP on 80 and so on. "Scanning ports" means asking every port: "is anyone here?".</p>
+<p>For TCP, the question is a connection's first step: a <strong>SYN</strong> packet. The reply tells the state:</p>
+<ul><li><strong>SYN-ACK</strong>: a service is listening → <em>open</em>;</li>
+<li><strong>RST</strong>: the host is there, but nobody listens → <em>closed</em>;</li>
+<li><strong>nothing</strong> (or an ICMP prohibited message): a firewall stepped in → <em>filtered</em>.</li></ul>
+<p>The target is <code>web-lab</code>, in your own lab, checked as in the lesson "Kali Linux: a safe lab".</p>`}},
+
+{at:["p22","p80","p8443"],frame:N2,kind:"n",move:[[["kali","fw"]],[["fw","p22"],["fw","p80"],["fw","p3306"],["fw","p8443"]]],tables:["ports"],hl:{ports:0},log:{ro:"prima scanare",en:"the first scan"},who:"nmap",
+ title:{ro:"Prima scanare: nmap 10.0.50.20",en:"The first scan: nmap 10.0.50.20"},
+ body:{ro:`<p>Fără opțiuni, cu <code>sudo</code>, nmap face un <strong>SYN scan</strong> pe cele mai folosite <strong>1000</strong> de porturi TCP.</p>
+<ul><li><code>22/tcp open ssh</code> și <code>80/tcp open http</code>;</li>
+<li><code>8443/tcp filtered</code>: nu a venit niciun răspuns;</li>
+<li><em>Not shown: 997 closed tcp ports (reset)</em>: restul au răspuns cu RST.</li></ul>
+<p>Coloana SERVICE e doar numele obișnuit al portului dintr-o listă, nu o verificare. Și un detaliu important: un port care nu e între cele 1000 nici n-a fost întrebat.</p>`,
+ en:`<p>With no options, run with <code>sudo</code>, nmap does a <strong>SYN scan</strong> of the <strong>1000</strong> most common TCP ports.</p>
+<ul><li><code>22/tcp open ssh</code> and <code>80/tcp open http</code>;</li>
+<li><code>8443/tcp filtered</code>: no reply came;</li>
+<li><em>Not shown: 997 closed tcp ports (reset)</em>: the rest answered with RST.</li></ul>
+<p>The SERVICE column is just the port's usual name from a list, not a check. And one important detail: a port outside those 1000 wasn't even asked.</p>`},
+ try:[{cmd:"sudo nmap 10.0.50.20",d:{ro:"SYN scan, top 1000 porturi TCP.",en:"SYN scan, top 1000 TCP ports."}}]},
+
+{at:"p22",frame:N3,kind:"n",move:[[["kali","fw"],["fw","p22"]],[["p22","fw"],["fw","kali"]],[["kali","fw"],["fw","p22"]]],marks:{p22:{k:"ok",t:"SYN-ACK"}},tables:["states"],hl:{states:"open"},log:{ro:"open pe fir",en:"open on the wire"},who:"open",
+ title:{ro:"Open, pe fir: SYN, SYN-ACK, apoi RST",en:"Open, on the wire: SYN, SYN-ACK, then RST"},
+ body:{ro:`<p>Cu <code>tcpdump</code> pornit în paralel vedem exact ce face nmap pe portul 22:</p>
+<ol><li><code>[S]</code>: Kali trimite SYN;</li>
+<li><code>[S.]</code>: web-lab răspunde SYN-ACK → portul e <strong>open</strong>;</li>
+<li><code>[R]</code>: Kali trimite RST în loc de ACK-ul care ar fi terminat conexiunea.</li></ol>
+<p>De aceea SYN scan se mai numește <strong>half-open</strong>: conexiunea nu ajunge niciodată la aplicație. E rapid și lasă mai puține urme în jurnalele serviciului, dar firewall-urile și IDS-urile îl văd foarte bine.</p>`,
+ en:`<p>With <code>tcpdump</code> running alongside, we see exactly what nmap does on port 22:</p>
+<ol><li><code>[S]</code>: Kali sends a SYN;</li>
+<li><code>[S.]</code>: web-lab answers SYN-ACK → the port is <strong>open</strong>;</li>
+<li><code>[R]</code>: Kali sends a RST instead of the ACK that would have completed the connection.</li></ol>
+<p>That's why a SYN scan is also called <strong>half-open</strong>: the connection never reaches the application. It's fast and leaves fewer traces in the service's logs, but firewalls and IDSs see it very well.</p>`},
+ try:[{cmd:"sudo tcpdump -ni eth0 host 10.0.50.20 and port 22",d:{ro:"Pornește-l într-un al doilea terminal, apoi scanează.",en:"Start it in a second terminal, then scan."}}]},
+
+{at:"p3306",frame:N4,kind:"n",move:[[["kali","fw"],["fw","p3306"]],[["p3306","fw"],["fw","kali"]]],marks:{p3306:{k:"ok",t:"RST"}},tables:["states"],hl:{states:"closed"},log:{ro:"closed: doar local",en:"closed: local only"},who:"closed",
+ title:{ro:"Closed: gazda răspunde „aici nu e nimeni”",en:"Closed: the host answers \"nobody's here\""},
+ body:{ro:`<p>MySQL rulează pe web-lab, totuși <code>3306/tcp</code> apare <strong>closed</strong>, cu motivul <code>reset</code>. Pe web-lab, <code>ss -ltn</code> lămurește: MySQL ascultă pe <code>127.0.0.1:3306</code>, deci doar pentru aplicațiile de pe aceeași mașină.</p>
+<p>Un SYN venit din rețea, spre <code>10.0.50.20:3306</code>, nu găsește pe nimeni, iar kernelul răspunde cu RST. Asta e configurarea corectă: baza de date nu trebuie să fie accesibilă din rețea.</p>
+<p class="key">Closed nu e un semn rău. Spune doar că gazda e pornită și că acolo nu ascultă nimic.</p>`,
+ en:`<p>MySQL runs on web-lab, yet <code>3306/tcp</code> shows as <strong>closed</strong>, with the reason <code>reset</code>. On web-lab, <code>ss -ltn</code> explains it: MySQL listens on <code>127.0.0.1:3306</code>, so only for apps on the same machine.</p>
+<p>A SYN arriving from the network, to <code>10.0.50.20:3306</code>, finds no one, and the kernel answers with a RST. That's the right setup: the database shouldn't be reachable from the network.</p>
+<p class="key">Closed isn't a bad sign. It just says the host is up and nothing listens there.</p>`}},
+
+{at:"p8443",frame:N5,kind:"n",move:[[["kali","fw"]]],marks:{fw:{k:"drop",t:"drop"},p8443:{k:"ok",t:{ro:"protejat",en:"protected"}}},tables:["states"],hl:{states:"filtered"},log:{ro:"filtered: firewall",en:"filtered: firewall"},who:"filtered",
+ title:{ro:"Filtered: un firewall aruncă pachetul",en:"Filtered: a firewall drops the packet"},
+ body:{ro:`<p>Pentru <code>8443</code>, nmap a trimis SYN-ul de două ori și nu a primit nimic: <code>no-response</code> → <strong>filtered</strong>. Pe web-lab, regula nftables explică: <em>orice nu vine din 10.0.40.0/24 (rețeaua de administrare) spre 8443 se aruncă</em>.</p>
+<p>Din Kali nu știm dacă în spate e un serviciu: firewall-ul ascunde exact asta. Panoul de administrare e protejat cum trebuie.</p>`,
+ en:`<p>For <code>8443</code>, nmap sent the SYN twice and got nothing: <code>no-response</code> → <strong>filtered</strong>. On web-lab, the nftables rule explains it: <em>anything to 8443 not coming from 10.0.40.0/24 (the management network) is dropped</em>.</p>
+<p>From Kali we can't tell whether a service sits behind it: the firewall hides exactly that. The admin panel is properly protected.</p>`},
+ more:{ro:`<p>Felul regulii schimbă rezultatul. <code>drop</code> → nimic → filtered. <code>reject with icmp admin-prohibited</code> → ICMP → tot filtered, dar mai rapid. <code>reject with tcp reset</code> → RST → portul pare <strong>closed</strong>, ca și cum n-ar exista firewall.</p>`,
+  en:`<p>The kind of rule changes the result. <code>drop</code> → nothing → filtered. <code>reject with icmp admin-prohibited</code> → ICMP → still filtered, but faster. <code>reject with tcp reset</code> → RST → the port looks <strong>closed</strong>, as if there were no firewall.</p>`}},
+
+{at:"p50k",frame:N6,kind:"n",move:[[["kali","fw"]],[["fw","p22"],["fw","p80"],["fw","p3306"],["fw","p8443"],["fw","p50k"]]],marks:{p50k:{k:"drop",t:{ro:"găsit!",en:"found!"}}},tables:["ports"],hl:{ports:3},log:{ro:"-p-: portul 50000",en:"-p-: port 50000"},who:"-p-",
+ title:{ro:"-p-: toate cele 65535 de porturi, și o surpriză",en:"-p-: all 65535 ports, and a surprise"},
+ body:{ro:`<p>Lista de 1000 de porturi acoperă serviciile obișnuite, dar oamenii pornesc servicii și pe porturi neobișnuite. <code>-p-</code> le verifică pe <strong>toate</strong> (1–65535), iar <code>-T4</code> grăbește ritmul, potrivit pentru o rețea locală.</p>
+<p>Apare <strong>50000/tcp open</strong>. nmap scrie „ibm-db2”, dar asta e doar numele din lista lui pentru portul 50000. Nu știm încă ce rulează acolo.</p>
+<p class="key">Un serviciu „uitat” pe un port neobișnuit e exact ce lipsește din inventar și ce ar găsi un atacator.</p>`,
+ en:`<p>The 1000-port list covers the usual services, but people start services on unusual ports too. <code>-p-</code> checks <strong>all</strong> of them (1–65535), and <code>-T4</code> speeds up the pace, fine for a local network.</p>
+<p><strong>50000/tcp open</strong> appears. nmap says "ibm-db2", but that's just its list's name for port 50000. We don't know yet what runs there.</p>
+<p class="key">A "forgotten" service on an unusual port is exactly what's missing from the inventory, and what an attacker would find.</p>`},
+ try:[{cmd:"sudo nmap -p- -T4 10.0.50.20",d:{ro:"Toate porturile TCP, ritm rapid.",en:"All TCP ports, fast pace."}}]},
+
+{at:["p22","p80","p50k"],frame:N7,kind:"n",move:[[["kali","fw"]],[["fw","p22"],["fw","p80"],["fw","p50k"]],[["p22","fw"],["p80","fw"],["p50k","fw"]]],marks:{p50k:{k:"drop",t:"Werkzeug"}},tables:["scans"],hl:{scans:"-sV"},log:{ro:"-sV: versiuni",en:"-sV: versions"},who:"-sV",
+ title:{ro:"-sV: ce rulează de fapt, și în ce versiune",en:"-sV: what actually runs, and which version"},
+ body:{ro:`<p><code>-sV</code> nu se mai oprește la SYN-ACK: deschide conexiunea, citește ce spune serviciul (bannerul) și îi trimite câteva cereri cunoscute.</p>
+<ul><li>22: <strong>OpenSSH 9.2p1 Debian</strong>;</li>
+<li>80: <strong>Apache httpd 2.4.62</strong>;</li>
+<li>50000: <strong>Werkzeug 3.0.1, Python</strong>: un server de dezvoltare, nu DB2. Un coleg a testat o aplicație și a lăsat-o pornită. Serverele de dezvoltare nu sunt făcute să fie expuse în rețea.</li></ul>
+<p>Versiunile contează: cu ele afli din avizele de securitate (CVE) dacă un serviciu are probleme cunoscute.</p>`,
+ en:`<p><code>-sV</code> no longer stops at the SYN-ACK: it opens the connection, reads what the service says (its banner) and sends it a few well-known requests.</p>
+<ul><li>22: <strong>OpenSSH 9.2p1 Debian</strong>;</li>
+<li>80: <strong>Apache httpd 2.4.62</strong>;</li>
+<li>50000: <strong>Werkzeug 3.0.1, Python</strong>: a development server, not DB2. A colleague tested an app and left it running. Development servers aren't made to be exposed on a network.</li></ul>
+<p>Versions matter: with them you can check security advisories (CVEs) for known problems in a service.</p>`},
+ try:[{cmd:"sudo nmap -sV -p 22,80,50000 10.0.50.20",d:{ro:"Detectarea serviciilor și a versiunilor.",en:"Service and version detection."}}]},
+
+{at:"p80",frame:N8,kind:"n",move:[[["kali","fw"],["fw","p80"]],[["p80","fw"],["fw","kali"]],[["kali","fw"],["fw","p80"]]],tables:["scans"],hl:{scans:"-sT"},log:{ro:"connect scan",en:"connect scan"},who:"-sT",
+ title:{ro:"Fără sudo: connect scan (-sT)",en:"Without sudo: connect scan (-sT)"},
+ body:{ro:`<p>Un SYN scan are nevoie de drepturi de administrator, ca nmap să poată construi pachetele singur. Fără <code>sudo</code>, nmap folosește <strong>connect scan</strong> (<code>-sT</code>): îi cere sistemului de operare o conexiune normală.</p>
+<p>Pe fir: <code>[S]</code>, <code>[S.]</code>, <code>[.]</code> (ACK, conexiunea e completă), apoi închidere. Rezultatul e același (<em>open</em>), dar conexiunea a ajuns până la aplicație și apare mai ușor în jurnalele ei. E și puțin mai lent.</p>`,
+ en:`<p>A SYN scan needs admin rights, so nmap can build packets itself. Without <code>sudo</code>, nmap uses a <strong>connect scan</strong> (<code>-sT</code>): it asks the operating system for a normal connection.</p>
+<p>On the wire: <code>[S]</code>, <code>[S.]</code>, <code>[.]</code> (ACK, the connection is complete), then a close. The result is the same (<em>open</em>), but the connection reached the application and shows up more easily in its logs. It's also a little slower.</p>`}},
+
+{at:"fw",frame:N9,kind:"n",move:[[["kali","fw"]],[["fw","kali"]]],tables:["states"],hl:{states:"open|filtered"},log:{ro:"UDP",en:"UDP"},who:"-sU",
+ title:{ro:"UDP: fără handshake, cu răspunsuri ambigue",en:"UDP: no handshake, ambiguous answers"},
+ body:{ro:`<p>Multe servicii importante sunt pe UDP: DNS (53), NTP (123), SNMP (161). <code>-sU --top-ports 20</code> verifică cele mai folosite 20.</p>
+<ul><li>Dacă vine un răspuns UDP → <strong>open</strong>: aici SNMP pe 161;</li>
+<li>dacă vine <em>ICMP port unreachable</em> → <strong>closed</strong>;</li>
+<li>dacă nu vine nimic → <strong>open|filtered</strong>: un serviciu care tace sau un firewall, nmap nu poate deosebi (NTP pe 123).</li></ul>
+<p>Scanările UDP sunt lente, pentru că sistemele limitează mesajele ICMP. De aceea scanezi UDP țintit, nu toate porturile.</p>`,
+ en:`<p>Many important services are on UDP: DNS (53), NTP (123), SNMP (161). <code>-sU --top-ports 20</code> checks the 20 most common.</p>
+<ul><li>If a UDP reply comes → <strong>open</strong>: here SNMP on 161;</li>
+<li>if <em>ICMP port unreachable</em> comes → <strong>closed</strong>;</li>
+<li>if nothing comes → <strong>open|filtered</strong>: a silent service or a firewall, nmap can't tell which (NTP on 123).</li></ul>
+<p>UDP scans are slow, because systems rate-limit ICMP messages. That's why you scan UDP selectively, not every port.</p>`},
+ try:[{cmd:"sudo nmap -sU --top-ports 20 10.0.50.20",d:{ro:"Cele mai folosite 20 de porturi UDP.",en:"The 20 most common UDP ports."}}]},
+
+{at:["p22","p80"],frame:N10,kind:"n",move:[[["kali","fw"]],[["fw","p22"],["fw","p80"]]],tables:["nse"],hl:{nse:"default (-sC)"},log:{ro:"scripturi default",en:"default scripts"},who:"NSE",
+ title:{ro:"Scripturi NSE: doar categoria default",en:"NSE scripts: the default category only"},
+ body:{ro:`<p>nmap are un motor de scripturi (<strong>NSE</strong>) cu sute de scripturi, împărțite pe categorii. <code>-sC</code> rulează categoria <strong>default</strong>: informații utile și sigure.</p>
+<ul><li><code>ssh-hostkey</code>: amprenta cheii serverului SSH;</li>
+<li><code>http-title</code>: titlul paginii web, „Lab Web - Login”;</li>
+<li><code>http-server-header</code>: ce spune serverul despre el.</li></ul>
+<p>Alte categorii (<em>intrusive</em>, <em>brute</em>, <em>exploit</em>) încarcă serviciul, încearcă parole sau vulnerabilități. Ele depășesc descoperirea și se folosesc doar cu acord explicit, în scopul unui test.</p>`,
+ en:`<p>nmap has a scripting engine (<strong>NSE</strong>) with hundreds of scripts, split into categories. <code>-sC</code> runs the <strong>default</strong> category: useful, safe information.</p>
+<ul><li><code>ssh-hostkey</code>: the SSH server key's fingerprint;</li>
+<li><code>http-title</code>: the web page's title, "Lab Web - Login";</li>
+<li><code>http-server-header</code>: what the server says about itself.</li></ul>
+<p>Other categories (<em>intrusive</em>, <em>brute</em>, <em>exploit</em>) load the service, try passwords or vulnerabilities. They go beyond discovery and are used only with explicit approval, within a test's scope.</p>`}},
+
+{at:["fw","p22","p50k"],frame:N11,kind:"n",move:[[["kali","fw"]],[["fw","p80"]]],marks:{p50k:{k:"ok",t:"closed"},p22:{k:"ok",t:"filtered"}},log:{ro:"remediere și rescanare",en:"fix and rescan"},who:{ro:"Raportul",en:"The report"},
+ title:{ro:"Raportul: din scanare în remediere, dovedită cu o rescanare",en:"The report: from scan to fix, proven with a rescan"},
+ body:{ro:`<p>Scopul unei scanări nu e lista de porturi, ci ce schimbi după ea. Pe web-lab, echipa:</p>
+<ul><li>oprește serverul de dezvoltare de pe 50000;</li>
+<li>permite SSH doar din rețeaua de administrare <code>10.0.40.0/24</code>, ca la 8443.</li></ul>
+<p>Rescanarea completă, salvată cu <code>-oA</code>: <code>22 filtered</code>, <code>80 open</code>, <code>8443 filtered</code>, <code>50000 closed</code>. Din laborator mai e vizibil un singur serviciu, cel care chiar trebuie să fie public.</p>
+<p class="key">Același flux îl folosește un administrator pe propria rețea: scanează, compară cu ce ar trebui să existe, închide restul, rescanează.</p>`,
+ en:`<p>The point of a scan isn't the list of ports, it's what you change afterwards. On web-lab, the team:</p>
+<ul><li>stops the development server on 50000;</li>
+<li>allows SSH only from the management network <code>10.0.40.0/24</code>, like 8443.</li></ul>
+<p>The full rescan, saved with <code>-oA</code>: <code>22 filtered</code>, <code>80 open</code>, <code>8443 filtered</code>, <code>50000 closed</code>. From the lab, only one service is still visible: the one that really has to be public.</p>
+<p class="key">An admin uses the same loop on their own network: scan, compare with what should exist, close the rest, rescan.</p>`},
+ try:[{cmd:"sudo nmap -sV -p- -oA web-lab-$(date +%F) 10.0.50.20",d:{ro:"Raport complet în trei formate.",en:"A full report in three formats."}}]},
+
+{at:["kali","fw","p22","p80","p3306","p8443","p50k"],frame:null,kind:"none",summary:true,
+ title:{ro:"Recapitulare",en:"Recap"},
+ body:{ro:`<ul><li><strong>open</strong> = SYN-ACK, <strong>closed</strong> = RST (gazda e acolo), <strong>filtered</strong> = nimic sau ICMP (firewall).</li>
+<li>Cu sudo: <code>-sS</code> (half-open). Fără sudo: <code>-sT</code> (conexiune completă).</li>
+<li>Implicit: top 1000 de porturi. <code>-p-</code> le verifică pe toate; serviciile uitate stau des pe porturi neobișnuite.</li>
+<li>Coloana SERVICE e o ghicire; <code>-sV</code> vorbește cu serviciul și aduce versiunea.</li>
+<li>UDP (<code>-sU</code>): <em>open|filtered</em> când nu vine nimic; îl scanezi țintit.</li>
+<li><code>-sC</code> rulează doar scripturi default; restul categoriilor doar cu acord explicit.</li>
+<li>Raport cu <code>-oA</code>, remediere, rescanare ca dovadă.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Mergi la laborator ↓</button></p>`,
+ en:`<ul><li><strong>open</strong> = SYN-ACK, <strong>closed</strong> = RST (the host is there), <strong>filtered</strong> = nothing or ICMP (a firewall).</li>
+<li>With sudo: <code>-sS</code> (half-open). Without sudo: <code>-sT</code> (a full connection).</li>
+<li>By default: the top 1000 ports. <code>-p-</code> checks them all; forgotten services often sit on unusual ports.</li>
+<li>The SERVICE column is a guess; <code>-sV</code> talks to the service and gets the version.</li>
+<li>UDP (<code>-sU</code>): <em>open|filtered</em> when nothing comes back; scan it selectively.</li>
+<li><code>-sC</code> runs only default scripts; the other categories only with explicit approval.</li>
+<li>A report with <code>-oA</code>, a fix, and a rescan as proof.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Go to the lab ↓</button></p>`}}
+],
+
+reference:(T,lang)=>{
+  const ro=lang==="ro";
+  return `<div class="ref-grid"><section class="card refcard"><h2>${ro?"Opțiuni nmap":"nmap options"}</h2>
+<pre class="yaml">sudo nmap 10.0.50.20                  <span class="c"># -sS, top 1000</span>
+sudo nmap -p 22,80,443 10.0.50.20
+sudo nmap -p- -T4 10.0.50.20          <span class="c"># ${ro?"toate porturile":"all ports"}</span>
+sudo nmap -p 8443 --reason 10.0.50.20 <span class="c"># ${ro?"de ce are starea asta":"why it has this state"}</span>
+nmap -sT -p 80 10.0.50.20             <span class="c"># ${ro?"fără sudo":"without sudo"}</span>
+sudo nmap -sV -p 22,80 10.0.50.20     <span class="c"># ${ro?"versiuni":"versions"}</span>
+sudo nmap -sU --top-ports 20 10.0.50.20
+sudo nmap -sC -p 22,80 10.0.50.20     <span class="c"># ${ro?"scripturi default":"default scripts"}</span>
+sudo nmap -sV -p- -oA raport 10.0.50.20
+nmap --script-help default            <span class="c"># ${ro?"ce face fiecare script":"what each script does"}</span></pre></section>
+<section class="card refcard"><h2>${ro?"Pe țintă (web-lab)":"On the target (web-lab)"}</h2>
+<pre class="yaml">ss -ltnup                             <span class="c"># ${ro?"ce ascultă și unde":"what listens, and where"}</span>
+sudo nft list ruleset
+sudo tcpdump -ni eth0 host 10.0.50.10
+<span class="c"># ${ro?"SSH doar din rețeaua de administrare":"SSH only from the management network"}</span>
+sudo nft add rule inet filter input tcp dport 22 ip saddr != 10.0.40.0/24 drop</pre>
+<h3>${ro?"Întrebări de interviu":"Interview questions"}</h3>
+<pre class="yaml">open / closed / filtered?    → SYN-ACK / RST / ${ro?"nimic":"nothing"}
+-sS vs -sT?                  → half-open (root) / connect()
+${ro?"De ce -p-?":"Why -p-?"}                   → ${ro?"servicii pe porturi neobișnuite":"services on unusual ports"}
+${ro?"SERVICE e sigur?":"Is SERVICE reliable?"}         → ${ro?"nu, folosește -sV":"no, use -sV"}</pre></section></div>`;
+},
+
+gloss:[
+ ["Port",null,{ro:"Număr (1–65535) pe care ascultă un serviciu de rețea.",en:"A number (1–65535) a network service listens on."}],
+ ["SYN scan",null,{ro:"Scanare care trimite SYN și răspunde la SYN-ACK cu RST, fără să termine conexiunea.",en:"A scan that sends a SYN and answers a SYN-ACK with a RST, never completing the connection."}],
+ ["Connect scan",null,{ro:"Scanare prin conexiuni TCP complete, făcute de sistemul de operare.",en:"A scan using full TCP connections made by the operating system."}],
+ ["open",null,{ro:"Portul a răspuns cu SYN-ACK: un serviciu ascultă.",en:"The port answered SYN-ACK: a service is listening."}],
+ ["closed",null,{ro:"Portul a răspuns cu RST: gazda există, nimic nu ascultă.",en:"The port answered RST: the host exists, nothing listens."}],
+ ["filtered",null,{ro:"Niciun răspuns sau ICMP de interzicere: un firewall intervine.",en:"No answer, or an ICMP prohibited message: a firewall steps in."}],
+ ["Banner",null,{ro:"Textul cu care un serviciu se prezintă, de exemplu versiunea.",en:"The text a service introduces itself with, such as its version."}],
+ ["NSE",null,{ro:"Nmap Scripting Engine: scripturi împărțite pe categorii.",en:"Nmap Scripting Engine: scripts split into categories."}],
+ ["CVE",null,{ro:"Identificator public al unei vulnerabilități cunoscute.",en:"A public identifier for a known vulnerability."}],
+ [{ro:"Suprafață expusă",en:"Exposed surface"},null,{ro:"Toate serviciile accesibile din rețea; cu cât e mai mică, cu atât mai bine.",en:"Every service reachable from the network; the smaller, the better."}]
+],
+glossEx:{
+ "filtered":{ro:"8443: regula nftables aruncă tot ce nu vine din 10.0.40.0/24.",en:"8443: the nftables rule drops anything not from 10.0.40.0/24."},
+ "closed":{ro:"3306: MySQL ascultă doar pe 127.0.0.1.",en:"3306: MySQL listens only on 127.0.0.1."}
+},
+
+quiz:[
+ {"q":{"ro":"Ce răspuns la SYN înseamnă că portul e open?","en":"Which reply to a SYN means the port is open?"},"o":["RST",{"ro":"Niciun răspuns","en":"No reply"},{"ro":"ICMP port unreachable","en":"ICMP port unreachable"},"SYN-ACK"],"a":3,"e":{"ro":"Un serviciu acceptă conexiunea.","en":"A service accepts the connection."}},
+ {"q":{"ro":"Un port e closed. Ce știi despre gazdă?","en":"A port is closed. What do you know about the host?"},"o":[{"ro":"E oprită","en":"It's off"},{"ro":"Are un firewall","en":"It has a firewall"},{"ro":"E pornită, dar pe portul ăsta nu ascultă nimic","en":"It's up, but nothing listens on this port"},{"ro":"E vulnerabilă","en":"It's vulnerable"}],"a":2,"e":{"ro":"RST-ul vine de la sistemul de pe gazdă.","en":"The RST comes from the host's own system."}},
+ {"q":{"ro":"Ce înseamnă de obicei filtered?","en":"What does filtered usually mean?"},"o":[{"ro":"Serviciul e oprit","en":"The service is stopped"},{"ro":"Un firewall aruncă sau respinge pachetele","en":"A firewall drops or rejects the packets"},{"ro":"Portul e deschis","en":"The port is open"},{"ro":"Gazda nu există","en":"The host doesn't exist"}],"a":1,"e":{"ro":"nmap nu poate vedea ce e în spatele firewall-ului.","en":"nmap can't see what's behind the firewall."}},
+ {"q":{"ro":"De ce nmap fără -p- poate rata un serviciu?","en":"Why can nmap without -p- miss a service?"},"o":[{"ro":"Implicit verifică doar cele mai folosite 1000 de porturi","en":"By default it only checks the 1000 most common ports"},{"ro":"E prea rapid","en":"It's too fast"},{"ro":"Nu vede UDP-ul","en":"It can't see UDP"},{"ro":"Are nevoie de -sV","en":"It needs -sV"}],"a":0,"e":{"ro":"Serviciul de pe 50000 a apărut doar cu -p-.","en":"The service on 50000 only showed up with -p-."}},
+ {"q":{"ro":"nmap scrie 50000/tcp open ibm-db2. Rulează sigur DB2?","en":"nmap says 50000/tcp open ibm-db2. Is DB2 definitely running?"},"o":[{"ro":"Da","en":"Yes"},{"ro":"Da, dacă e open","en":"Yes, if it's open"},{"ro":"Doar pe Windows","en":"Only on Windows"},{"ro":"Nu: SERVICE e doar numele obișnuit al portului; -sV verifică","en":"No: SERVICE is just the port's usual name; -sV checks"}],"a":3,"e":{"ro":"-sV a arătat un server Python de dezvoltare.","en":"-sV showed a Python development server."}},
+ {"q":{"ro":"Ce face SYN scan-ul după ce primește SYN-ACK?","en":"What does a SYN scan do after receiving a SYN-ACK?"},"o":[{"ro":"Trimite ACK și deschide conexiunea","en":"Sends ACK and opens the connection"},{"ro":"Trimite date HTTP","en":"Sends HTTP data"},{"ro":"Trimite RST, fără să termine conexiunea","en":"Sends RST, without completing the connection"},{"ro":"Nu face nimic","en":"Does nothing"}],"a":2,"e":{"ro":"De aceea se numește half-open.","en":"That's why it's called half-open."}},
+ {"q":{"ro":"La UDP, portul nu răspunde deloc. Ce stare raportează nmap?","en":"On UDP, the port doesn't answer at all. Which state does nmap report?"},"o":["open","open|filtered","closed","filtered"],"a":1,"e":{"ro":"Fără handshake, tăcerea e ambiguă.","en":"Without a handshake, silence is ambiguous."}},
+ {"q":{"ro":"Ce scripturi NSE rulează -sC?","en":"Which NSE scripts does -sC run?"},"o":[{"ro":"Categoria default: informații utile și sigure","en":"The default category: useful, safe information"},{"ro":"Toate","en":"All of them"},{"ro":"Doar exploit","en":"Only exploit"},{"ro":"Doar brute","en":"Only brute"}],"a":0,"e":{"ro":"Celelalte categorii doar cu acord explicit.","en":"Other categories only with explicit approval."}}
+]
+};
+})();
+</script>
+<script src="../assets/engine.js?v=4"></script>
+<script src="../assets/labs-data.js?v=9"></script>
+<script src="../assets/lab.js?v=1"></script>
+<script type="module" src="../assets/auth.js?v=16"></script>
+</body>
+</html>

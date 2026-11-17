@@ -401,6 +401,42 @@ terraform: { title: "Terraform", tasks: [
  { type: "order", name: B("De la simptom la cauză", "From symptom to cause"), q: B("Ordonează investigația pentru serverul lent.", "Order the investigation for the slow server."),
    items: [B("uptime: load 18 pe 4 nuclee", "uptime: load 18 on 4 cores"), B("top: 66% wa, procese în D", "top: 66% wa, processes in D"), B("vmstat 1 5: si/so mari", "vmstat 1 5: high si/so"), B("free -h: available 160 MiB", "free -h: available 160 MiB"), B("ps --sort=-%mem: report-job 11,6 GB", "ps --sort=-%mem: report-job 11.6 GB"), B("journalctl -k: Out of memory: Killed process", "journalctl -k: Out of memory: Killed process")],
    hint: B("De la general (load) la proces și dovadă.", "From general (load) to the process and the proof.") }
+]},
+
+"kali-lab": { title: "Kali: laborator", tasks: [
+ { type: "term", name: B("Verificarea izolării", "The isolation check"), q: B("Verifică pe unde ar pleca un pachet spre routerul de acasă, 192.168.1.1. În laborator vrei „unreachable”.", "Check which way a packet to the home router, 192.168.1.1, would go. In the lab you want \"unreachable\"."),
+   prompt: "kali@kali:~$", need: ["ip", "route", "get", "192.168.1.1"], sol: "ip route get 192.168.1.1",
+   out: "RTNETLINK answers: Network is unreachable",
+   hint: B("ip route get <adresă>", "ip route get <address>"), why: B("Adaptorul NAT e deconectat: Kali ajunge doar în 10.0.50.0/24.", "The NAT adapter is unplugged: Kali reaches only 10.0.50.0/24.") },
+ { type: "input", name: B("Modul de rețea", "The network mode"), q: B("Ce mod de rețea VirtualBox leagă doar VM-urile între ele? (două cuvinte, în engleză)", "Which VirtualBox network mode connects only VMs to each other? (two words)"),
+   ans: ["internal network", "internal"], hint: B("Nu NAT, nu bridged.", "Not NAT, not bridged."), why: B("Bridged pune VM-ul în rețeaua de acasă; NAT îl lasă să iasă prin laptop.", "Bridged puts the VM on the home network; NAT lets it out through the laptop.") },
+ { type: "order", name: B("Pregătirea laboratorului", "Preparing the lab"), q: B("Ordonează pașii pentru un laborator Kali sigur.", "Order the steps for a safe Kali lab."),
+   items: [B("Descarci imaginea de pe kali.org și verifici SHA256", "Download the image from kali.org and check its SHA256"), B("Pui Kali în Internal Network + NAT", "Put Kali on Internal Network + NAT"), B("Schimbi parola implicită cu passwd", "Change the default password with passwd"), B("apt update && apt full-upgrade", "apt update && apt full-upgrade"), B("Deconectezi NAT și verifici cu ip route get", "Unplug NAT and check with ip route get"), B("Faci snapshot-ul curat", "Take the clean snapshot")],
+   hint: B("Actualizezi înainte să deconectezi NAT-ul.", "Update before unplugging NAT.") }
+]},
+
+"kali-descoperire": { title: "Descoperire", tasks: [
+ { type: "term", name: B("Descoperire fără porturi", "Discovery without ports"), q: B("Află ce gazde sunt pornite în 10.0.50.0/24, fără să scanezi porturi.", "Find which hosts are up in 10.0.50.0/24, without scanning ports."),
+   prompt: "kali@kali:~$", need: ["nmap", "-sn", "10.0.50.0/24"], sol: "sudo nmap -sn 10.0.50.0/24",
+   out: "Nmap scan report for 10.0.50.1\nHost is up (0.00042s latency).\nMAC Address: 52:54:00:12:35:01 (QEMU virtual NIC)\nNmap scan report for 10.0.50.20\nHost is up (0.00031s latency).\nMAC Address: 08:00:27:3A:91:0C (PCS Systemtechnik/Oracle VirtualBox virtual NIC)\n…\nNmap done: 256 IP addresses (5 hosts up) scanned in 2.07 seconds",
+   hint: B("nmap -s? <rețea>", "nmap -s? <network>"), why: B("Pe segmentul local, cu sudo, nmap folosește ARP.", "On the local segment, with sudo, nmap uses ARP.") },
+ { type: "input", name: B("Prefixul MAC", "The MAC prefix"), q: B("Cum se numesc primii 3 octeți ai unui MAC, care identifică producătorul? (trei litere)", "What are a MAC's first 3 bytes, identifying the vendor, called? (three letters)"),
+   ans: ["oui"], hint: B("Organizationally Unique …", "Organizationally Unique …"), why: B("08:00:27 = VirtualBox.", "08:00:27 = VirtualBox.") },
+ { type: "order", name: B("Inventarul", "The inventory"), q: B("Ordonează pașii descoperirii rețelei, de la cel mai discret.", "Order the discovery steps, most discreet first."),
+   items: [B("Asculți: ip neigh, tcpdump pe ARP și mDNS", "Listen: ip neigh, tcpdump on ARP and mDNS"), B("Confirmi rețeaua: ip -br addr, ip route", "Confirm the network: ip -br addr, ip route"), B("arp-scan -l în segmentul local", "arp-scan -l on the local segment"), B("nmap -sn dincolo de router", "nmap -sn beyond the router"), B("Identifici necunoscutul cu câteva porturi și -sV", "Identify the unknown device with a few ports and -sV"), B("Salvezi cu -oA și compari cu ndiff", "Save with -oA and compare with ndiff")],
+   hint: B("Pasiv înainte de activ.", "Passive before active.") }
+]},
+
+"kali-nmap": { title: "nmap", tasks: [
+ { type: "term", name: B("Toate porturile", "Every port"), q: B("Scanează toate cele 65535 de porturi TCP ale lui web-lab (10.0.50.20), cu ritm rapid.", "Scan all 65535 TCP ports on web-lab (10.0.50.20), at a fast pace."),
+   prompt: "kali@kali:~$", need: ["nmap", "-p-", "10.0.50.20"], sol: "sudo nmap -p- -T4 10.0.50.20",
+   out: "Nmap scan report for 10.0.50.20\nNot shown: 65531 closed tcp ports (reset)\nPORT      STATE    SERVICE\n22/tcp    open     ssh\n80/tcp    open     http\n8443/tcp  filtered https-alt\n50000/tcp open     ibm-db2",
+   hint: B("nmap -p<ce porturi?> -T4 <țintă>", "nmap -p<which ports?> -T4 <target>"), why: B("50000 nu e în top 1000; „ibm-db2” e doar o ghicire după număr.", "50000 isn't in the top 1000; \"ibm-db2\" is just a guess from the number.") },
+ { type: "input", name: B("Starea", "The state"), q: B("Ce stare raportează nmap pentru un port TCP care răspunde cu RST? (un cuvânt)", "Which state does nmap report for a TCP port that answers with a RST? (one word)"),
+   ans: ["closed"], hint: B("Gazda e acolo, dar nu ascultă nimic.", "The host is there, but nothing listens."), why: B("open = SYN-ACK, filtered = nimic sau ICMP.", "open = SYN-ACK, filtered = nothing or ICMP.") },
+ { type: "order", name: B("De la scanare la remediere", "From scan to fix"), q: B("Ordonează pașii pentru web-lab.", "Order the steps for web-lab."),
+   items: [B("nmap: top 1000 porturi", "nmap: the top 1000 ports"), B("nmap -p- -T4: toate porturile", "nmap -p- -T4: every port"), B("nmap -sV pe porturile deschise", "nmap -sV on the open ports"), B("nmap -sC: scripturi default", "nmap -sC: default scripts"), B("Oprești serviciul uitat, restrângi SSH", "Stop the forgotten service, restrict SSH"), B("Rescanezi cu -oA ca dovadă", "Rescan with -oA as proof")],
+   hint: B("Lărgești scanarea, apoi aprofundezi.", "Widen the scan, then go deeper.") }
 ]}
 };
 })();

@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kali Linux: un laborator sigur</title>
+<meta name="description" content="Lecție interactivă: un laborator Kali Linux sigur și legal: reguli și permisiuni, imaginea verificată, moduri de rețea în VirtualBox, primul login, actualizări, metapachete, izolarea de rețeaua de acasă, ținte de test și snapshot-uri. / Interactive lesson: building a safe Kali Linux lab.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/diagram.css?v=1">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<script>
+(function(){
+const RO="READ-ONLY",CH="LAB CHANGE",SC="ACTIVE SCAN";
+const K2={q:{ro:"E imaginea Kali exact cea publicată?",en:"Is the Kali image exactly the published one?"},cmd:"sha256sum kali-linux-2026.3-virtualbox-amd64.7z",mode:RO,out:"9f2a6c…e41b  kali-linux-2026.3-virtualbox-amd64.7z",proves:{ro:"hash-ul e identic cu cel de pe kali.org: fișierul nu a fost modificat pe drum",en:"the hash matches the one on kali.org: the file wasn't altered on the way"}};
+const K3={q:{ro:"În ce rețea pui mașina virtuală Kali?",en:"Which network do you put the Kali VM on?"},fix:{ro:"Adaptor 1: Internal Network „lab-net” · Adaptor 2: NAT, doar pentru actualizări",en:"Adapter 1: Internal Network \"lab-net\" · Adapter 2: NAT, for updates only"},mode:CH,proves:{ro:"Kali și țintele sunt într-o rețea virtuală închisă; Kali nu e pus direct în rețeaua de acasă (bridged)",en:"Kali and the targets sit on a closed virtual network; Kali isn't placed directly on the home network (bridged)"}};
+const K4={q:{ro:"Cu ce cont lucrezi?",en:"Which account do you work as?"},fix:"passwd",mode:CH,cmd:"id",out:"passwd: password updated successfully · uid=1000(kali) gid=1000(kali) groups=1000(kali),27(sudo),…",proves:{ro:"lucrezi ca utilizator obișnuit, cu sudo doar când trebuie; parola implicită kali/kali nu mai merge",en:"you work as a normal user, with sudo only when needed; the default kali/kali password no longer works"}};
+const K5={q:{ro:"Sunt uneltele la zi?",en:"Are the tools up to date?"},cmd:"sudo apt update && sudo apt full-upgrade -y",mode:CH,out:"Get:1 http://http.kali.org/kali kali-rolling InRelease [41.5 kB] · 412 upgraded, 3 newly installed, 0 to remove",proves:{ro:"Kali e „rolling”: pachetele vin semnate din depozitul kali-rolling și se actualizează des",en:"Kali is \"rolling\": packages come signed from the kali-rolling repository and update often"}};
+const K6={q:{ro:"Ce unelte instalezi?",en:"Which tools do you install?"},cmd:"apt-cache search --names-only '^kali-tools-' · sudo apt install -y kali-tools-information-gathering",mode:CH,out:"kali-tools-information-gathering - Kali Linux information gathering menu · … · Setting up nmap (7.95+dfsg-1kali1) …",proves:{ro:"instalezi doar categoria de care ai nevoie, nu tot ce există",en:"you install only the category you need, not everything there is"}};
+const K7={q:{ro:"Ce adrese și ce rute are Kali?",en:"Which addresses and routes does Kali have?"},cmd:"ip -br addr · ip route",mode:RO,out:"eth0 UP 10.0.50.10/24 · eth1 UP 10.0.2.15/24 · default via 10.0.2.2 dev eth1 · 10.0.50.0/24 dev eth0",proves:{ro:"eth0 = laboratorul; eth1 = NAT, singurul drum spre exterior",en:"eth0 = the lab; eth1 = NAT, the only way out"}};
+const K8={q:{ro:"Poate Kali ajunge la rețeaua de acasă?",en:"Can Kali reach the home network?"},cmd:"ip route get 192.168.1.1 · ping -c1 192.168.1.1",mode:RO,out:"192.168.1.1 via 10.0.2.2 dev eth1 src 10.0.2.15 · 64 bytes from 192.168.1.1: icmp_seq=1 ttl=63 time=2.1 ms",proves:{ro:"da: prin NAT, Kali ajunge la routerul de acasă; o scanare greșită ar lovi și telefoanele, televizorul, vecinii de rețea",en:"yes: through NAT, Kali reaches the home router; a mistyped scan would also hit the phones, the TV, everyone on that network"},bad:"LEAK"};
+const K9={q:{ro:"Cum închidem drumul spre rețeaua de acasă?",en:"How do we close the path to the home network?"},fix:{ro:"după actualizare: „Cable connected” debifat pe adaptorul NAT (sau sudo ip link set eth1 down)",en:"after updating: untick \"Cable connected\" on the NAT adapter (or sudo ip link set eth1 down)"},mode:CH,cmd:"ip route get 192.168.1.1",out:"RTNETLINK answers: Network is unreachable",proves:{ro:"acum Kali ajunge doar în 10.0.50.0/24, laboratorul",en:"Kali now reaches only 10.0.50.0/24, the lab"}};
+const K10={q:{ro:"Răspund țintele de test?",en:"Do the test targets answer?"},cmd:"ping -c2 10.0.50.20 · ping -c2 10.0.50.30",mode:RO,out:"2 packets transmitted, 2 received, 0% packet loss · 2 packets transmitted, 2 received, 0% packet loss",proves:{ro:"cele două ținte vulnerabile intenționat răspund și există doar în rețeaua internă",en:"the two deliberately vulnerable targets answer, and exist only on the internal network"}};
+const K11={q:{ro:"Cum revii la o stare curată?",en:"How do you get back to a clean state?"},fix:"VBoxManage snapshot kali take curat-2026-11",mode:CH,cmd:"VBoxManage snapshot kali list",out:"Name: curat-2026-11 (UUID: 3c1f…) *",proves:{ro:"după orice exercițiu, revii la starea curată în câteva secunde (la fel pentru ținte)",en:"after any exercise, you return to the clean state in seconds (the same for the targets)"}};
+
+window.LESSON={
+docTitle:{ro:"Kali Linux: un laborator sigur",en:"Kali Linux: a safe lab"},
+eyebrow:{ro:"Lecție interactivă · Securitate",en:"Interactive lesson · Security"},
+title:{ro:"Kali Linux: un laborator sigur, legal și izolat",en:"Kali Linux: a safe, legal and isolated lab"},
+sub:{ro:"Kali Linux e o distribuție cu sute de unelte pentru testarea securității. Aceleași unelte pot strica sau pot fi ilegale dacă le îndrepți spre rețeaua altcuiva. Construim pas cu pas un laborator pe laptop: reguli clare, imaginea verificată, o rețea virtuală închisă, primul login, actualizări, verificarea că nu poți ajunge din greșeală în rețeaua de acasă, ținte de test și snapshot-uri.",en:"Kali Linux is a distribution with hundreds of security-testing tools. The same tools can break things, or be illegal, if you point them at someone else's network. We build a lab on a laptop step by step: clear rules, a verified image, a closed virtual network, the first login, updates, checking you can't reach the home network by mistake, test targets and snapshots."},
+meta:[{ro:"≈ 20 minute",en:"≈ 20 minutes"},{ro:"12 pași",en:"12 steps"},{ro:"8 întrebări",en:"8 questions"},{ro:"Începător",en:"Beginner"}],
+goals:[{ro:"Ce ai voie să scanezi și de ce contează permisiunea scrisă",en:"What you're allowed to scan and why written permission matters"},{ro:"Modurile de rețea ale unei mașini virtuale: NAT, internal, host-only, bridged",en:"A VM's network modes: NAT, internal, host-only, bridged"},{ro:"Primul login, actualizări și metapachete în Kali",en:"First login, updates and metapackages in Kali"},{ro:"Izolarea laboratorului, ținte de test și snapshot-uri",en:"Isolating the lab, test targets and snapshots"}],
+foot:{ro:"Adrese și nume fictive. Folosește uneltele doar pe sisteme care îți aparțin sau pentru care ai acord scris. Lecțiile următoare: „Descoperirea rețelei” și „Scanarea porturilor cu nmap”.",en:"Fictional addresses and names. Use the tools only on systems you own or have written permission for. Next lessons: \"Network discovery\" and \"Port scanning with nmap\"."},
+ui:{frameT:{ro:"Laboratorul (live)",en:"The lab (live)"},refT:{ro:"Comenzi pentru laborator",en:"Lab commands"},refLead:{ro:"Configurarea VM-ului, rețeaua și comenzile de bază.",en:"VM setup, the network and the basic commands."}},
+tryT:{ro:"Încearcă (în laboratorul tău)",en:"Try it (in your lab)"},
+legend:[["lg-ip","READ",{ro:"doar citește",en:"read-only"}],["lg-arp","CHANGE",{ro:"modifică sistemul",en:"changes the system"}],["lg-tcp","ERR",{ro:"risc găsit",en:"risk found"}]],
+
+nodes:{
+  host:{type:"host",name:"laptop",lines:["VirtualBox"]},
+  home:{type:"switch",name:{ro:"rețeaua de acasă",en:"home network"},lines:["192.168.1.0/24"]},
+  net:{type:"globe",name:"internet",lines:["http.kali.org"]},
+  kali:{type:"server",name:"kali",lines:["10.0.50.10"]},
+  nat:{type:"router",name:"NAT",lines:[{ro:"doar update-uri",en:"updates only"}]},
+  lab:{type:"switch",name:"lab-net",lines:["10.0.50.0/24"]},
+  t1:{type:"server",name:"web-lab",lines:["10.0.50.20"]},
+  t2:{type:"server",name:"win-lab",lines:["10.0.50.30"]}
+},
+links:[["host","home"],["home","net"],["host","kali","virt"],["kali","nat"],["nat","home"],["kali","lab"],["lab","t1"],["lab","t2"]],
+linkLabels:{"host-home":"Wi-Fi","home-net":{"ro":"router de acasă","en":"home router"},"host-kali":"VM","kali-nat":"eth1","nat-home":{"ro":"prin laptop","en":"through the laptop"},"kali-lab":"eth0","lab-t1":"internal","lab-t2":"internal"},
+layouts:{
+  wide:{vb:[0,0,1000,520],n:{host:[260,80],home:[720,170],net:[910,170],kali:[260,290],nat:[520,290],lab:[260,420],t1:[430,375],t2:[560,450]},
+    zones:[{x:170,y:210,w:470,h:300,top:true,cls:"virt",l:{ro:"în VirtualBox, pe laptop",en:"in VirtualBox, on the laptop"}}],lpos:{"nat-home":.42}},
+  narrow:{vb:[0,0,360,860],n:{host:[60,90],home:[300,90],net:[180,190],kali:[70,340],nat:[270,340],lab:[110,510],t1:[70,700],t2:[290,700]}}
+},
+groups:[
+  {id:"q",color:"l7",fields:["q"],name:{ro:"Întrebarea",en:"The question"},short:"Q",grow:2},
+  {id:"c",color:"l3",fields:["cmd","mode","out"],name:{ro:"Comanda și rezultatul",en:"Command and output"},short:"CMD",grow:4},
+  {id:"e",color:"arp",fields:["proves","fix"],name:{ro:"Dovada și configurarea",en:"Evidence and setup"},short:{ro:"Dovada",en:"Evidence"},grow:3}
+],
+fieldLabels:{q:{ro:"Întrebarea",en:"The question"},cmd:{ro:"Comanda",en:"Command"},mode:{ro:"Tip",en:"Type"},out:{ro:"Ce afișează",en:"Output"},proves:{ro:"Ce dovedește",en:"What it proves"},fix:{ro:"Configurare",en:"Setup"}},
+pdu:f=>f.bad?{badge:{ro:"Risc găsit",en:"Risk found"},tok:[f.bad,"k-tcp"]}:f.mode===SC?{badge:{ro:"Scanare activă: doar în laborator",en:"Active scan: lab only"},tok:["SCAN","k-app"]}:f.mode===CH?{badge:{ro:"Schimbare în laborator",en:"Change in the lab"},tok:["CHANGE","k-arp"]}:{badge:{ro:"Doar citește",en:"Read-only"},tok:["READ","k-ip"]},
+
+init:{},
+tables:{
+  rules:{title:{ro:"Regulile laboratorului",en:"The lab rules"},cols:[{ro:"Regulă",en:"Rule"},{ro:"De ce",en:"Why"}],plain:[0,1],
+    rows:()=>[[{ro:"Scanezi doar ce îți aparține sau ce ai în scris",en:"Scan only what you own or have in writing"},{ro:"accesul și chiar scanarea neautorizată pot fi infracțiuni sau încălcări de contract",en:"unauthorised access, and even scanning, can be a crime or a breach of contract"}],[{ro:"Scop scris: ce adrese, ce ore, ce teste",en:"A written scope: which addresses, which hours, which tests"},{ro:"la un test real, scopul e contractul tău",en:"in a real test, the scope is your contract"}],[{ro:"Nu în rețeaua de la serviciu fără acord",en:"Not on the work network without approval"},{ro:"o scanare poate declanșa alarme sau poate opri echipamente vechi",en:"a scan can trigger alarms or knock old devices over"}],[{ro:"Ținte vulnerabile doar în rețea internă",en:"Vulnerable targets on an internal network only"},{ro:"nu le expui niciodată la internet",en:"never expose them to the internet"}]]},
+  modes:{title:{ro:"Modurile de rețea în VirtualBox",en:"VirtualBox network modes"},cols:[{ro:"Mod",en:"Mode"},{ro:"VM-ul vede",en:"The VM sees"},{ro:"Pentru laborator",en:"For the lab"}],plain:[1,2],
+    rows:()=>[["NAT",{ro:"internetul și rețeaua laptopului, prin laptop",en:"the internet and the laptop's network, through the laptop"},{ro:"doar pentru actualizări, apoi deconectat",en:"for updates only, then disconnected"}],["Internal Network",{ro:"doar alte VM-uri din aceeași rețea internă",en:"only other VMs on the same internal network"},{ro:"da: rețeaua laboratorului",en:"yes: the lab network"}],["Host-only",{ro:"VM-urile și laptopul",en:"the VMs and the laptop"},{ro:"da, dacă vrei acces din laptop",en:"yes, if you want access from the laptop"}],["Bridged",{ro:"rețeaua de acasă, ca un dispozitiv nou",en:"the home network, like a new device"},{ro:"nu pentru scanări",en:"not for scanning"}]]},
+  meta:{title:{ro:"Metapachete Kali",en:"Kali metapackages"},cols:[{ro:"Pachet",en:"Package"},{ro:"Conține",en:"Contains"}],plain:[1],
+    rows:()=>[["kali-linux-core",{ro:"sistemul de bază, fără unelte",en:"the base system, no tools"}],["kali-linux-default",{ro:"setul obișnuit din imaginile oficiale",en:"the usual set from the official images"}],["kali-tools-information-gathering",{ro:"descoperire: nmap, arp-scan, netdiscover, dnsrecon…",en:"discovery: nmap, arp-scan, netdiscover, dnsrecon…"}],["kali-linux-large / everything",{ro:"aproape tot; mare și rar necesar",en:"nearly everything; big and rarely needed"}]]}
+},
+log:{title:{ro:"Jurnalul laboratorului",en:"Lab log"},lead:{ro:"Fiecare pas al configurării și ce a dovedit.",en:"Every setup step and what it proved."},first:{ro:"Pas",en:"Step"},minWidth:600,
+  cols:[{h:{ro:"Comanda",en:"Command"},v:f=>f.fix||f.cmd||"",cls:"mac"},{h:{ro:"Ce dovedește",en:"What it proves"},v:f=>f.proves||"",cls:""}]},
+
+steps:[
+{at:["kali","home"],frame:null,kind:"none",tables:["rules"],who:{ro:"Regulile",en:"The rules"},
+ title:{ro:"Înainte de orice: ce ai voie să scanezi",en:"Before anything: what you're allowed to scan"},
+ body:{ro:`<p><strong>Kali Linux</strong> e o distribuție Debian întreținută de OffSec, cu sute de unelte pentru teste de securitate. Uneltele nu sunt „de hacker” sau „de apărător”: aceeași comandă nmap o rulează și un administrator care își face inventarul, și un atacator care caută o țintă.</p>
+<p>Diferența e <strong>permisiunea</strong>. În multe țări, inclusiv în România, accesul fără drept la un sistem informatic e infracțiune. Chiar și o simplă scanare a rețelei altcuiva poate încălca un contract (de exemplu cu furnizorul de internet sau cu angajatorul) sau poate declanșa alarme.</p>
+<p class="key">Regula laboratorului: scanezi doar mașini care îți aparțin, într-o rețea pe care o controlezi. La un test real, ai un acord scris cu un scop clar.</p>`,
+ en:`<p><strong>Kali Linux</strong> is a Debian distribution maintained by OffSec, with hundreds of security-testing tools. The tools aren't "attacker" or "defender" tools: the same nmap command is run by an admin taking inventory and by an attacker looking for a target.</p>
+<p>The difference is <strong>permission</strong>. In many countries, Romania included, accessing a computer system without the right to do so is a crime. Even a simple scan of someone else's network can break a contract (with your internet provider or employer, for example) or trigger alarms.</p>
+<p class="key">The lab rule: scan only machines you own, on a network you control. In a real test, you have a written agreement with a clear scope.</p>`}},
+
+{at:"host",frame:K2,kind:"k",log:{ro:"imaginea verificată",en:"the image verified"},who:"sha256sum",
+ title:{ro:"Imaginea oficială, verificată",en:"The official image, verified"},
+ body:{ro:`<p>Cea mai simplă variantă pentru un laborator: imaginea gata făcută pentru <strong>VirtualBox</strong> (sau VMware) de pe <code>kali.org</code>. O descarci doar de acolo, nu de pe site-uri cu „Kali modificat”.</p>
+<p>Lângă fiecare imagine, site-ul publică un <strong>SHA256</strong>. <code>sha256sum</code> calculează amprenta fișierului descărcat; dacă e identică, fișierul e exact cel publicat. O unealtă de securitate descărcată modificată ar fi o ironie scumpă.</p>`,
+ en:`<p>The simplest option for a lab: the ready-made <strong>VirtualBox</strong> (or VMware) image from <code>kali.org</code>. Download it only from there, not from sites offering a "modified Kali".</p>
+<p>Next to each image, the site publishes a <strong>SHA256</strong>. <code>sha256sum</code> computes the downloaded file's fingerprint; if it matches, the file is exactly the published one. A security tool downloaded already tampered with would be an expensive irony.</p>`},
+ try:[{cmd:"sha256sum kali-linux-*-virtualbox-amd64.7z",d:{ro:"Compari rezultatul cu valoarea de pe kali.org.",en:"Compare the result with the value on kali.org."}}]},
+
+{at:["kali","lab"],frame:K3,kind:"k",tables:["modes"],hl:{modes:"Internal Network"},log:{ro:"rețeaua VM-ului",en:"the VM's network"},who:{ro:"Rețeaua",en:"The network"},
+ title:{ro:"Cea mai importantă alegere: rețeaua mașinii virtuale",en:"The most important choice: the VM's network"},
+ body:{ro:`<p>O mașină virtuală poate fi legată la rețea în mai multe feluri. Pentru laborator:</p>
+<ul><li><strong>Adaptorul 1: Internal Network</strong>, numit <code>lab-net</code>: o rețea virtuală care există doar între VM-urile tale. Aici stau Kali și țintele;</li>
+<li><strong>Adaptorul 2: NAT</strong>: Kali iese prin laptop, ca să descarce actualizări.</li></ul>
+<p>Ce <strong>nu</strong> folosești pentru scanări: <strong>bridged</strong>. Atunci Kali apare în rețeaua de acasă ca un dispozitiv nou, iar orice scanare atinge routerul, telefoanele și televizorul.</p>`,
+ en:`<p>A virtual machine can be connected to a network in several ways. For the lab:</p>
+<ul><li><strong>Adapter 1: Internal Network</strong>, named <code>lab-net</code>: a virtual network that exists only between your VMs. Kali and the targets live here;</li>
+<li><strong>Adapter 2: NAT</strong>: Kali goes out through the laptop, to download updates.</li></ul>
+<p>What you <strong>don't</strong> use for scanning: <strong>bridged</strong>. Then Kali shows up on the home network as a new device, and any scan touches the router, the phones and the TV.</p>`}},
+
+{at:"kali",frame:K4,kind:"k",log:{ro:"parola schimbată",en:"password changed"},who:{ro:"Primul login",en:"First login"},
+ title:{ro:"Primul login: schimbi parola implicită",en:"First login: change the default password"},
+ body:{ro:`<p>Imaginile oficiale pornesc cu utilizatorul <code>kali</code> și parola <code>kali</code>, cunoscute de toată lumea. Primul lucru: <code>passwd</code>.</p>
+<p>Din 2020, Kali nu mai lucrează implicit ca <code>root</code>. <code>id</code> arată că ești <code>kali</code>, în grupul <code>sudo</code>: rulezi ca utilizator obișnuit și ceri drepturi de administrator doar pentru comenzile care chiar au nevoie (o scanare SYN cu nmap, de exemplu).</p>`,
+ en:`<p>The official images start with the user <code>kali</code> and the password <code>kali</code>, known to everyone. First thing: <code>passwd</code>.</p>
+<p>Since 2020, Kali no longer works as <code>root</code> by default. <code>id</code> shows you're <code>kali</code>, in the <code>sudo</code> group: you run as a normal user and ask for admin rights only for commands that really need them (an nmap SYN scan, for example).</p>`},
+ try:[{cmd:"passwd",d:{ro:"Schimbă parola utilizatorului curent.",en:"Changes the current user's password."}},{cmd:"id",d:{ro:"UID-ul și grupurile tale.",en:"Your UID and groups."}}]},
+
+{at:"kali",frame:K5,kind:"k",move:[[["kali","nat"]],[["nat","home"]],[["home","net"]]],log:{ro:"sistemul actualizat",en:"system updated"},who:"apt",
+ title:{ro:"Actualizarea: Kali e o distribuție „rolling”",en:"Updating: Kali is a \"rolling\" distribution"},
+ body:{ro:`<p>Kali nu are versiuni mari la câțiva ani, ci se actualizează continuu din depozitul <code>kali-rolling</code>. Imaginea descărcată e deja în urmă cu câteva săptămâni.</p>
+<p><code>sudo apt update</code> citește lista de pachete (semnată cu cheia Kali), iar <code>sudo apt full-upgrade -y</code> le aduce pe toate la zi, inclusiv când se schimbă dependențele. Pachetele trec prin adaptorul NAT, apoi prin laptop și routerul de acasă.</p>`,
+ en:`<p>Kali doesn't have big releases every few years; it updates continuously from the <code>kali-rolling</code> repository. The downloaded image is already a few weeks behind.</p>
+<p><code>sudo apt update</code> reads the package list (signed with the Kali key), and <code>sudo apt full-upgrade -y</code> brings everything up to date, including when dependencies change. The packages come through the NAT adapter, then the laptop and the home router.</p>`},
+ more:{ro:`<p>Depozitul oficial e în <code>/etc/apt/sources.list</code>: <code>deb http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware</code>. Nu adăuga depozite Debian sau PPA-uri: amestecul strică sistemul.</p>`,
+  en:`<p>The official repository is in <code>/etc/apt/sources.list</code>: <code>deb http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware</code>. Don't add Debian repositories or PPAs: the mix breaks the system.</p>`},
+ try:[{cmd:"sudo apt update && sudo apt full-upgrade -y",d:{ro:"Actualizează tot sistemul.",en:"Updates the whole system."}}]},
+
+{at:"kali",frame:K6,kind:"k",tables:["meta"],hl:{meta:"kali-tools-information-gathering"},log:{ro:"uneltele de descoperire",en:"discovery tools"},who:{ro:"Metapachete",en:"Metapackages"},
+ title:{ro:"Metapachete: instalezi doar ce-ți trebuie",en:"Metapackages: install only what you need"},
+ body:{ro:`<p>Uneltele Kali sunt grupate în <strong>metapachete</strong>: pachete goale care trag după ele o categorie de unelte. Pentru lecțiile următoare îți ajunge <code>kali-tools-information-gathering</code>: nmap, arp-scan, netdiscover și alte unelte de descoperire.</p>
+<p>Mai puține unelte înseamnă un sistem mai mic, mai rapid de actualizat și mai ușor de înțeles. Nu instalezi „tot”, ca să ai de unde alege.</p>`,
+ en:`<p>Kali's tools are grouped into <strong>metapackages</strong>: empty packages that pull in a category of tools. For the next lessons, <code>kali-tools-information-gathering</code> is enough: nmap, arp-scan, netdiscover and other discovery tools.</p>
+<p>Fewer tools mean a smaller system, quicker to update and easier to understand. You don't install "everything" just to have options.</p>`}},
+
+{at:"kali",frame:K7,kind:"k",log:{ro:"adresele lui Kali",en:"Kali's addresses"},who:"ip",
+ title:{ro:"Unde e Kali în rețea?",en:"Where is Kali on the network?"},
+ body:{ro:`<p>Înainte de orice scanare, afli <strong>unde ești</strong>. <code>ip -br addr</code> și <code>ip route</code>:</p>
+<ul><li><code>eth0 10.0.50.10/24</code>: placa din <code>lab-net</code>. Rețeaua laboratorului e <code>10.0.50.0/24</code>;</li>
+<li><code>eth1 10.0.2.15/24</code>: placa NAT;</li>
+<li><code>default via 10.0.2.2 dev eth1</code>: tot ce nu e în laborator iese prin NAT.</li></ul>
+<p>Ultima linie e cea care ne îngrijorează: „tot ce nu e în laborator” include și rețeaua de acasă.</p>`,
+ en:`<p>Before any scan, you find out <strong>where you are</strong>. <code>ip -br addr</code> and <code>ip route</code>:</p>
+<ul><li><code>eth0 10.0.50.10/24</code>: the <code>lab-net</code> card. The lab network is <code>10.0.50.0/24</code>;</li>
+<li><code>eth1 10.0.2.15/24</code>: the NAT card;</li>
+<li><code>default via 10.0.2.2 dev eth1</code>: everything not in the lab goes out through NAT.</li></ul>
+<p>The last line is the worrying one: "everything not in the lab" includes the home network.</p>`},
+ try:[{cmd:"ip -br addr",d:{ro:"Interfețe și adrese.",en:"Interfaces and addresses."}},{cmd:"ip route",d:{ro:"Unde pleacă pachetele.",en:"Where packets go."}}]},
+
+{at:"home",frame:K8,kind:"k",move:[[["kali","nat"]],[["nat","home"]]],marks:{home:{k:"drop",t:{ro:"accesibilă!",en:"reachable!"}}},log:{ro:"drum spre rețeaua de acasă",en:"a path to the home network"},who:{ro:"Verificarea izolării",en:"Isolation check"},
+ title:{ro:"Verificarea izolării: rețeaua de acasă e accesibilă",en:"Isolation check: the home network is reachable"},
+ body:{ro:`<p>Testăm ce credeam că e imposibil. <code>ip route get 192.168.1.1</code>: pachetul ar pleca pe <code>eth1</code>, prin NAT. <code>ping</code> spre routerul de acasă: <strong>răspunde</strong>.</p>
+<p>NAT-ul VirtualBox duce traficul VM-ului prin laptop, deci Kali poate ajunge oriunde ajunge și laptopul: routerul, telefoanele, imprimanta, camerele. O greșeală de tastare (<code>192.168.1.0/24</code> în loc de <code>10.0.50.0/24</code>) ar scana rețeaua familiei.</p>
+<p class="key">Nu presupui izolarea. O verifici, cu o comandă, înainte de primul exercițiu.</p>`,
+ en:`<p>We test what we assumed was impossible. <code>ip route get 192.168.1.1</code>: the packet would leave on <code>eth1</code>, through NAT. A <code>ping</code> to the home router: <strong>it answers</strong>.</p>
+<p>VirtualBox NAT carries the VM's traffic through the laptop, so Kali can reach anything the laptop can: the router, phones, the printer, cameras. A typo (<code>192.168.1.0/24</code> instead of <code>10.0.50.0/24</code>) would scan the family network.</p>
+<p class="key">You don't assume isolation. You check it, with a command, before the first exercise.</p>`}},
+
+{at:"kali",frame:K9,kind:"k",marks:{nat:{k:"ok",t:{ro:"deconectat",en:"disconnected"}}},log:{ro:"NAT deconectat",en:"NAT disconnected"},who:{ro:"Izolarea",en:"Isolation"},
+ title:{ro:"Închidem drumul: NAT doar când actualizezi",en:"Closing the path: NAT only while updating"},
+ body:{ro:`<p>Soluția simplă: adaptorul NAT stă <strong>deconectat</strong> cât lucrezi în laborator. În setările VM-ului debifezi „Cable connected” (sau, din Kali, <code>sudo ip link set eth1 down</code>). Îl reconectezi doar pentru <code>apt full-upgrade</code>.</p>
+<p>Verificarea: <code>ip route get 192.168.1.1</code> → <strong>Network is unreachable</strong>. Kali mai poate ajunge doar în <code>10.0.50.0/24</code>.</p>`,
+ en:`<p>The simple fix: the NAT adapter stays <strong>disconnected</strong> while you work in the lab. In the VM settings you untick "Cable connected" (or, from Kali, <code>sudo ip link set eth1 down</code>). You reconnect it only for <code>apt full-upgrade</code>.</p>
+<p>The check: <code>ip route get 192.168.1.1</code> → <strong>Network is unreachable</strong>. Kali can now reach only <code>10.0.50.0/24</code>.</p>`},
+ more:{ro:`<p>O variantă mai strictă: o regulă nftables în Kali care permite ieșirea pe <code>eth1</code> doar spre portul 80/443, sau un VM separat care face actualizările.</p>`,
+  en:`<p>A stricter option: an nftables rule in Kali that allows <code>eth1</code> out only to ports 80/443, or a separate VM that does the updates.</p>`}},
+
+{at:["t1","t2"],frame:K10,kind:"k",move:[[["kali","lab"]],[["lab","t1"],["lab","t2"]]],log:{ro:"țintele răspund",en:"targets answer"},who:{ro:"Țintele",en:"Targets"},
+ title:{ro:"Țintele de test: vulnerabile intenționat, închise în laborator",en:"Test targets: vulnerable on purpose, locked in the lab"},
+ body:{ro:`<p>În <code>lab-net</code> pornești mașini făcute anume pentru exerciții: de exemplu <strong>Metasploitable 2</strong> (un Linux vechi, plin de servicii vulnerabile) sau o aplicație web ca <strong>DVWA</strong>. Aici le numim <code>web-lab</code> (<code>.20</code>) și <code>win-lab</code> (<code>.30</code>).</p>
+<p>Sunt vulnerabile <em>intenționat</em>, deci nu le dai niciodată adaptor NAT sau bridged și nu le expui la internet. <code>ping</code> confirmă că răspund din Kali.</p>`,
+ en:`<p>On <code>lab-net</code> you start machines made specifically for practice: for example <strong>Metasploitable 2</strong> (an old Linux full of vulnerable services) or a web app like <strong>DVWA</strong>. Here we call them <code>web-lab</code> (<code>.20</code>) and <code>win-lab</code> (<code>.30</code>).</p>
+<p>They're vulnerable <em>on purpose</em>, so you never give them a NAT or bridged adapter and never expose them to the internet. <code>ping</code> confirms they answer from Kali.</p>`}},
+
+{at:["kali","t1","t2"],frame:K11,kind:"k",move:[[["host","kali"]]],log:{ro:"snapshot curat",en:"clean snapshot"},who:"Snapshot",
+ title:{ro:"Snapshot-uri: un buton „înapoi” pentru tot laboratorul",en:"Snapshots: an \"undo\" button for the whole lab"},
+ body:{ro:`<p>Un <strong>snapshot</strong> salvează starea completă a unei mașini virtuale: disc, setări, opțional memoria. După ce Kali și țintele sunt configurate, faci câte un snapshot „curat”.</p>
+<p>Orice exercițiu care strică ceva (o configurare greșită, un serviciu oprit, o țintă modificată) se anulează revenind la snapshot, în câteva secunde. Așa poți experimenta fără teamă.</p>`,
+ en:`<p>A <strong>snapshot</strong> saves a virtual machine's complete state: disk, settings, optionally memory. Once Kali and the targets are set up, you take a "clean" snapshot of each.</p>
+<p>Any exercise that breaks something (a wrong setting, a stopped service, a modified target) is undone by going back to the snapshot, in seconds. That way you can experiment without fear.</p>`},
+ try:[{cmd:"VBoxManage snapshot kali take curat-2026-11",d:{ro:"Snapshot din linia de comandă.",en:"A snapshot from the command line."}},{cmd:"VBoxManage snapshot kali restore curat-2026-11",d:{ro:"Revenire (cu VM-ul oprit).",en:"Restore (with the VM powered off)."}}]},
+
+{at:["kali","lab","t1","t2"],frame:null,kind:"none",summary:true,
+ title:{ro:"Recapitulare",en:"Recap"},
+ body:{ro:`<ul><li>Uneltele Kali sunt neutre; ce contează e <strong>permisiunea</strong>: doar sisteme proprii sau un acord scris, cu scop clar.</li>
+<li>Imaginea vine doar de pe kali.org și se verifică cu <code>sha256sum</code>.</li>
+<li>Rețeaua: <strong>Internal Network</strong> pentru laborator, NAT doar pentru actualizări, niciodată bridged pentru scanări.</li>
+<li>Primul login: <code>passwd</code>; lucrezi ca utilizator normal, cu <code>sudo</code>. Apoi <code>apt full-upgrade</code> și doar metapachetele necesare.</li>
+<li>Izolarea se <strong>verifică</strong>: <code>ip route get</code> spre rețeaua de acasă trebuie să dea „unreachable”.</li>
+<li>Țintele vulnerabile stau doar în rețeaua internă; snapshot-urile te readuc la starea curată.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Mergi la laborator ↓</button></p>`,
+ en:`<ul><li>Kali's tools are neutral; what matters is <strong>permission</strong>: only your own systems or a written agreement with a clear scope.</li>
+<li>The image comes only from kali.org and is checked with <code>sha256sum</code>.</li>
+<li>The network: <strong>Internal Network</strong> for the lab, NAT only for updates, never bridged for scanning.</li>
+<li>First login: <code>passwd</code>; you work as a normal user, with <code>sudo</code>. Then <code>apt full-upgrade</code> and only the metapackages you need.</li>
+<li>Isolation is <strong>checked</strong>: <code>ip route get</code> towards the home network must say "unreachable".</li>
+<li>Vulnerable targets live only on the internal network; snapshots take you back to a clean state.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Go to the lab ↓</button></p>`}}
+],
+
+reference:(T,lang)=>{
+  const ro=lang==="ro";
+  return `<div class="ref-grid"><section class="card refcard"><h2>${ro?"Configurarea VM-urilor":"VM setup"}</h2>
+<pre class="yaml"><span class="c"># ${ro?"Kali: placa 1 în rețeaua internă, placa 2 NAT":"Kali: card 1 on the internal network, card 2 NAT"}</span>
+VBoxManage modifyvm kali --nic1 intnet --intnet1 lab-net
+VBoxManage modifyvm kali --nic2 nat
+VBoxManage modifyvm kali --cableconnected2 off   <span class="c"># ${ro?"NAT deconectat":"NAT unplugged"}</span>
+<span class="c"># ${ro?"ținte: doar rețeaua internă":"targets: internal network only"}</span>
+VBoxManage modifyvm web-lab --nic1 intnet --intnet1 lab-net
+VBoxManage snapshot kali take curat-2026-11</pre>
+<h3>${ro?"Adrese fixe în lab-net (fără DHCP)":"Static addresses on lab-net (no DHCP)"}</h3>
+<pre class="yaml">sudo nmcli con add type ethernet ifname eth0 con-name lab \
+  ipv4.method manual ipv4.addresses 10.0.50.10/24</pre></section>
+<section class="card refcard"><h2>${ro?"Comenzi în Kali":"Commands in Kali"}</h2>
+<pre class="yaml">passwd
+id
+sudo apt update && sudo apt full-upgrade -y
+sudo apt install -y kali-tools-information-gathering
+ip -br addr
+ip route
+ip route get 192.168.1.1      <span class="c"># ${ro?"trebuie: unreachable":"should be: unreachable"}</span>
+ping -c2 10.0.50.20</pre>
+<h3>${ro?"Înainte de fiecare exercițiu":"Before every exercise"}</h3>
+<pre class="yaml">1. ${ro?"Ținta e a mea / am acord scris?":"Is the target mine / do I have written approval?"}
+2. ${ro?"NAT deconectat? ip route get":"NAT unplugged? ip route get"}
+3. ${ro?"Adresele din comandă sunt din 10.0.50.0/24?":"Are the command's addresses in 10.0.50.0/24?"}
+4. ${ro?"Am un snapshot curat?":"Do I have a clean snapshot?"}</pre></section></div>`;
+},
+
+gloss:[
+ ["Kali Linux",null,{ro:"Distribuție Debian cu unelte pentru teste de securitate, întreținută de OffSec.",en:"A Debian distribution with security-testing tools, maintained by OffSec."}],
+ [{ro:"Mașină virtuală (VM)",en:"Virtual machine (VM)"},null,{ro:"Un calculator simulat care rulează pe laptopul tău.",en:"A simulated computer running on your laptop."}],
+ ["Internal Network",null,{ro:"Rețea virtuală VirtualBox care leagă doar VM-urile între ele.",en:"A VirtualBox virtual network that connects only VMs to each other."}],
+ ["NAT",null,{ro:"Mod în care VM-ul iese prin adresa laptopului; vede tot ce vede laptopul.",en:"A mode where the VM goes out through the laptop's address; it sees everything the laptop sees."}],
+ ["Bridged",null,{ro:"VM-ul apare în rețeaua fizică ca un dispozitiv separat.",en:"The VM shows up on the physical network as a separate device."}],
+ [{ro:"Scop (scope)",en:"Scope"},null,{ro:"Lista scrisă a adreselor, orelor și testelor permise.",en:"The written list of allowed addresses, hours and tests."}],
+ ["Snapshot",null,{ro:"Starea salvată a unei VM, la care poți reveni oricând.",en:"A saved VM state you can return to at any time."}],
+ [{ro:"Metapachet",en:"Metapackage"},null,{ro:"Pachet gol care instalează un grup de unelte.",en:"An empty package that installs a group of tools."}],
+ ["SHA256",null,{ro:"Amprentă a unui fișier; orice modificare o schimbă complet.",en:"A file's fingerprint; any change alters it completely."}]
+],
+glossEx:{
+ "NAT":{ro:"prin NAT, Kali a ajuns la routerul de acasă 192.168.1.1.",en:"through NAT, Kali reached the home router 192.168.1.1."},
+ "Internal Network":{ro:"lab-net, 10.0.50.0/24: Kali, web-lab și win-lab.",en:"lab-net, 10.0.50.0/24: Kali, web-lab and win-lab."}
+},
+
+quiz:[
+ {"q":{"ro":"Ce face o scanare legitimă diferită de una ilegală?","en":"What makes a scan legitimate rather than illegal?"},"o":[{"ro":"Unealta folosită","en":"The tool used"},{"ro":"Permisiunea: sisteme proprii sau acord scris, cu scop clar","en":"Permission: your own systems or written approval, with a clear scope"},{"ro":"Ora la care rulezi","en":"The time you run it"},{"ro":"Folosirea Kali Linux","en":"Using Kali Linux"}],"a":1,"e":{"ro":"Aceeași comandă nmap poate fi inventar sau atac.","en":"The same nmap command can be inventory or an attack."}},
+ {"q":{"ro":"Ce mod de rețea folosești pentru rețeaua laboratorului?","en":"Which network mode do you use for the lab network?"},"o":["Internal Network","Bridged",{"ro":"NAT, permanent","en":"NAT, permanently"},{"ro":"Wi-Fi-ul laptopului","en":"The laptop's Wi-Fi"}],"a":0,"e":{"ro":"Internal: doar VM-urile se văd între ele.","en":"Internal: only the VMs see each other."}},
+ {"q":{"ro":"De ce nu folosești bridged pentru scanări?","en":"Why don't you use bridged for scanning?"},"o":[{"ro":"E mai lent","en":"It's slower"},{"ro":"Nu merge cu Kali","en":"It doesn't work with Kali"},{"ro":"Consumă mai multă memorie","en":"It uses more memory"},{"ro":"Kali apare în rețeaua de acasă, iar scanările ating toate dispozitivele de acolo","en":"Kali shows up on the home network, and scans touch every device there"}],"a":3,"e":{"ro":"Laboratorul trebuie să fie o rețea pe care o controlezi complet.","en":"The lab must be a network you fully control."}},
+ {"q":{"ro":"Cum verifici că imaginea Kali descărcată nu a fost modificată?","en":"How do you check the downloaded Kali image wasn't altered?"},"o":[{"ro":"După mărimea fișierului","en":"By the file size"},{"ro":"Pornești VM-ul și vezi dacă merge","en":"Start the VM and see if it works"},{"ro":"Compari sha256sum cu valoarea publicată pe kali.org","en":"Compare sha256sum with the value published on kali.org"},{"ro":"Cu antivirusul","en":"With the antivirus"}],"a":2,"e":{"ro":"O singură modificare schimbă complet amprenta.","en":"A single change alters the fingerprint completely."}},
+ {"q":{"ro":"Kali are un adaptor NAT conectat. Ce poate atinge?","en":"Kali has a connected NAT adapter. What can it reach?"},"o":[{"ro":"Doar internetul","en":"Only the internet"},{"ro":"Tot ce atinge laptopul, inclusiv rețeaua de acasă","en":"Everything the laptop reaches, including the home network"},{"ro":"Doar alte VM-uri","en":"Only other VMs"},{"ro":"Nimic","en":"Nothing"}],"a":1,"e":{"ro":"De aceea NAT stă deconectat în timpul exercițiilor.","en":"That's why NAT stays unplugged during exercises."}},
+ {"q":{"ro":"Ce rezultat vrei de la ip route get 192.168.1.1 în laborator?","en":"Which result do you want from ip route get 192.168.1.1 in the lab?"},"o":["Network is unreachable",{"ro":"via 10.0.2.2 dev eth1","en":"via 10.0.2.2 dev eth1"},{"ro":"dev eth0","en":"dev eth0"},{"ro":"Orice, nu contează","en":"Anything, it doesn't matter"}],"a":0,"e":{"ro":"Unreachable = Kali nu poate ieși din laborator.","en":"Unreachable = Kali can't get out of the lab."}},
+ {"q":{"ro":"Cum actualizezi complet Kali?","en":"How do you fully update Kali?"},"o":[{"ro":"Reinstalezi imaginea în fiecare lună","en":"Reinstall the image every month"},"sudo apt install kali",{"ro":"Adaugi depozite Debian","en":"Add Debian repositories"},"sudo apt update && sudo apt full-upgrade -y"],"a":3,"e":{"ro":"Kali e rolling: actualizări dese din kali-rolling.","en":"Kali is rolling: frequent updates from kali-rolling."}},
+ {"q":{"ro":"De ce faci un snapshot după configurare?","en":"Why take a snapshot after setup?"},"o":[{"ro":"Ca să meargă mai repede","en":"So it runs faster"},{"ro":"E obligatoriu pentru licență","en":"The licence requires it"},{"ro":"Ca să revii în câteva secunde la o stare curată după orice exercițiu","en":"To return to a clean state in seconds after any exercise"},{"ro":"Ca să ocupe mai puțin spațiu","en":"To use less space"}],"a":2,"e":{"ro":"Poți experimenta fără teamă.","en":"You can experiment without fear."}}
+]
+};
+})();
+</script>
+<script src="../assets/engine.js?v=4"></script>
+<script src="../assets/labs-data.js?v=9"></script>
+<script src="../assets/lab.js?v=1"></script>
+<script type="module" src="../assets/auth.js?v=16"></script>
+</body>
+</html>

@@ -5,7 +5,8 @@ export const TESTS = ["ethernet", "vlan", "nat", "dns", "https", "ipv6", "bgp", 
   "microservicii", "kubernetes", "k8s-intrare", "ingress", "gke-retea", "service-mesh", "istio", "observabilitate",
   "certificate", "load-balancing", "ldap", "kafka", "mq", "xfb", "xfb-gateway", "gitops", "artifactory", "cassandra",
   "terraform", "terraform-deploy",
-  "linux-retea", "linux-servicii", "linux-disc", "linux-performanta"];
+  "linux-retea", "linux-servicii", "linux-disc", "linux-performanta",
+  "kali-lab", "kali-descoperire", "kali-nmap"];
 export const PER_TEST = 5;
 export const START = 15;   // free starting points, so everyone can try the roulette
 export const MIN_SHARE = 0.8;

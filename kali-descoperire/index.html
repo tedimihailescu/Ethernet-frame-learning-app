@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Descoperirea rețelei: cine e în rețea?</title>
+<meta name="description" content="Lecție interactivă: descoperirea dispozitivelor dintr-o rețea de laborator cu Kali Linux: observare pasivă, ip neigh, tcpdump, arp-scan, nmap -sn, subrețele din spatele unui router, traceroute, nume prin DNS și mDNS, cum vede apărătorul o scanare și inventarul cu ndiff. / Interactive lesson: discovering hosts on a lab network.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/diagram.css?v=1">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<script>
+(function(){
+const RO="READ-ONLY",CH="LAB CHANGE",SC="ACTIVE SCAN";
+const CAM="d0:5f:aa:0b:2e:9d";
+const D1={q:{ro:"Ce afli fără să trimiți niciun pachet?",en:"What can you learn without sending a single packet?"},cmd:"ip neigh · sudo tcpdump -ni eth0 -c 20 \"arp or port 67 or port 5353\"",mode:RO,out:"10.0.50.1 dev eth0 lladdr 52:54:00:12:35:01 REACHABLE · ARP, Request who-has 10.0.50.1 tell 10.0.50.77 · IP 10.0.50.77.5353 > 224.0.0.251.5353: 0*- [0q] 2/0/0 PTR ipcam-2e9d.local.",proves:{ro:"doar ascultând: routerul și un dispozitiv necunoscut, 10.0.50.77, care se anunță singur prin mDNS",en:"just by listening: the router and an unknown device, 10.0.50.77, announcing itself over mDNS"}};
+const D2={q:{ro:"Ce rețea scanez de fapt?",en:"Which network am I actually scanning?"},cmd:"ip -br addr · ip route",mode:RO,out:"eth0 UP 10.0.50.10/24 · default via 10.0.50.1 dev eth0 · 10.0.50.0/24 dev eth0",proves:{ro:"segmentul local e 10.0.50.0/24 (254 de adrese folosibile); orice altă rețea se vede prin routerul 10.0.50.1",en:"the local segment is 10.0.50.0/24 (254 usable addresses); any other network is seen through the router 10.0.50.1"}};
+const D3={q:{ro:"Cine e în segmentul local?",en:"Who is on the local segment?"},cmd:"sudo arp-scan -l -I eth0",mode:SC,out:"10.0.50.1 52:54:00:12:35:01 QEMU virtual NIC · 10.0.50.20 08:00:27:3a:91:0c PCS Systemtechnik GmbH · 10.0.50.30 08:00:27:c4:55:e1 PCS Systemtechnik GmbH · 10.0.50.77 "+CAM+" (Unknown) · 4 hosts responded",proves:{ro:"ARP găsește tot ce e în același segment, chiar și ce blochează ping-ul; producătorul vine din primii 3 octeți ai MAC-ului",en:"ARP finds everything on the same segment, even devices that block ping; the vendor comes from the MAC's first 3 bytes"}};
+const D4={q:{ro:"Ce spune nmap despre același segment?",en:"What does nmap say about the same segment?"},cmd:"sudo nmap -sn 10.0.50.0/24",mode:SC,out:"Nmap scan report for 10.0.50.1 · Host is up (0.00042s latency). · MAC Address: 52:54:00:12:35:01 (QEMU virtual NIC) · … · Nmap done: 256 IP addresses (5 hosts up) scanned in 2.07 seconds",proves:{ro:"5 gazde: cele 4 de mai sus și Kali; pe rețeaua locală, -sn folosește tot cereri ARP, fără porturi",en:"5 hosts: the 4 above plus Kali; on the local network, -sn also uses ARP requests, no ports"}};
+const D5={q:{ro:"Cine e dincolo de router, în 10.0.60.0/24?",en:"Who is beyond the router, in 10.0.60.0/24?"},cmd:"ping -c2 10.0.60.15 · sudo nmap -sn --reason 10.0.60.0/24",mode:SC,out:"2 packets transmitted, 0 received, 100% packet loss · Nmap scan report for 10.0.60.1 Host is up, received echo-reply · Nmap scan report for 10.0.60.15 Host is up, received reset · (2 hosts up)",proves:{ro:"ping-ul spune „nimeni”, dar nmap găsește db-lab: a răspuns cu RST la o sondă TCP, deși blochează ICMP",en:"ping says \"nobody\", but nmap finds db-lab: it answered a TCP probe with a RST, even though it blocks ICMP"}};
+const D6={q:{ro:"Pe ce drum ajung pachetele acolo?",en:"Which path do packets take to get there?"},cmd:"sudo traceroute -n -T -p 443 10.0.60.15",mode:SC,out:"1  10.0.50.1  0.41 ms · 2  10.0.60.15  0.98 ms",proves:{ro:"un singur router între segmente; traceroute cu TCP trece acolo unde ICMP e blocat",en:"a single router between the segments; TCP traceroute gets through where ICMP is blocked"}};
+const D7={q:{ro:"Cum se numesc dispozitivele?",en:"What are the devices called?"},cmd:"dig -x 10.0.50.20 +short · avahi-resolve --address 10.0.50.77",mode:RO,out:"web-lab.lab.local. · 10.0.50.77 ipcam-2e9d.local",proves:{ro:"DNS invers confirmă web-lab; mDNS dă numele lui .77: „ipcam”, o cameră IP",en:"reverse DNS confirms web-lab; mDNS gives .77's name: \"ipcam\", an IP camera"}};
+const D8={q:{ro:"Ce fel de dispozitiv e 10.0.50.77?",en:"What kind of device is 10.0.50.77?"},cmd:"sudo nmap -sV -p 80,443,554,8000 10.0.50.77",mode:SC,out:"80/tcp open http lighttpd 1.4.59 · 443/tcp closed https · 554/tcp open rtsp · 8000/tcp closed http-alt",proves:{ro:"RTSP pe 554 înseamnă flux video, plus o interfață web pe 80: e o cameră IP adusă de cineva în rețeaua laboratorului",en:"RTSP on 554 means a video stream, plus a web interface on 80: it's an IP camera someone brought into the lab network"},bad:{ro:"NECUNOSCUT",en:"UNKNOWN"}};
+const D9={q:{ro:"Cum arată scanarea pentru apărător?",en:"What does the scan look like to a defender?"},cmd:"sudo tcpdump -ni eth0 arp (pe web-lab) · journalctl -u arpwatch -n 3",mode:RO,out:"ARP, Request who-has 10.0.50.2 tell 10.0.50.10 · … who-has 10.0.50.254 tell 10.0.50.10 (254 cereri în 2 s) · arpwatch: new station 10.0.50.77 "+CAM+" eth0",proves:{ro:"o scanare se vede clar: sute de cereri de la aceeași adresă; aceleași unelte îi ajută pe apărători să prindă dispozitive noi",en:"a scan is plainly visible: hundreds of requests from one address; the same tools help defenders spot new devices"}};
+const D10={q:{ro:"Ce s-a schimbat față de inventarul de săptămâna trecută?",en:"What changed since last week's inventory?"},cmd:"sudo nmap -sn -oA lab-2026-11-17 10.0.50.0/24 · ndiff lab-2026-11-10.xml lab-2026-11-17.xml",mode:SC,out:"-Nmap 7.95 scan … · +10.0.50.77 ("+CAM+"): +Host is up.",proves:{ro:"inventarul salvat și comparat în timp arată exact ce a apărut: camera nouă",en:"the inventory, saved and compared over time, shows exactly what appeared: the new camera"}};
+
+window.LESSON={
+docTitle:{ro:"Descoperirea rețelei: cine e în rețea?",en:"Network discovery: who's on the network?"},
+eyebrow:{ro:"Lecție interactivă · Securitate",en:"Interactive lesson · Security"},
+title:{ro:"Descoperirea rețelei: cine e în rețea?",en:"Network discovery: who's on the network?"},
+sub:{ro:"În laboratorul Kali din lecția anterioară, cineva spune că „a mai apărut ceva în rețea”. Facem inventarul ca un administrator atent: întâi doar ascultăm, apoi întrebăm cu ARP în segmentul local, apoi cu nmap dincolo de router, unde ping-ul minte. Găsim un dispozitiv necunoscut, aflăm ce e, vedem cum arată scanarea pentru apărător și salvăm inventarul ca să putem compara în timp.",en:"In the Kali lab from the previous lesson, someone says \"something new showed up on the network\". We take an inventory like a careful admin: first we only listen, then we ask with ARP on the local segment, then with nmap beyond the router, where ping lies. We find an unknown device, work out what it is, see what the scan looks like to a defender and save the inventory so we can compare over time."},
+meta:[{ro:"≈ 25 minute",en:"≈ 25 minutes"},{ro:"11 pași",en:"11 steps"},{ro:"8 întrebări",en:"8 questions"},{ro:"Începător+",en:"Beginner+"}],
+goals:[{ro:"Descoperire pasivă vs. activă și de ce începi cu ascultatul",en:"Passive vs active discovery, and why you start by listening"},{ro:"ARP în segmentul local: arp-scan și nmap -sn",en:"ARP on the local segment: arp-scan and nmap -sn"},{ro:"Gazde dincolo de router: ce sonde trimite nmap și de ce ping-ul nu ajunge",en:"Hosts beyond a router: which probes nmap sends and why ping isn't enough"},{ro:"Nume, identificare, perspectiva apărătorului și inventar cu ndiff",en:"Names, identification, the defender's view and an inventory with ndiff"}],
+foot:{ro:"Adrese, nume și MAC-uri fictive. Scanările (ACTIVE SCAN) se fac doar în laboratorul tău sau cu acord scris.",en:"Fictional addresses, names and MACs. Scans (ACTIVE SCAN) only in your own lab or with written approval."},
+ui:{frameT:{ro:"Descoperirea (live)",en:"The discovery (live)"},refT:{ro:"Comenzi de descoperire",en:"Discovery commands"},refLead:{ro:"Ce comandă folosești pentru fiecare întrebare și ce trimite în rețea.",en:"Which command answers each question, and what it sends on the wire."}},
+tryT:{ro:"Încearcă (în laboratorul tău)",en:"Try it (in your lab)"},
+legend:[["lg-ip","READ",{ro:"pasiv: doar ascultă",en:"passive: only listens"}],["lg-app","SCAN",{ro:"activ: trimite sonde",en:"active: sends probes"}],["lg-tcp","?",{ro:"dispozitiv necunoscut",en:"unknown device"}]],
+
+nodes:{
+  kali:{type:"server",name:"kali",lines:["10.0.50.10"]},
+  sw:{type:"switch",name:"lab-switch",lines:["10.0.50.0/24"]},
+  t1:{type:"server",name:"web-lab",lines:["10.0.50.20"]},
+  t2:{type:"server",name:"win-lab",lines:["10.0.50.30"]},
+  cam:{type:"host",name:"10.0.50.77",lines:[{ro:"necunoscut",en:"unknown"}]},
+  gw:{type:"router",name:"router",lines:["10.0.50.1 · 10.0.60.1"]},
+  t4:{type:"db",name:"db-lab",lines:["10.0.60.15"]}
+},
+links:[["kali","sw"],["sw","t1"],["sw","t2"],["sw","cam"],["sw","gw"],["gw","t4"]],
+linkLabels:{"kali-sw":"eth0","sw-t1":"ARP","sw-t2":"ARP","sw-cam":"ARP · mDNS","sw-gw":"ARP","gw-t4":{"ro":"rutare: fără ARP","en":"routed: no ARP"}},
+layouts:{
+  wide:{vb:[0,0,1000,500],n:{kali:[90,260],sw:[320,260],t1:[320,80],t2:[540,110],cam:[540,420],gw:[700,260],t4:[900,260]},
+    zones:[{x:30,y:30,w:620,h:450,top:true,cls:"virt",l:{ro:"segment 10.0.50.0/24",en:"segment 10.0.50.0/24"}},{x:780,y:150,w:210,h:220,top:true,cls:"virt",l:"10.0.60.0/24"}]},
+  narrow:{vb:[0,0,360,860],n:{kali:[60,60],sw:[180,200],t1:[50,340],t2:[310,340],cam:[130,500],gw:[290,570],t4:[290,770]}}
+},
+groups:[
+  {id:"q",color:"l7",fields:["q"],name:{ro:"Întrebarea",en:"The question"},short:"Q",grow:2},
+  {id:"c",color:"l3",fields:["cmd","mode","out"],name:{ro:"Comanda și rezultatul",en:"Command and output"},short:"CMD",grow:4},
+  {id:"e",color:"arp",fields:["proves"],name:{ro:"Ce dovedește",en:"What it proves"},short:{ro:"Dovada",en:"Evidence"},grow:3}
+],
+fieldLabels:{q:{ro:"Întrebarea",en:"The question"},cmd:{ro:"Comanda",en:"Command"},mode:{ro:"Tip",en:"Type"},out:{ro:"Ce afișează",en:"Output"},proves:{ro:"Ce dovedește",en:"What it proves"}},
+pdu:f=>f.bad?{badge:{ro:"Dispozitiv necunoscut",en:"Unknown device"},tok:["?","k-tcp"]}:f.mode===SC?{badge:{ro:"Scanare activă: doar în laborator",en:"Active scan: lab only"},tok:["SCAN","k-app"]}:{badge:{ro:"Pasiv: doar ascultă",en:"Passive: only listens"},tok:["LISTEN","k-ip"]},
+
+init:{},
+tables:{
+  pass:{title:{ro:"Pasiv vs. activ",en:"Passive vs active"},cols:["",{ro:"Pasiv",en:"Passive"},{ro:"Activ",en:"Active"}],plain:[0,1,2],
+    rows:()=>[[{ro:"Ce faci",en:"What you do"},{ro:"asculți ce trimit alții",en:"listen to what others send"},{ro:"trimiți sonde și aștepți răspunsuri",en:"send probes and wait for answers"}],[{ro:"Unelte",en:"Tools"},"ip neigh, tcpdump, netdiscover -p","arp-scan, nmap, ping"],[{ro:"Se vede?",en:"Visible?"},{ro:"practic deloc",en:"practically not"},{ro:"da, în loguri și alerte",en:"yes, in logs and alerts"}],[{ro:"Găsește",en:"Finds"},{ro:"doar ce vorbește",en:"only what talks"},{ro:"și ce tace, dacă răspunde la sonde",en:"silent devices too, if they answer probes"}]]},
+  probes:{idx:true,title:{ro:"Ce trimite nmap -sn",en:"What nmap -sn sends"},cols:[{ro:"Unde e ținta",en:"Where the target is"},{ro:"Sonde",en:"Probes"},{ro:"Cu sudo?",en:"With sudo?"}],plain:[0,1],
+    rows:()=>[[{ro:"același segment",en:"same segment"},{ro:"cerere ARP",en:"an ARP request"},{ro:"da",en:"yes"}],[{ro:"dincolo de router",en:"beyond a router"},{ro:"ICMP echo, TCP SYN :443, TCP ACK :80, ICMP timestamp",en:"ICMP echo, TCP SYN :443, TCP ACK :80, ICMP timestamp"},{ro:"da",en:"yes"}],[{ro:"oriunde",en:"anywhere"},{ro:"conectări TCP la 80 și 443",en:"TCP connects to 80 and 443"},{ro:"nu (fără drepturi)",en:"no (unprivileged)"}]]},
+  oui:{title:{ro:"Ce spune un MAC",en:"What a MAC tells you"},cols:[{ro:"Prefix (OUI)",en:"Prefix (OUI)"},{ro:"Producător",en:"Vendor"},{ro:"Concluzie",en:"Conclusion"}],plain:[1,2],
+    rows:()=>[["08:00:27","PCS Systemtechnik",{ro:"placă VirtualBox: VM",en:"a VirtualBox NIC: a VM"}],["52:54:00","QEMU",{ro:"VM KVM/QEMU (routerul)",en:"a KVM/QEMU VM (the router)"}],["d0:5f:aa",{ro:"necunoscut în baza locală",en:"unknown in the local database"},{ro:"de identificat altfel",en:"needs other identification"}]]}
+},
+log:{title:{ro:"Jurnalul descoperirii",en:"Discovery log"},lead:{ro:"Fiecare comandă și ce a aflat.",en:"Every command and what it found."},first:{ro:"Pas",en:"Step"},minWidth:600,
+  cols:[{h:{ro:"Comanda",en:"Command"},v:f=>f.cmd||"",cls:"mac"},{h:{ro:"Ce dovedește",en:"What it proves"},v:f=>f.proves||"",cls:""}]},
+
+steps:[
+{at:["kali","cam"],frame:D1,kind:"d",move:[[["cam","sw"]],[["sw","kali"]]],tables:["pass"],log:{ro:"observare pasivă",en:"passive observation"},who:{ro:"Pasiv",en:"Passive"},
+ title:{ro:"Întâi asculți: ce spune rețeaua de la sine",en:"First you listen: what the network says on its own"},
+ body:{ro:`<p>O rețea nu e niciodată tăcută. Dispozitivele trimit singure cereri <strong>ARP</strong> („cine are adresa X?”), cer adrese prin <strong>DHCP</strong> și se anunță prin <strong>mDNS</strong> (<code>nume.local</code>).</p>
+<ul><li><code>ip neigh</code>: vecinii pe care Kali îi știe deja (cache-ul ARP);</li>
+<li><code>tcpdump</code> filtrat pe ARP, DHCP (portul 67) și mDNS (5353): ce circulă acum.</li></ul>
+<p>Fără să trimiți nimic, vezi routerul și un dispozitiv pe care nu-l știa nimeni: <strong>10.0.50.77</strong>, care se anunță ca <code>ipcam-2e9d.local</code>.</p>
+<p class="key">Descoperirea pasivă e invizibilă și nu deranjează nimic. Începi mereu cu ea.</p>`,
+ en:`<p>A network is never silent. Devices send <strong>ARP</strong> requests on their own ("who has address X?"), ask for addresses over <strong>DHCP</strong> and announce themselves over <strong>mDNS</strong> (<code>name.local</code>).</p>
+<ul><li><code>ip neigh</code>: the neighbours Kali already knows (the ARP cache);</li>
+<li><code>tcpdump</code> filtered on ARP, DHCP (port 67) and mDNS (5353): what's flowing right now.</li></ul>
+<p>Without sending anything, you see the router and a device nobody knew about: <strong>10.0.50.77</strong>, announcing itself as <code>ipcam-2e9d.local</code>.</p>
+<p class="key">Passive discovery is invisible and disturbs nothing. You always start with it.</p>`},
+ more:{ro:`<p><code>netdiscover -p</code> face același lucru automat: ascultă ARP și construiește lista de gazde. Pe un switch, vezi doar broadcast-uri și traficul tău, nu conversațiile dintre alți doi.</p>`,
+  en:`<p><code>netdiscover -p</code> does the same automatically: it listens to ARP and builds a host list. On a switch you only see broadcasts and your own traffic, not conversations between two others.</p>`},
+ try:[{cmd:"ip neigh",d:{ro:"Cache-ul ARP.",en:"The ARP cache."}},{cmd:"sudo tcpdump -ni eth0 -c 20 \"arp or port 67 or port 5353\"",d:{ro:"20 de pachete ARP, DHCP sau mDNS.",en:"20 ARP, DHCP or mDNS packets."}}]},
+
+{at:"kali",frame:D2,kind:"d",log:{ro:"rețeaua de scanat",en:"the network to scan"},who:"ip",
+ title:{ro:"Unde ești: ce rețea are sens să scanezi",en:"Where you are: which network makes sense to scan"},
+ body:{ro:`<p>Înainte de prima sondă activă, confirmi ținta. <code>ip -br addr</code>: <code>10.0.50.10/24</code>. Masca <code>/24</code> înseamnă că segmentul local e <code>10.0.50.0</code>–<code>10.0.50.255</code>: 254 de adrese pentru gazde.</p>
+<p><code>ip route</code>: tot ce nu e în <code>10.0.50.0/24</code> merge la routerul <code>10.0.50.1</code>. Laboratorul are acum un al doilea segment, <code>10.0.60.0/24</code>, cu o bază de date.</p>
+<p class="key">Adresa din comanda de scanare trebuie să fie din scopul tău. Verifici de două ori înainte de Enter.</p>`,
+ en:`<p>Before the first active probe, you confirm the target. <code>ip -br addr</code>: <code>10.0.50.10/24</code>. The <code>/24</code> mask means the local segment is <code>10.0.50.0</code>–<code>10.0.50.255</code>: 254 host addresses.</p>
+<p><code>ip route</code>: anything outside <code>10.0.50.0/24</code> goes to the router <code>10.0.50.1</code>. The lab now has a second segment, <code>10.0.60.0/24</code>, with a database.</p>
+<p class="key">The address in the scan command must be within your scope. Check it twice before pressing Enter.</p>`}},
+
+{at:["t1","t2","cam","gw"],frame:D3,kind:"d",move:[[["kali","sw"]],[["sw","t1"],["sw","t2"],["sw","cam"],["sw","gw"]]],marks:{cam:{k:"drop",t:"?"}},tables:["oui"],hl:{oui:"08:00:27"},log:{ro:"arp-scan: 4 gazde",en:"arp-scan: 4 hosts"},who:"arp-scan",
+ title:{ro:"arp-scan: întrebi pe toată lumea din segment",en:"arp-scan: asking everyone on the segment"},
+ body:{ro:`<p><code>arp-scan -l</code> trimite câte o cerere ARP pentru fiecare adresă din rețeaua locală (<code>-l</code> = „rețeaua de pe interfață”). Orice dispozitiv care folosește IPv4 în segment <strong>trebuie</strong> să răspundă la ARP, altfel nu poate comunica deloc. Deci ARP găsește și dispozitivele care blochează ping-ul.</p>
+<p>Răspund 4. Primii 3 octeți ai MAC-ului (<strong>OUI</strong>) arată producătorul plăcii: <code>08:00:27</code> e VirtualBox, deci <code>.20</code> și <code>.30</code> sunt VM-urile noastre. <code>.77</code> are un OUI necunoscut: nu e o mașină virtuală.</p>`,
+ en:`<p><code>arp-scan -l</code> sends an ARP request for every address on the local network (<code>-l</code> = "the interface's network"). Any device using IPv4 on the segment <strong>must</strong> answer ARP, or it can't communicate at all. So ARP finds devices that block ping too.</p>
+<p>4 answer. A MAC's first 3 bytes (the <strong>OUI</strong>) show the card's vendor: <code>08:00:27</code> is VirtualBox, so <code>.20</code> and <code>.30</code> are our VMs. <code>.77</code> has an unknown OUI: it's not a virtual machine.</p>`},
+ more:{ro:`<p>ARP nu trece de router: funcționează doar în segmentul local (același domeniu de broadcast). Pentru alte rețele ai nevoie de sonde IP.</p>`,
+  en:`<p>ARP doesn't cross a router: it only works on the local segment (the same broadcast domain). For other networks you need IP probes.</p>`},
+ try:[{cmd:"sudo arp-scan -l -I eth0",d:{ro:"ARP la fiecare adresă din segment.",en:"ARP to every address on the segment."}}]},
+
+{at:["t1","t2","cam","gw"],frame:D4,kind:"d",move:[[["kali","sw"]],[["sw","t1"],["sw","t2"],["sw","cam"],["sw","gw"]]],tables:["probes"],hl:{probes:0},log:{ro:"nmap -sn: 5 gazde",en:"nmap -sn: 5 hosts"},who:"nmap -sn",
+ title:{ro:"nmap -sn: descoperire de gazde, fără porturi",en:"nmap -sn: host discovery, no ports"},
+ body:{ro:`<p><code>nmap -sn</code> înseamnă „spune-mi doar cine e pornit, nu scana porturi”. Pe segmentul local, rulat cu <code>sudo</code>, nmap folosește tot <strong>ARP</strong>: e cea mai rapidă și mai sigură metodă.</p>
+<p>Rezultat: <strong>5 hosts up</strong>, cele 4 de la arp-scan plus Kali însuși, fiecare cu MAC-ul și latența. 256 de adrese verificate în 2 secunde.</p>`,
+ en:`<p><code>nmap -sn</code> means "just tell me who's up, don't scan ports". On the local segment, run with <code>sudo</code>, nmap also uses <strong>ARP</strong>: it's the fastest and most reliable method.</p>
+<p>The result: <strong>5 hosts up</strong>, the 4 from arp-scan plus Kali itself, each with its MAC and latency. 256 addresses checked in 2 seconds.</p>`},
+ more:{ro:`<p>Fără <code>sudo</code>, nmap nu poate trimite ARP sau pachete construite de mână și încearcă doar conexiuni TCP la porturile 80 și 443: poate rata dispozitive.</p>`,
+  en:`<p>Without <code>sudo</code>, nmap can't send ARP or hand-built packets and only tries TCP connections to ports 80 and 443: it may miss devices.</p>`},
+ try:[{cmd:"sudo nmap -sn 10.0.50.0/24",d:{ro:"Cine e pornit în segment.",en:"Who's up on the segment."}}]},
+
+{at:"t4",frame:D5,kind:"d",move:[[["kali","sw"],["sw","gw"],["gw","t4"]],[["t4","gw"],["gw","sw"],["sw","kali"]]],marks:{t4:{k:"ok",t:{ro:"RST la :443",en:"RST on :443"}}},tables:["probes"],hl:{probes:1},log:{ro:"db-lab găsit prin TCP",en:"db-lab found via TCP"},who:{ro:"Dincolo de router",en:"Beyond the router"},
+ title:{ro:"Dincolo de router: ping-ul spune „nimeni”, nmap găsește",en:"Beyond the router: ping says \"nobody\", nmap finds it"},
+ body:{ro:`<p>Pentru <code>10.0.60.0/24</code>, ARP nu mai merge: e altă rețea, în spatele routerului. <code>ping 10.0.60.15</code>: <strong>100% packet loss</strong>. Concluzia grăbită ar fi „nu e nimic acolo”.</p>
+<p><code>nmap -sn</code> trimite mai multe feluri de sonde: ICMP echo (ping), <strong>TCP SYN la 443</strong>, TCP ACK la 80 și ICMP timestamp. Firewall-ul lui db-lab aruncă ICMP, dar la SYN-ul spre 443 sistemul răspunde cu <strong>RST</strong> („port închis”). Un RST înseamnă că cineva e acolo. Cu <code>--reason</code>, nmap spune exact ce răspuns a primit.</p>
+<p class="key">Lipsa răspunsului la ping nu dovedește că o gazdă nu există.</p>`,
+ en:`<p>For <code>10.0.60.0/24</code>, ARP no longer works: it's another network, behind the router. <code>ping 10.0.60.15</code>: <strong>100% packet loss</strong>. The hasty conclusion would be "there's nothing there".</p>
+<p><code>nmap -sn</code> sends several kinds of probes: ICMP echo (ping), <strong>TCP SYN to 443</strong>, TCP ACK to 80 and ICMP timestamp. db-lab's firewall drops ICMP, but the system answers the SYN to 443 with a <strong>RST</strong> ("port closed"). A RST means someone is there. With <code>--reason</code>, nmap says exactly which reply it got.</p>
+<p class="key">No reply to ping doesn't prove a host doesn't exist.</p>`},
+ more:{ro:`<p>Dacă o gazdă nu răspunde la nicio sondă, <code>-Pn</code> îi spune lui nmap să o considere pornită și să-i scaneze direct porturile. Pe o rețea mare, asta face scanarea mult mai lentă.</p>`,
+  en:`<p>If a host answers no probe at all, <code>-Pn</code> tells nmap to treat it as up and scan its ports directly. On a big network, that makes the scan much slower.</p>`},
+ try:[{cmd:"sudo nmap -sn --reason 10.0.60.0/24",d:{ro:"Gazdele și ce răspuns a dovedit că sunt pornite.",en:"The hosts and which reply proved they're up."}}]},
+
+{at:["gw","t4"],frame:D6,kind:"d",move:[[["kali","sw"],["sw","gw"]],[["gw","t4"]]],log:{ro:"drumul spre db-lab",en:"the path to db-lab"},who:"traceroute",
+ title:{ro:"traceroute: câte routere sunt pe drum",en:"traceroute: how many routers are on the way"},
+ body:{ro:`<p><code>traceroute</code> trimite pachete cu TTL 1, 2, 3…: fiecare router care decrementează TTL-ul la 0 trimite înapoi un mesaj ICMP „time exceeded” și așa se dă de gol.</p>
+<p>Implicit, traceroute folosește UDP sau ICMP, pe care firewall-ul le-ar putea bloca. Cu <code>-T -p 443</code> trimite TCP SYN spre portul 443, la fel ca sonda nmap care a mers. Rezultat: hop 1 <code>10.0.50.1</code> (routerul), hop 2 <code>10.0.60.15</code>. Un singur router între segmente.</p>`,
+ en:`<p><code>traceroute</code> sends packets with TTL 1, 2, 3…: each router that drops the TTL to 0 sends back an ICMP "time exceeded" message, and so gives itself away.</p>
+<p>By default, traceroute uses UDP or ICMP, which the firewall might block. With <code>-T -p 443</code> it sends TCP SYNs to port 443, like the nmap probe that worked. The result: hop 1 <code>10.0.50.1</code> (the router), hop 2 <code>10.0.60.15</code>. A single router between the segments.</p>`},
+ try:[{cmd:"sudo traceroute -n -T -p 443 10.0.60.15",d:{ro:"Traceroute cu TCP SYN la 443.",en:"Traceroute with TCP SYN to 443."}}]},
+
+{at:["t1","cam"],frame:D7,kind:"d",log:{ro:"nume prin DNS și mDNS",en:"names via DNS and mDNS"},who:{ro:"Nume",en:"Names"},
+ title:{ro:"De la adrese la nume: DNS invers și mDNS",en:"From addresses to names: reverse DNS and mDNS"},
+ body:{ro:`<p>Adresele spun puțin; numele spun mai mult.</p>
+<ul><li><code>dig -x 10.0.50.20</code>: DNS invers (înregistrarea PTR) → <code>web-lab.lab.local</code>. nmap face și el căutări inverse, dacă nu-i dai <code>-n</code>;</li>
+<li><code>avahi-resolve --address 10.0.50.77</code> întreabă prin mDNS → <code>ipcam-2e9d.local</code>.</li></ul>
+<p>Numele „ipcam” e un indiciu puternic, dar doar un indiciu: oricine își poate da orice nume. Confirmăm cu serviciile pe care le oferă.</p>`,
+ en:`<p>Addresses say little; names say more.</p>
+<ul><li><code>dig -x 10.0.50.20</code>: reverse DNS (the PTR record) → <code>web-lab.lab.local</code>. nmap does reverse lookups too, unless you give it <code>-n</code>;</li>
+<li><code>avahi-resolve --address 10.0.50.77</code> asks over mDNS → <code>ipcam-2e9d.local</code>.</li></ul>
+<p>The name "ipcam" is a strong hint, but only a hint: anyone can give themselves any name. We confirm it with the services it offers.</p>`}},
+
+{at:"cam",frame:D8,kind:"d",move:[[["kali","sw"],["sw","cam"]],[["cam","sw"],["sw","kali"]]],marks:{cam:{k:"drop",t:{ro:"cameră IP",en:"IP camera"}}},log:{ro:".77 = cameră IP",en:".77 = IP camera"},who:{ro:"Identificare",en:"Identification"},
+ title:{ro:"Ce e 10.0.50.77? O cameră IP adusă în laborator",en:"What is 10.0.50.77? An IP camera brought into the lab"},
+ body:{ro:`<p>O scanare scurtă, doar pe câteva porturi tipice pentru camere: <code>nmap -sV -p 80,443,554,8000 10.0.50.77</code>.</p>
+<ul><li><strong>554/tcp open rtsp</strong>: RTSP e protocolul pentru fluxuri video;</li>
+<li><strong>80/tcp open http</strong>: o interfață web de administrare.</li></ul>
+<p>E o cameră IP pe care un coleg a conectat-o „doar ca să o testeze”. Într-o rețea reală, exact așa apar dispozitivele necunoscute: o cameră, o imprimantă, un router de buzunar. Le găsești doar dacă faci inventarul.</p>
+<p>Despre scanarea porturilor și ce înseamnă <em>open</em>, <em>closed</em> și <em>filtered</em>: lecția următoare.</p>`,
+ en:`<p>A short scan, only of a few ports typical for cameras: <code>nmap -sV -p 80,443,554,8000 10.0.50.77</code>.</p>
+<ul><li><strong>554/tcp open rtsp</strong>: RTSP is the protocol for video streams;</li>
+<li><strong>80/tcp open http</strong>: a web admin interface.</li></ul>
+<p>It's an IP camera a colleague plugged in "just to test it". On a real network, that's exactly how unknown devices appear: a camera, a printer, a pocket router. You only find them if you take inventory.</p>
+<p>Port scanning, and what <em>open</em>, <em>closed</em> and <em>filtered</em> mean: the next lesson.</p>`}},
+
+{at:"t1",frame:D9,kind:"d",move:[[["kali","sw"]],[["sw","t1"]]],marks:{t1:{k:"drop",t:{ro:"254 ARP în 2 s",en:"254 ARP in 2 s"}}},log:{ro:"scanarea văzută de apărător",en:"the scan seen by a defender"},who:{ro:"Apărătorul",en:"The defender"},
+ title:{ro:"De partea cealaltă: cum arată scanarea pentru apărător",en:"The other side: what the scan looks like to a defender"},
+ body:{ro:`<p>Pe web-lab, un <code>tcpdump</code> pe ARP arată ce a trimis Kali: <strong>254 de cereri „who-has” în 2 secunde</strong>, toate de la <code>10.0.50.10</code>. Niciun dispozitiv normal nu face asta. Un IDS (Suricata, Zeek) sau switch-urile gestionate o semnalează imediat.</p>
+<p>Apărătorii folosesc aceleași idei: <code>arpwatch</code> scrie în jurnal <em>„new station 10.0.50.77”</em> când apare un MAC nou. Așa ar fi fost prinsă camera, chiar fără scanarea noastră.</p>
+<p class="key">Scanările active se văd. Încă un motiv să le faci doar unde ai voie.</p>`,
+ en:`<p>On web-lab, a <code>tcpdump</code> on ARP shows what Kali sent: <strong>254 "who-has" requests in 2 seconds</strong>, all from <code>10.0.50.10</code>. No normal device does that. An IDS (Suricata, Zeek) or managed switches flag it straight away.</p>
+<p>Defenders use the same ideas: <code>arpwatch</code> logs <em>"new station 10.0.50.77"</em> when a new MAC appears. That's how the camera would have been caught, even without our scan.</p>
+<p class="key">Active scans are visible. One more reason to run them only where you're allowed to.</p>`}},
+
+{at:["t1","t2","cam","gw","t4"],frame:D10,kind:"d",move:[[["kali","sw"]],[["sw","t1"],["sw","t2"],["sw","cam"],["sw","gw"]]],log:{ro:"inventarul comparat",en:"inventory compared"},who:"ndiff",
+ title:{ro:"Inventarul: salvezi, compari, afli ce e nou",en:"The inventory: save, compare, find what's new"},
+ body:{ro:`<p>O descoperire făcută o singură dată se învechește repede. <code>-oA lab-2026-11-17</code> salvează rezultatul în trei formate: text (<code>.nmap</code>), pentru grep (<code>.gnmap</code>) și XML (<code>.xml</code>).</p>
+<p><code>ndiff</code> compară două scanări XML: <strong>+10.0.50.77 … Host is up</strong>. Exact ce s-a schimbat de săptămâna trecută. Rulată regulat (de exemplu dintr-un timer systemd, în laborator), comparația devine un detector de dispozitive noi.</p>`,
+ en:`<p>A discovery done once quickly goes stale. <code>-oA lab-2026-11-17</code> saves the result in three formats: text (<code>.nmap</code>), grep-friendly (<code>.gnmap</code>) and XML (<code>.xml</code>).</p>
+<p><code>ndiff</code> compares two XML scans: <strong>+10.0.50.77 … Host is up</strong>. Exactly what changed since last week. Run regularly (from a systemd timer, for example, in the lab), the comparison becomes a new-device detector.</p>`},
+ try:[{cmd:"sudo nmap -sn -oA lab-$(date +%F) 10.0.50.0/24",d:{ro:"Salvează inventarul cu data în nume.",en:"Saves the inventory with the date in its name."}},{cmd:"ndiff vechi.xml nou.xml",d:{ro:"Ce a apărut și ce a dispărut.",en:"What appeared and what disappeared."}}]},
+
+{at:["kali","sw","t1","t2","cam","gw","t4"],frame:null,kind:"none",summary:true,
+ title:{ro:"Recapitulare",en:"Recap"},
+ body:{ro:`<ul><li>Începi <strong>pasiv</strong>: <code>ip neigh</code>, <code>tcpdump</code> pe ARP, DHCP, mDNS. Nu deranjezi nimic și afli deja mult.</li>
+<li>Confirmi scopul: <code>ip -br addr</code>, <code>ip route</code>; adresele din comandă trebuie să fie ale tale.</li>
+<li>În segmentul local: <strong>ARP</strong> (<code>arp-scan -l</code>, <code>nmap -sn</code> cu sudo) găsește tot, chiar și ce blochează ping-ul. OUI-ul din MAC arată producătorul.</li>
+<li>Dincolo de router: nmap combină ICMP și TCP; <strong>lipsa ping-ului nu înseamnă lipsa gazdei</strong>. <code>traceroute -T</code> arată drumul.</li>
+<li>Nume: <code>dig -x</code>, mDNS. Identificare: câteva porturi tipice, cu <code>-sV</code>.</li>
+<li>Scanările se văd (IDS, arpwatch). Inventarul salvat cu <code>-oA</code> și comparat cu <code>ndiff</code> arată ce e nou.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Mergi la laborator ↓</button></p>`,
+ en:`<ul><li>You start <strong>passive</strong>: <code>ip neigh</code>, <code>tcpdump</code> on ARP, DHCP, mDNS. You disturb nothing and already learn a lot.</li>
+<li>You confirm the scope: <code>ip -br addr</code>, <code>ip route</code>; the addresses in the command must be yours.</li>
+<li>On the local segment: <strong>ARP</strong> (<code>arp-scan -l</code>, <code>nmap -sn</code> with sudo) finds everything, even devices that block ping. The MAC's OUI shows the vendor.</li>
+<li>Beyond a router: nmap combines ICMP and TCP; <strong>no ping doesn't mean no host</strong>. <code>traceroute -T</code> shows the path.</li>
+<li>Names: <code>dig -x</code>, mDNS. Identification: a few typical ports, with <code>-sV</code>.</li>
+<li>Scans are visible (IDS, arpwatch). An inventory saved with <code>-oA</code> and compared with <code>ndiff</code> shows what's new.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Go to the lab ↓</button></p>`}}
+],
+
+reference:(T,lang)=>{
+  const ro=lang==="ro";
+  return `<div class="ref-grid"><section class="card refcard"><h2>${ro?"Pasiv":"Passive"}</h2>
+<pre class="yaml">ip neigh
+sudo tcpdump -ni eth0 "arp or port 67 or port 5353"
+sudo netdiscover -p -i eth0
+avahi-browse -art                    <span class="c"># ${ro?"servicii anunțate prin mDNS":"services announced over mDNS"}</span></pre>
+<h3>${ro?"Activ, în segmentul local":"Active, local segment"}</h3>
+<pre class="yaml">sudo arp-scan -l -I eth0
+sudo nmap -sn 10.0.50.0/24
+sudo netdiscover -r 10.0.50.0/24</pre></section>
+<section class="card refcard"><h2>${ro?"Dincolo de router":"Beyond a router"}</h2>
+<pre class="yaml">sudo nmap -sn --reason 10.0.60.0/24
+sudo nmap -sn -PS22,443 -PA80 10.0.60.0/24   <span class="c"># ${ro?"sonde alese de tine":"probes you choose"}</span>
+sudo nmap -Pn -p 443 10.0.60.15              <span class="c"># ${ro?"fără descoperire":"skip discovery"}</span>
+sudo traceroute -n -T -p 443 10.0.60.15</pre>
+<h3>${ro?"Nume și inventar":"Names and inventory"}</h3>
+<pre class="yaml">dig -x 10.0.50.20 +short
+avahi-resolve --address 10.0.50.77
+nmap -sL -n 10.0.50.0/28         <span class="c"># ${ro?"doar listează ținte, nu trimite nimic":"just lists targets, sends nothing"}</span>
+sudo nmap -sn -oA lab-$(date +%F) 10.0.50.0/24
+ndiff lab-2026-11-10.xml lab-2026-11-17.xml</pre></section></div>`;
+},
+
+gloss:[
+ [{ro:"Descoperire pasivă",en:"Passive discovery"},null,{ro:"Afli ce e în rețea doar ascultând traficul, fără să trimiți nimic.",en:"Learning what's on the network just by listening, without sending anything."}],
+ ["ARP",null,{ro:"Protocolul care află MAC-ul pentru o adresă IP din același segment.",en:"The protocol that finds the MAC for an IP address on the same segment."}],
+ ["OUI",null,{ro:"Primii 3 octeți ai unui MAC: identifică producătorul plăcii.",en:"A MAC's first 3 bytes: they identify the card's vendor."}],
+ ["mDNS",null,{ro:"DNS fără server, în rețeaua locală: nume care se termină în .local.",en:"Serverless DNS on the local network: names ending in .local."}],
+ [{ro:"Segment",en:"Segment"},null,{ro:"Partea de rețea în care ajung broadcast-urile; ARP nu trece de router.",en:"The part of the network broadcasts reach; ARP doesn't cross a router."}],
+ ["nmap -sn",null,{ro:"Descoperire de gazde fără scanare de porturi.",en:"Host discovery without a port scan."}],
+ ["RST",null,{ro:"Răspuns TCP „port închis”; dovedește totuși că gazda există.",en:"A TCP \"port closed\" reply; it still proves the host exists."}],
+ ["TTL",null,{ro:"Contor scăzut de fiecare router; la 0, pachetul e aruncat și se trimite ICMP time exceeded.",en:"A counter each router decrements; at 0 the packet is dropped and ICMP time exceeded is sent."}],
+ ["arpwatch",null,{ro:"Unealtă de apărare care anunță MAC-uri noi sau schimbate în rețea.",en:"A defensive tool that reports new or changed MACs on the network."}],
+ ["ndiff",null,{ro:"Compară două rezultate nmap XML.",en:"Compares two nmap XML results."}]
+],
+glossEx:{
+ "OUI":{ro:"08:00:27 = VirtualBox; așa am știut că .20 și .30 sunt VM-uri.",en:"08:00:27 = VirtualBox; that's how we knew .20 and .30 were VMs."},
+ "RST":{ro:"db-lab a ignorat ping-ul, dar a răspuns cu RST la SYN :443.",en:"db-lab ignored ping but answered the SYN to :443 with a RST."}
+},
+
+quiz:[
+ {"q":{"ro":"Cu ce începi descoperirea unei rețele?","en":"What do you start network discovery with?"},"o":[{"ro":"Scanarea tuturor porturilor","en":"Scanning every port"},{"ro":"Un traceroute spre internet","en":"A traceroute to the internet"},{"ro":"Observarea pasivă: ARP, DHCP, mDNS din trafic","en":"Passive observation: ARP, DHCP, mDNS in the traffic"},{"ro":"Repornirea routerului","en":"Rebooting the router"}],"a":2,"e":{"ro":"E invizibilă și nu deranjează nimic.","en":"It's invisible and disturbs nothing."}},
+ {"q":{"ro":"De ce găsește ARP și dispozitivele care blochează ping-ul?","en":"Why does ARP find devices that block ping?"},"o":[{"ro":"Pentru că e mai rapid","en":"Because it's faster"},{"ro":"Pentru că orice dispozitiv IPv4 din segment trebuie să răspundă la ARP ca să comunice","en":"Because every IPv4 device on the segment must answer ARP to communicate"},{"ro":"Pentru că ocolește firewall-ul routerului","en":"Because it bypasses the router's firewall"},{"ro":"Nu le găsește","en":"It doesn't"}],"a":1,"e":{"ro":"Dar doar în același segment.","en":"But only on the same segment."}},
+ {"q":{"ro":"Funcționează arp-scan pentru rețeaua 10.0.60.0/24, aflată după router?","en":"Does arp-scan work for the 10.0.60.0/24 network behind the router?"},"o":[{"ro":"Nu: ARP nu trece de router; ai nevoie de sonde IP (ICMP, TCP)","en":"No: ARP doesn't cross a router; you need IP probes (ICMP, TCP)"},{"ro":"Da, la fel","en":"Yes, the same"},{"ro":"Doar cu -Pn","en":"Only with -Pn"},{"ro":"Doar fără sudo","en":"Only without sudo"}],"a":0,"e":{"ro":"nmap -sn trimite atunci ICMP și TCP.","en":"nmap -sn then sends ICMP and TCP."}},
+ {"q":{"ro":"ping 10.0.60.15 dă 100% pierdere. Ce poți concluziona?","en":"ping 10.0.60.15 gives 100% loss. What can you conclude?"},"o":[{"ro":"Gazda nu există","en":"The host doesn't exist"},{"ro":"Gazda e oprită","en":"The host is off"},{"ro":"Routerul e defect","en":"The router is broken"},{"ro":"Nimic sigur: ICMP poate fi blocat; încerci sonde TCP","en":"Nothing for sure: ICMP may be blocked; you try TCP probes"}],"a":3,"e":{"ro":"db-lab a răspuns cu RST la SYN :443.","en":"db-lab answered the SYN to :443 with a RST."}},
+ {"q":{"ro":"Ce înseamnă un RST primit la o sondă de descoperire?","en":"What does a RST received to a discovery probe mean?"},"o":[{"ro":"Gazda e oprită","en":"The host is off"},{"ro":"Firewall-ul a blocat","en":"The firewall blocked it"},{"ro":"Gazda există; portul e doar închis","en":"The host exists; the port is just closed"},{"ro":"Eroare de rețea","en":"A network error"}],"a":2,"e":{"ro":"Cineva a trebuit să trimită RST-ul.","en":"Someone had to send that RST."}},
+ {"q":{"ro":"Ce îți spune prefixul MAC 08:00:27?","en":"What does the MAC prefix 08:00:27 tell you?"},"o":[{"ro":"E un router Cisco","en":"It's a Cisco router"},{"ro":"E o placă de rețea VirtualBox: o mașină virtuală","en":"It's a VirtualBox NIC: a virtual machine"},{"ro":"E o cameră IP","en":"It's an IP camera"},{"ro":"E o adresă de broadcast","en":"It's a broadcast address"}],"a":1,"e":{"ro":"OUI-ul identifică producătorul.","en":"The OUI identifies the vendor."}},
+ {"q":{"ro":"Cum arată o scanare ARP a întregii rețele pentru un apărător?","en":"What does an ARP scan of the whole network look like to a defender?"},"o":[{"ro":"Sute de cereri who-has de la aceeași adresă în câteva secunde","en":"Hundreds of who-has requests from one address within seconds"},{"ro":"Invizibilă","en":"Invisible"},{"ro":"Un singur pachet","en":"A single packet"},{"ro":"Trafic HTTP","en":"HTTP traffic"}],"a":0,"e":{"ro":"IDS-urile și switch-urile gestionate o semnalează.","en":"IDSs and managed switches flag it."}},
+ {"q":{"ro":"Cum afli ce dispozitive au apărut de săptămâna trecută?","en":"How do you find which devices appeared since last week?"},"o":[{"ro":"Îți amintești","en":"You remember"},{"ro":"Repornești toate dispozitivele","en":"Reboot every device"},{"ro":"Scanezi toate porturile","en":"Scan every port"},{"ro":"Salvezi scanările cu -oA și le compari cu ndiff","en":"Save scans with -oA and compare them with ndiff"}],"a":3,"e":{"ro":"ndiff arată gazdele adăugate (+) și dispărute (-).","en":"ndiff shows added (+) and removed (-) hosts."}}
+]
+};
+})();
+</script>
+<script src="../assets/engine.js?v=4"></script>
+<script src="../assets/labs-data.js?v=9"></script>
+<script src="../assets/lab.js?v=1"></script>
+<script type="module" src="../assets/auth.js?v=16"></script>
+</body>
+</html>
