@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
 <link rel="stylesheet" href="../assets/site.css">
 <link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/diagram.css?v=1">
 <link rel="stylesheet" href="../assets/theme.css">
 </head>
 <body>
@@ -44,6 +45,7 @@ nodes:{
   br:{type:"host",name:"Browser",lines:[{ro:"magazinul de rădăcini",en:"root store"}]}
 },
 links:[["ops","srv"],["srv","ca"],["ca","root","virt"],["srv","br"]],
+linkLabels:{"ops-srv":"SSH","srv-ca":{"ro":"CSR → certificat","en":"CSR → certificate"},"ca-root":{"ro":"semnat de","en":"signed by"},"srv-br":"TLS · 443"},
 layouts:{
   wide:{vb:[0,0,1000,470],n:{ops:[90,110],srv:[330,270],ca:[640,110],root:[900,110],br:[760,390]}},
   narrow:{vb:[0,0,360,740],n:{ops:[90,70],srv:[180,250],ca:[90,450],root:[270,450],br:[180,640]}}
@@ -268,7 +270,7 @@ quiz:[
 };
 })();
 </script>
-<script src="../assets/engine.js?v=3"></script>
+<script src="../assets/engine.js?v=4"></script>
 <script src="../assets/labs-data.js?v=6"></script>
 <script src="../assets/lab.js?v=1"></script>
 <script type="module" src="../assets/auth.js?v=13"></script>

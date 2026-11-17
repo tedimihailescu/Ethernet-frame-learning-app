@@ -294,6 +294,7 @@ footer{text-align:left;padding:0}
   .wrap{padding-block:14px}
 }
 </style>
+<link rel="stylesheet" href="../assets/diagram.css?v=1">
 <link rel="stylesheet" href="../assets/theme.css">
 </head>
 <body>
@@ -333,6 +334,7 @@ footer{text-align:left;padding:0}
 
 <div class="wrap" id="sim">
   <section class="card diagram" aria-label="Diagrama rețelei / Network diagram">
+    <div class="dcap" id="dcap" aria-live="polite"></div>
     <svg id="net" role="img" aria-labelledby="t-title"></svg>
     <div class="dlegend" id="dlegend"></div>
   </section>
@@ -1068,7 +1070,9 @@ function buildDiagram(){
   const n=L.n,narrow=L.cls==="narrow";let h="";
   L.zones.forEach(z=>{h+=`<rect class="zone" x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="12"/><text class="zone-lbl" x="${z.x+10}" y="${z.y+z.h-9}">${z.l}</text>`});
   h+=`<text class="zone-lbl" x="${L.wan.x}" y="${L.wan.y}" text-anchor="${L.wan.a}">WAN · 10.0.0.0/30</text>`;
+  h+=`<defs><marker id="arr" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path class="arrhead" d="M0 0L10 5L0 10z"/></marker></defs>`;
   LINKS.forEach(([a,b])=>{h+=`<line class="link" data-l="${a}-${b}" x1="${n[a][0]}" y1="${n[a][1]}" x2="${n[b][0]}" y2="${n[b][1]}"/>`});
+  h+=`<g id="paths"></g>`;
   PORTS.forEach(([sw,o,p])=>{const [x1,y1]=n[sw],[x2,y2]=n[o];const dx=x2-x1,dy=y2-y1,len=Math.hypot(dx,dy);const d=narrow?40:44;
     const px=x1+dx/len*d+(dy===0?0:9),py=y1+dy/len*d+(dy===0?-7:4);h+=`<text class="port" x="${px}" y="${py}" text-anchor="middle">${p}</text>`});
   Object.entries(NODES).forEach(([id,nd])=>{const [x,y]=n[id];
@@ -1094,12 +1098,39 @@ function setMarks(st){const g=svg.querySelector("#marks");g.innerHTML="";if(!st.
     const t=document.createElementNS(SVGNS,"text");t.setAttribute("class","mark "+k);
     t.setAttribute("x",side?x+30:x);t.setAttribute("y",side?y+42:y-52);if(!side)t.setAttribute("text-anchor","middle");
     t.textContent=T(k==="ok"?UI.accepted:UI.dropped);g.appendChild(t)})}
+// Numbered arrows (direction and order of this step's hops) and the caption above the diagram.
+function clearR(id,vx,vy){const nd=NODES[id],ring=nd.type==="switch"?33:28;let r=ring+2;
+  if(!nd.side&&!nd.lblLeft&&vy>0.05){const lh=mqNarrow.matches?12:14,H=(nd.type==="switch"?47:44)+lh*(nd.lines||[]).length+6,w=Math.max(String(nd.name).length,...(nd.lines||[]).map(l=>String(T(l)).length),4)*3.9+6;
+    r=Math.max(r,Math.min(H/vy,Math.abs(vx)>0.01?w/Math.abs(vx):Infinity))}
+  return r}
+function drawHops(st){const g=svg.querySelector("#paths");if(!g)return;const moves=st.move||[];
+  const pairs=new Set();moves.forEach(ph=>ph.forEach(([a,b])=>pairs.add(a+">"+b)));let h="",badges="";
+  moves.forEach((segs,k)=>segs.forEach(([a,b])=>{const [x1,y1]=L.n[a],[x2,y2]=L.n[b],dx=x2-x1,dy=y2-y1,len=Math.hypot(dx,dy)||1,ux=dx/len,uy=dy/len;
+    const off=pairs.has(b+">"+a)?7:0,px=-uy*off,py=ux*off,r1=clearR(a,ux,uy)+2,r2=clearR(b,-ux,-uy)+5;if(len<r1+r2+12)return;
+    const sx=x1+ux*r1+px,sy=y1+uy*r1+py,ex=x2-ux*r2+px,ey=y2-uy*r2+py;
+    h+=`<line class="hop" x1="${sx.toFixed(1)}" y1="${sy.toFixed(1)}" x2="${ex.toFixed(1)}" y2="${ey.toFixed(1)}" marker-end="url(#arr)"/>`;
+    if(moves.length<2)return;const f=Math.min(.3,26/len+.08),mx=sx+(ex-sx)*f+px*1.8,my=sy+(ey-sy)*f+py*1.8;
+    badges+=`<g class="hopn"><circle cx="${mx.toFixed(1)}" cy="${my.toFixed(1)}" r="9"/><text x="${mx.toFixed(1)}" y="${(my+.5).toFixed(1)}">${k+1}</text></g>`}));
+  g.innerHTML=h+badges}
+const CAPW={eth:{ro:"Cadru Ethernet",en:"Ethernet frame"},arp:{ro:"Mesaj ARP",en:"ARP message"},ip:{ro:"Pachet IP",en:"IP packet"},tcp:{ro:"Segment TCP",en:"TCP segment"},app:{ro:"Date",en:"Data"}};
+function renderCap(){const el=document.getElementById("dcap");if(!el)return;const st=S[cur],nm=id=>NODES[id]?String(NODES[id].name):id;
+  let h=`<span class="dcap-step">${T(UI.step)} ${cur+1}/${N}</span><b class="dcap-t">${T(st.title)}</b>`;
+  const k=st.move&&pduKey(st.frame);if(k&&CAPW[k])h+=`<span class="dcap-what">${T(CAPW[k])}</span>`;
+  if(st.move&&st.move.length){h+=`<ol class="hops">`+st.move.map((ph,i)=>{const by={};ph.forEach(([a,b])=>{(by[a]=by[a]||[]).push(b)});
+    return `<li><i>${st.move.length>1?i+1:"→"}</i>${Object.entries(by).map(([a,bs])=>`${nm(a)} <span class="ar">→</span> ${bs.map(nm).join(", ")}`).join(" · ")}</li>`}).join("")+`</ol>`}
+  else{const at=[].concat(st.at||[]);if(at.length&&at.length<=3)h+=`<span class="dcap-at">📍 ${at.map(nm).join(", ")}</span>`}
+  el.innerHTML=h}
 function updateDiagram(animate,done){
   const st=S[cur];const id=++animId;
   svg.querySelectorAll(".node").forEach(e=>e.classList.remove("active"));
   [].concat(st.at).forEach(a=>{const e=svg.querySelector("#n-"+a);if(e)e.classList.add("active")});
   const hot=new Set();(st.move||[]).forEach(ph=>ph.forEach(([a,b])=>{hot.add(a+"-"+b);hot.add(b+"-"+a)}));
   svg.querySelectorAll(".link").forEach(l=>l.classList.toggle("hot",hot.has(l.dataset.l)));
+  // Focus: fade the devices that take no part in this step.
+  const inv=new Set([].concat(st.at||[]));(st.move||[]).forEach(p=>p.forEach(([a,b])=>{inv.add(a);inv.add(b)}));Object.keys(st.marks||{}).forEach(k=>inv.add(k));
+  svg.classList.toggle("focus",inv.size>0&&inv.size<Object.keys(NODES).length);
+  svg.querySelectorAll(".node").forEach(e=>e.classList.toggle("inv",inv.has(e.id.slice(2))));
+  drawHops(st);renderCap();
   const layer=svg.querySelector("#tokens");layer.innerHTML="";svg.querySelector("#marks").innerHTML="";
   const finish=()=>{if(id!==animId)return;layer.innerHTML="";if(st.frame)restNodes(st).forEach(n=>{const t=tokenEl(st.frame);place(t,tokPos(n));layer.appendChild(t)});setMarks(st);done&&done()};
   if(!animate||!st.move||!st.frame||mqReduce.matches){finish();return 0}

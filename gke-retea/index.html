@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
 <link rel="stylesheet" href="../assets/site.css">
 <link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/diagram.css?v=1">
 <link rel="stylesheet" href="../assets/theme.css">
 </head>
 <body>
@@ -58,6 +59,7 @@ nodes:{
   podB:{type:"pod",name:"pod B",lines:[IP.b]}
 },
 links:[["podA","br1"],["podA2","br1"],["br1","n1"],["n1","vpc"],["vpc","n2"],["n2","br2"],["br2","podB"],["vpc","vm"],["vpc","inet"]],
+linkLabels:{"podA-br1":"veth","podA2-br1":"veth","br2-podB":"veth","br1-n1":{"ro":"rutare","en":"routing"},"n2-br2":{"ro":"rutare","en":"routing"},"n1-vpc":"10.4.1.0/24","vpc-n2":"10.4.2.0/24","vpc-vm":"VPC","vpc-inet":"Cloud NAT"},
 layouts:{
   wide:{vb:[0,0,1000,500],n:{podA:[80,140],podA2:[80,330],br1:[190,235],n1:[305,235],vpc:[500,235],inet:[500,80],vm:[500,400],n2:[695,235],br2:[810,235],podB:[925,235]},
     zones:[{x:10,y:40,w:330,h:380,top:true,l:{ro:"node-1 (VM GCE) · pod-uri 10.4.1.0/24",en:"node-1 (GCE VM) · pods 10.4.1.0/24"}},
@@ -411,7 +413,7 @@ quiz:[
 };
 })();
 </script>
-<script src="../assets/engine.js?v=3"></script>
+<script src="../assets/engine.js?v=4"></script>
 <script src="../assets/labs-data.js?v=6"></script>
 <script src="../assets/lab.js?v=1"></script>
 <script type="module" src="../assets/auth.js?v=13"></script>

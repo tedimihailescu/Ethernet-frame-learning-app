@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
 <link rel="stylesheet" href="../assets/site.css">
 <link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/diagram.css?v=1">
 <link rel="stylesheet" href="../assets/theme.css">
 </head>
 <body>
@@ -48,6 +49,7 @@ nodes:{
   sent:{type:"box",name:"Sentinel",lines:[{ro:"monitorizare",en:"monitoring"}]}
 },
 links:[["app","cft1"],["cft1","cft2"],["cft2","core"],["cft1","sent"],["cft2","sent"]],
+linkLabels:{"app-cft1":"CFTUTIL SEND","cft1-cft2":"1761","cft2-core":{"ro":"procedura EXEC","en":"EXEC procedure"},"cft1-sent":{"ro":"evenimente","en":"events"},"cft2-sent":{"ro":"evenimente","en":"events"}},
 layouts:{
   wide:{vb:[0,0,1000,480],n:{app:[90,190],cft1:[330,190],cft2:[650,190],core:[900,190],sent:[490,390]},
     texts:[{x:490,y:170,t:"PeSIT · TLS"}]},
@@ -267,7 +269,7 @@ quiz:[
 };
 })();
 </script>
-<script src="../assets/engine.js?v=3"></script>
+<script src="../assets/engine.js?v=4"></script>
 <script src="../assets/labs-data.js?v=6"></script>
 <script src="../assets/lab.js?v=1"></script>
 <script type="module" src="../assets/auth.js?v=13"></script>

@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
 <link rel="stylesheet" href="../assets/site.css">
 <link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/diagram.css?v=1">
 <link rel="stylesheet" href="../assets/theme.css">
 </head>
 <body>
@@ -49,6 +50,7 @@ nodes:{
   g2:{type:"host",name:"PC-G2",lines:[{ro:"Oaspeți · VLAN 20",en:"Guests · VLAN 20"},IP.g2]}
 },
 links:[["f1","sw1"],["g1","sw1"],["sw1","sw2"],["sw1","r1"],["sw2","f2"],["sw2","g2"]],
+linkLabels:{"f1-sw1":"access · VLAN 10","g1-sw1":"access · VLAN 20","sw1-r1":"trunk · 802.1Q","sw2-f2":"access · VLAN 10","sw2-g2":"access · VLAN 20"},
 ports:[["sw1","f1","p1"],["sw1","g1","p2"],["sw1","sw2","p24"],["sw1","r1","p23"],["sw2","f2","p3"],["sw2","g2","p4"]],
 layouts:{
   wide:{vb:[0,0,1000,500],n:{f1:[80,120],g1:[80,340],sw1:[300,230],r1:[520,430],sw2:[700,230],f2:[900,120],g2:[900,340]},
@@ -294,7 +296,7 @@ quiz:[
 };
 })();
 </script>
-<script src="../assets/engine.js?v=3"></script>
+<script src="../assets/engine.js?v=4"></script>
 <script src="../assets/labs-data.js?v=6"></script>
 <script src="../assets/lab.js?v=1"></script>
 <script type="module" src="../assets/auth.js?v=13"></script>

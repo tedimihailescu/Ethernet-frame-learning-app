@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
 <link rel="stylesheet" href="../assets/site.css">
 <link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/diagram.css?v=1">
 <link rel="stylesheet" href="../assets/theme.css">
 </head>
 <body>
@@ -53,6 +54,7 @@ nodes:{
   n6:{type:"db",name:{ro:"nod 6",en:"node 6"},lines:["10.0.1.16"]}
 },
 links:[["app","n5"],["n1","n2","virt"],["n2","n3","virt"],["n3","n4","virt"],["n4","n5","virt"],["n5","n6","virt"],["n6","n1","virt"],["n5","n1"]],
+linkLabels:{"app-n5":"CQL · 9042","n5-n1":{"ro":"replicare · 7000","en":"replication · 7000"}},
 layouts:{
   wide:{vb:[0,0,1000,560],n:{app:[110,330],n1:[640,110],n2:[820,205],n3:[820,395],n4:[640,490],n5:[460,395],n6:[460,205]},
     zones:[{x:360,y:20,w:580,h:530,top:true,cls:"virt",l:{ro:"Cluster tracking · datacenter eu-west · RF = 3",en:"tracking cluster · eu-west data centre · RF = 3"}}],
@@ -318,7 +320,7 @@ quiz:[
 };
 })();
 </script>
-<script src="../assets/engine.js?v=3"></script>
+<script src="../assets/engine.js?v=4"></script>
 <script src="../assets/labs-data.js?v=6"></script>
 <script src="../assets/lab.js?v=1"></script>
 <script type="module" src="../assets/auth.js?v=13"></script>

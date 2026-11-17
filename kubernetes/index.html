@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
 <link rel="stylesheet" href="../assets/site.css">
 <link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/diagram.css?v=1">
 <link rel="stylesheet" href="../assets/theme.css">
 </head>
 <body>
@@ -184,6 +185,7 @@ nodes:{
   lb:{type:"svc",name:"LoadBalancer",lines:[IP.lb+":80"]}
 },
 links:[["fe","sdns","virt"],["sdns","cdns","virt"],["fe","sbk","virt"],["sbk","bk1","virt"],["sbk","bk2","virt"],["user","lb"],["lb","bk2"]],
+linkLabels:{"fe-sdns":"UDP 53","sdns-cdns":"UDP 53","fe-sbk":":80","sbk-bk1":":8080","sbk-bk2":":8080","user-lb":":80","lb-bk2":"NodePort"},
 layouts:{
   wide:{vb:[0,0,1000,490],n:{fe:[175,110],bk1:[175,262],sdns:[500,110],sbk:[500,262],cdns:[825,110],bk2:[825,262],user:[330,418],lb:[660,418]},
     zones:[{x:10,y:20,w:330,h:330,top:true,l:{ro:"node-1 · 10.0.0.11 · pod-uri 10.244.1.0/24",en:"node-1 · 10.0.0.11 · pods 10.244.1.0/24"}},
@@ -616,7 +618,7 @@ quiz:[
 };
 })();
 </script>
-<script src="../assets/engine.js?v=3"></script>
+<script src="../assets/engine.js?v=4"></script>
 <script src="../assets/labs-data.js?v=6"></script>
 <script src="../assets/lab.js?v=1"></script>
 <script type="module" src="../assets/auth.js?v=13"></script>

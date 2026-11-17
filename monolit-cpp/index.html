@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
 <link rel="stylesheet" href="../assets/site.css">
 <link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/diagram.css?v=1">
 <link rel="stylesheet" href="../assets/theme.css">
 </head>
 <body>
@@ -53,6 +54,7 @@ nodes:{
   ora:{type:"db",name:"Oracle",lines:["ATLASDB :1521"]}
 },
 links:[["client","ngx"],["ngx","lis"],["ngx","app2","virt"],["lis","soap"],["soap","biz"],["biz","dal"],["dal","ora"]],
+linkLabels:{"client-ngx":"SOAP · 443","ngx-lis":":8081","ngx-app2":":8081","lis-soap":"XML","soap-biz":{"ro":"apel C++","en":"C++ call"},"biz-dal":{"ro":"apel C++","en":"C++ call"},"dal-ora":"OCI · 1521"},
 layouts:{
   wide:{vb:[0,0,1000,480],n:{client:[60,210],ngx:[200,210],lis:[350,210],soap:[490,210],biz:[630,210],dal:[770,210],ora:[920,210],app2:[450,415]},
     zones:[{x:285,y:110,w:570,h:200,top:true,l:{ro:"app-01 · Linux · un singur proces: atlas-core (C++)",en:"app-01 · Linux · one process: atlas-core (C++)"}}]},
@@ -442,7 +444,7 @@ quiz:[
 };
 })();
 </script>
-<script src="../assets/engine.js?v=3"></script>
+<script src="../assets/engine.js?v=4"></script>
 <script src="../assets/labs-data.js?v=6"></script>
 <script src="../assets/lab.js?v=1"></script>
 <script type="module" src="../assets/auth.js?v=13"></script>

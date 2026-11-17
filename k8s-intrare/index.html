@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
 <link rel="stylesheet" href="../assets/site.css">
 <link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/diagram.css?v=1">
 <link rel="stylesheet" href="../assets/theme.css">
 </head>
 <body>
@@ -63,6 +64,7 @@ nodes:{
   app:{type:"pod",name:{ro:"pod aplicație",en:"app pod"},lines:[A.app+":8080"]}
 },
 links:[["cl","lb"],["lb","nic"],["nic","pre"],["pre","kube"],["kube","rt"],["rt","post"],["post","n2"],["n2","veth"],["veth","pod"],["pod","app","virt"]],
+linkLabels:{"cl-lb":"TCP 443","lb-nic":"NodePort 30443","nic-pre":"netfilter","pre-kube":"iptables","kube-rt":"DNAT","rt-post":"SNAT","post-n2":"VPC","n2-veth":"eth0","veth-pod":":443","pod-app":":8080"},
 layouts:{
   wide:{vb:[0,0,1000,500],n:{cl:[55,120],lb:[185,120],nic:[320,120],pre:[455,120],kube:[590,120],rt:[725,120],post:[870,120],n2:[870,360],veth:[690,360],pod:[510,360],app:[300,360]},hideLinks:["post-n2"],
     texts:[{x:960,y:250,a:"end",t:{ro:"pe fir ↓",en:"on the wire ↓"}}],
@@ -474,7 +476,7 @@ quiz:[
 };
 })();
 </script>
-<script src="../assets/engine.js?v=3"></script>
+<script src="../assets/engine.js?v=4"></script>
 <script src="../assets/labs-data.js?v=6"></script>
 <script src="../assets/lab.js?v=1"></script>
 <script type="module" src="../assets/auth.js?v=13"></script>

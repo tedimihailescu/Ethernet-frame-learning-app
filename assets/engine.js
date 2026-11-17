@@ -58,7 +58,7 @@ document.getElementById("app").innerHTML=`
   <div class="goals"><h2 data-t="goalsT"></h2><ul id="goals"></ul></div>
 </div></section>
 <div class="wrap" id="sim">
-  <section class="card diagram"><svg id="net" role="img" aria-labelledby="t-title"></svg><div class="dlegend" id="dlegend"></div></section>
+  <section class="card diagram"><div class="dcap" id="dcap" aria-live="polite"></div><svg id="net" role="img" aria-labelledby="t-title"></svg><div class="dlegend" id="dlegend"></div></section>
   <section class="card controls"><div class="btns"><button type="button" class="btn" id="b-reset"></button><button type="button" class="btn" id="b-back"></button><button type="button" class="btn" id="b-play"></button><button type="button" class="btn primary" id="b-next"></button></div>
     <div class="progress"><div class="stepno" id="stepno" aria-live="polite"></div><div class="dots" id="dots"></div></div>
     <div class="easy"><button type="button" class="btn" id="b-simple" aria-pressed="false"></button><details class="outline" id="outline"><summary data-t="outline"></summary><ol id="outlineList"></ol></details><span class="easy-tip" data-t="hoverTip"></span></div></section>
@@ -103,7 +103,14 @@ function buildDiagram(){
   const n=L.n,narrow=mqNarrow.matches;let h="";
   (L.zones||[]).forEach(z=>{const c=z.cls?" "+z.cls:"";h+=`<rect class="zone${c}" x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="12"/><text class="zone-lbl${c}" x="${z.x+10}" y="${z.top?z.y+18:z.y+z.h-9}">${T(z.l)}</text>`});
   (L.texts||[]).forEach(t=>{h+=`<text class="zone-lbl" x="${t.x}" y="${t.y}" text-anchor="${t.a||"middle"}">${T(t.t)}</text>`});
-  LS.links.forEach(([a,b,c])=>{if(!n[a]||!n[b]||(L.hideLinks||[]).includes(a+"-"+b))return;h+=`<line class="link${c?" "+c:""}" data-l="${a}-${b}" x1="${n[a][0]}" y1="${n[a][1]}" x2="${n[b][0]}" y2="${n[b][1]}"/>`});
+  h+=`<defs><marker id="arr" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path class="arrhead" d="M0 0L10 5L0 10z"/></marker></defs>`;
+  const shown=([a,b])=>n[a]&&n[b]&&!(L.hideLinks||[]).includes(a+"-"+b);
+  LS.links.forEach(([a,b,c])=>{if(!shown([a,b]))return;h+=`<line class="link${c?" "+c:""}" data-l="${a}-${b}" x1="${n[a][0]}" y1="${n[a][1]}" x2="${n[b][0]}" y2="${n[b][1]}"/>`});
+  // What travels on each link (protocol, port...): links:[a,b,cls,label] or LESSON.linkLabels {"a-b": label}
+  const LL=LS.linkLabels||{};
+  if(!(narrow&&L.hideLabels))LS.links.forEach(l=>{const [a,b]=l,lab=linkLabel(a,b);if(!lab||!shown(l))return;
+    h+=`<text class="llbl" data-l="${a}-${b}" data-a="${a}" data-b="${b}">${T(lab)}</text>`});
+  h+=`<g id="paths"></g>`;
   (LS.ports||[]).forEach(([sw,o,p])=>{const [x1,y1]=n[sw],[x2,y2]=n[o];const dx=x2-x1,dy=y2-y1,len=Math.hypot(dx,dy);const d=narrow?40:44;
     h+=`<text class="port" x="${x1+dx/len*d+(dy===0?0:9)}" y="${y1+dy/len*d+(dy===0?-7:4)}" text-anchor="middle">${p}</text>`});
   Object.entries(LS.nodes).forEach(([id,nd])=>{if(!n[id])return;const [x,y]=n[id];const [ring,lo]=ty(nd.type);
@@ -113,6 +120,29 @@ function buildDiagram(){
     else{const yy=y+lo;h+=`<text class="nm" x="${x}" y="${yy}" text-anchor="middle">${T(nd.name)}</text>`;(nd.lines||[]).forEach((l,i)=>{h+=`<text class="lbl" x="${x}" y="${yy+lh*(i+1)}" text-anchor="middle">${T(l)}</text>`})}
     h+=`</g>`});
   h+=`<g id="marks"></g><g id="tokens"></g>`;svg.innerHTML=h;
+  placeLabels();
+}
+function linkLabel(a,b){const LL=LS.linkLabels||{},l=LS.links.find(([x,y])=>(x===a&&y===b)||(x===b&&y===a));return (l&&l[3])||LL[a+"-"+b]||LL[b+"-"+a]||null}
+// Put each link label beside its line where it doesn't cover a name, an icon or another label:
+// try the middle first, then other points along the line and the other side; hide it if nothing fits
+// (the step caption still names it).
+function placeLabels(){
+  const els=[...svg.querySelectorAll(".llbl")];if(!els.length)return;
+  const box=e=>{try{const b=e.getBBox();return [b.x,b.y,b.x+b.width,b.y+b.height]}catch(x){return null}};
+  const hit=(p,q)=>p[0]<q[2]-1&&q[0]<p[2]-1&&p[1]<q[3]-1&&q[1]<p[3]-1;
+  const obst=[...svg.querySelectorAll(".nm,.lbl,.zone-lbl,.port")].map(box).filter(Boolean);
+  svg.querySelectorAll(".node .ring").forEach(c=>{const r=+c.getAttribute("r")-3,x=+c.getAttribute("cx"),y=+c.getAttribute("cy");obst.push([x-r,y-r,x+r,y+r])});
+  const vb=L.vb,narrow=mqNarrow.matches,d=narrow?7:9;
+  els.forEach(e=>{const a=e.dataset.a,b=e.dataset.b,[x1,y1]=L.n[a],[x2,y2]=L.n[b],len=Math.hypot(x2-x1,y2-y1)||1;
+    let nx=-(y2-y1)/len,ny=(x2-x1)/len;if(ny>0.01||(Math.abs(ny)<=0.01&&nx<0)){nx=-nx;ny=-ny}
+    const fix=(L.lpos||{})[a+"-"+b],ts=typeof fix==="number"?[fix]:[.5,.4,.6,.32,.68,.25,.75];let ok=false;
+    for(const t of ts){for(const s of [1,-1]){const sx=nx*s,sy=ny*s,an=Math.abs(sx)>.7?(sx>0?"start":"end"):"middle";
+      e.setAttribute("x",(x1+(x2-x1)*t+sx*d).toFixed(1));e.setAttribute("y",(y1+(y2-y1)*t+sy*d+(an==="middle"?(sy>0?8:0):4)).toFixed(1));e.setAttribute("text-anchor",an);
+      const bb=box(e);if(!bb)continue;
+      if(bb[0]<vb[0]+2||bb[2]>vb[0]+vb[2]-2||bb[1]<vb[1]||bb[3]>vb[1]+vb[3])continue;
+      if(obst.some(o=>hit(bb,o)))continue;
+      obst.push(bb);ok=true;break}if(ok)break}
+    if(!ok)e.remove()});
 }
 const tokPos=id=>{const [x,y]=L.n[id];return [x,y-ty(LS.nodes[id].type)[0]-6]};
 function tokenEl(f){const [lbl,cls]=LS.pdu(f).tok;const g=document.createElementNS(SVGNS,"g");g.setAttribute("class","token "+cls);
@@ -122,13 +152,58 @@ function restNodes(st){if(st.rest)return st.rest;if(st.move)return st.move[st.mo
 function setMarks(st){const g=svg.querySelector("#marks");g.innerHTML="";if(!st.marks)return;
   Object.entries(st.marks).forEach(([id,m])=>{const [x,y]=L.n[id];const t=document.createElementNS(SVGNS,"text");
     t.setAttribute("class","mark "+(m.k||"ok"));t.setAttribute("x",x);t.setAttribute("y",y-ty(LS.nodes[id].type)[0]-24);t.setAttribute("text-anchor","middle");t.textContent=T(m.t);g.appendChild(t)})}
+// How far from a node's centre an arrow must stop (direction vx,vy, pointing away from the node),
+// so it doesn't run over the node's name and the lines under it.
+function clearR(id,vx,vy){
+  const nd=LS.nodes[id],[ring,lo]=ty(nd.type),side=(L.side||{})[id]||nd.side;let r=ring+2;
+  if(!side&&vy>0.05){const narrow=mqNarrow.matches,lh=narrow?12:14,nl=(nd.lines||[]).length;
+    const H=lo+lh*nl+6,w=Math.max(T(nd.name).length,...(nd.lines||[]).map(l=>String(T(l)).length),4)*(narrow?3.4:3.9)+6;
+    r=Math.max(r,Math.min(H/vy,Math.abs(vx)>0.01?w/Math.abs(vx):Infinity))}
+  return r;
+}
+// Numbered arrows: which way the message goes in this step, and in what order.
+function drawHops(st){
+  const g=svg.querySelector("#paths");if(!g)return;const moves=st.move||[];
+  const pairs=new Set();moves.forEach(ph=>ph.forEach(([a,b])=>pairs.add(a+">"+b)));
+  let h="",badges="";const seen=new Set();
+  moves.forEach((segs,k)=>segs.forEach(([a,b])=>{
+    if(!L.n[a]||!L.n[b]||!LS.nodes[a]||!LS.nodes[b])return;
+    const [x1,y1]=L.n[a],[x2,y2]=L.n[b],dx=x2-x1,dy=y2-y1,len=Math.hypot(dx,dy)||1,ux=dx/len,uy=dy/len;
+    const off=pairs.has(b+">"+a)?7:0,px=-uy*off,py=ux*off;
+    const r1=clearR(a,ux,uy)+2,r2=clearR(b,-ux,-uy)+5;if(len<r1+r2+12)return;
+    const sx=x1+ux*r1+px,sy=y1+uy*r1+py,ex=x2-ux*r2+px,ey=y2-uy*r2+py;
+    h+=`<line class="hop" x1="${sx.toFixed(1)}" y1="${sy.toFixed(1)}" x2="${ex.toFixed(1)}" y2="${ey.toFixed(1)}" marker-end="url(#arr)"/>`;
+    const key=k+":"+a+">"+b;if(moves.length<2||seen.has(key))return;seen.add(key);
+    const f=Math.min(.3,26/len+.08),mx=sx+(ex-sx)*f+px*1.8,my=sy+(ey-sy)*f+py*1.8;
+    badges+=`<g class="hopn"><circle cx="${mx.toFixed(1)}" cy="${my.toFixed(1)}" r="9"/><text x="${mx.toFixed(1)}" y="${(my+.5).toFixed(1)}">${k+1}</text></g>`}));
+  g.innerHTML=h+badges;
+}
+// The caption above the diagram: the step, what travels, and the path in order.
+const escH=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
+function renderCap(){
+  const el=$("#dcap");if(!el)return;const st=S[cur],nm=id=>LS.nodes[id]?escH(T(LS.nodes[id].name)):escH(id);
+  let what=null;try{what=st.frame&&LS.pdu?LS.pdu(st.frame):null}catch(e){}
+  let h=`<span class="dcap-step">${T(UI.step)} ${cur+1}/${N}</span><b class="dcap-t">${T(st.title)}</b>`;
+  if(what&&what.badge&&st.move)h+=`<span class="dcap-what">${escH(T(what.badge))}</span>`;
+  if(st.move&&st.move.length){
+    h+=`<ol class="hops">`+st.move.map((ph,k)=>{const by={};ph.forEach(([a,b])=>{(by[a]=by[a]||[]).push(b)});
+      return `<li>${st.move.length>1?`<i>${k+1}</i>`:`<i>→</i>`}${Object.entries(by).map(([a,bs])=>`${nm(a)} <span class="ar">→</span> ${bs.map(b=>{const lb=linkLabel(a,b);return nm(b)+(lb?` <small class="via">${escH(T(lb))}</small>`:"")}).join(", ")}`).join(" · ")}</li>`}).join("")+`</ol>`;
+  }else{const at=[].concat(st.at||[]);if(at.length&&at.length<=3)h+=`<span class="dcap-at">📍 ${at.map(nm).join(", ")}</span>`}
+  el.innerHTML=h;
+}
 let animId=0;
 function updateDiagram(animate){
   const st=S[cur],id=++animId;
   svg.querySelectorAll(".node").forEach(e=>e.classList.remove("active"));
   [].concat(st.at||[]).forEach(a=>{const e=svg.querySelector("#n-"+a);if(e)e.classList.add("active")});
   const hot=new Set();(st.move||[]).forEach(ph=>ph.forEach(([a,b])=>{hot.add(a+"-"+b);hot.add(b+"-"+a)}));
-  svg.querySelectorAll(".link").forEach(l=>l.classList.toggle("hot",hot.has(l.dataset.l)));
+  svg.querySelectorAll(".link,.llbl").forEach(l=>l.classList.toggle("hot",hot.has(l.dataset.l)));
+  // Focus: fade the devices that take no part in this step.
+  const inv=new Set([].concat(st.at||[]));(st.move||[]).forEach(p=>p.forEach(([a,b])=>{inv.add(a);inv.add(b)}));Object.keys(st.marks||{}).forEach(k=>inv.add(k));
+  const all=Object.keys(LS.nodes).filter(k=>L.n[k]).length;
+  svg.classList.toggle("focus",inv.size>0&&inv.size<all&&!st.summary);
+  svg.querySelectorAll(".node").forEach(e=>e.classList.toggle("inv",inv.has(e.id.slice(2))));
+  drawHops(st);renderCap();
   const layer=svg.querySelector("#tokens");layer.innerHTML="";svg.querySelector("#marks").innerHTML="";
   const finish=()=>{if(id!==animId)return;layer.innerHTML="";if(st.frame)restNodes(st).forEach(n=>{const t=tokenEl(st.frame);place(t,tokPos(n));layer.appendChild(t)});setMarks(st)};
   if(!animate||!st.move||!st.frame||mqReduce.matches){finish();return 0}

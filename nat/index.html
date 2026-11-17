@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
 <link rel="stylesheet" href="../assets/site.css">
 <link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/diagram.css?v=1">
 <link rel="stylesheet" href="../assets/theme.css">
 </head>
 <body>
@@ -49,6 +50,7 @@ nodes:{
   fr:{type:"user",name:{ro:"Un prieten",en:"A friend"},lines:[FR]}
 },
 links:[["lap","rtr"],["ph","rtr"],["nas","rtr"],["rtr","net"],["net","web"],["net","fr"]],
+linkLabels:{"lap-rtr":"192.168.1.10","ph-rtr":"LAN","nas-rtr":"192.168.1.30","rtr-net":"198.51.100.7","net-web":":443","net-fr":":8443"},
 layouts:{
   wide:{vb:[0,0,1000,500],n:{lap:[90,100],ph:[90,250],nas:[90,400],rtr:[330,250],net:[600,250],web:[870,130],fr:[870,380]},
     zones:[{x:10,y:30,w:410,h:440,top:true,l:{ro:"Acasă · 192.168.1.0/24 (privat)",en:"Home · 192.168.1.0/24 (private)"}},{x:440,y:30,w:550,h:440,top:true,cls:"virt",l:{ro:"Internet (adrese publice)",en:"Internet (public addresses)"}}]},
@@ -263,7 +265,7 @@ quiz:[
 };
 })();
 </script>
-<script src="../assets/engine.js?v=3"></script>
+<script src="../assets/engine.js?v=4"></script>
 <script src="../assets/labs-data.js?v=6"></script>
 <script src="../assets/lab.js?v=1"></script>
 <script type="module" src="../assets/auth.js?v=13"></script>

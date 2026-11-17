@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
 <link rel="stylesheet" href="../assets/site.css">
 <link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/diagram.css?v=1">
 <link rel="stylesheet" href="../assets/theme.css">
 </head>
 <body>
@@ -56,6 +57,7 @@ nodes:{
   ext:{type:"globe",name:"api.psp.example.com",lines:[{ro:"procesator plăți",en:"payment processor"}]}
 },
 links:[["usr","gw"],["gw","web"],["web","chk"],["chk","pay"],["chk","reco"],["job","pay"],["pay","ext"],["ist","web","virt"],["ist","chk","virt"]],
+linkLabels:{"usr-gw":"HTTPS · 443","gw-web":"mTLS","web-chk":"mTLS","chk-pay":"mTLS","chk-reco":"mTLS","job-pay":{"ro":"blocat: 403","en":"blocked: 403"},"pay-ext":"TLS · ServiceEntry","ist-web":"xDS","ist-chk":"xDS"},
 layouts:{
   wide:{vb:[0,0,1000,520],n:{usr:[60,270],gw:[210,270],web:[380,270],chk:[570,270],pay:[780,150],reco:[780,400],job:[650,100],ist:[470,80],ext:[935,150]},
     zones:[{x:140,y:30,w:730,h:470,top:true,cls:"virt",l:{ro:"Cluster · namespace shop",en:"Cluster · namespace shop"}}]},
@@ -364,7 +366,7 @@ quiz:[
 };
 })();
 </script>
-<script src="../assets/engine.js?v=3"></script>
+<script src="../assets/engine.js?v=4"></script>
 <script src="../assets/labs-data.js?v=6"></script>
 <script src="../assets/lab.js?v=1"></script>
 <script type="module" src="../assets/auth.js?v=13"></script>

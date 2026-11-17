@@ -1,0 +1,24 @@
+/* ---- diagram: caption, numbered arrows, link labels, focus ---- */
+.dcap{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:4px 6px 10px;margin-bottom:4px;border-bottom:1px solid var(--border)}
+.dcap-step{font:700 .7rem var(--mono);letter-spacing:.02em;background:var(--text);color:var(--surface);border-radius:999px;padding:3px 9px;white-space:nowrap}
+.dcap-t{font:700 1rem/1.25 var(--head)}
+.dcap-what{font:600 .74rem var(--sans);color:var(--muted);border:1px solid var(--border);border-radius:999px;padding:2px 8px}
+.dcap-at{font-size:.84rem;color:var(--muted)}
+.hops{list-style:none;display:flex;flex-wrap:wrap;gap:4px 14px;margin:0;padding:0;flex-basis:100%;font:500 .84rem/1.4 var(--sans)}
+.hops li{display:flex;align-items:center;flex-wrap:wrap;gap:0 4px}
+.hops i{display:inline-grid;place-items:center;min-width:19px;height:19px;border-radius:50%;background:var(--hot);color:var(--surface);font:700 .7rem var(--sans);font-style:normal;margin-right:3px}
+.hops .ar{color:var(--hot);font-weight:700}
+.hop{stroke:var(--hot);stroke-width:3;fill:none;stroke-linecap:round}
+.arrhead{fill:var(--hot)}
+.hopn circle{fill:var(--hot);stroke:var(--surface);stroke-width:2}
+.hopn text{font:700 10.5px var(--sans);fill:var(--surface);text-anchor:middle;dominant-baseline:central}
+.llbl{font:600 10.5px var(--mono);fill:var(--muted);paint-order:stroke;stroke:var(--surface);stroke-width:4px;stroke-linejoin:round}
+.llbl.hot{fill:var(--text)}
+.narrow .llbl{font-size:8.5px}
+#net .node,#net .link,#net .llbl{transition:opacity .25s}
+#net.focus .node:not(.inv){opacity:.32}
+#net.focus .link:not(.hot){opacity:.35}
+#net.focus .llbl:not(.hot){opacity:.4}
+@media (prefers-reduced-motion: reduce){#net .node,#net .link,#net .llbl{transition:none}}
+#net .nm,#net .lbl,#net .zone-lbl,#net .port{paint-order:stroke;stroke:var(--surface);stroke-width:5px;stroke-linejoin:round}
+.hops .via{font:600 .72rem var(--mono);color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:0 4px}

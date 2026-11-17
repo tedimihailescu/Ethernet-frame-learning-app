@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
 <link rel="stylesheet" href="../assets/site.css">
 <link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/diagram.css?v=1">
 <link rel="stylesheet" href="../assets/theme.css">
 </head>
 <body>
@@ -49,6 +50,7 @@ nodes:{
   sent:{type:"box",name:"Sentinel",lines:[{ro:"monitorizare",en:"monitoring"}]}
 },
 links:[["core","cft"],["cft","gw"],["gw","partner"],["partner","st"],["st","gw"],["cft","sent"],["gw","sent"]],
+linkLabels:{"core-cft":{"ro":"fișier","en":"file"},"cft-gw":"PeSIT · TLS","gw-partner":"SFTP · 22 · PGP","partner-st":"SFTP · .ack","st-gw":{"ro":"intern","en":"internal"},"cft-sent":{"ro":"evenimente","en":"events"},"gw-sent":{"ro":"evenimente","en":"events"}},
 layouts:{
   wide:{vb:[0,0,1000,500],n:{core:[80,200],cft:[250,200],gw:[520,200],st:[700,380],partner:[900,200],sent:[385,400]},
     zones:[{x:10,y:40,w:440,h:440,l:{ro:"rețea internă",en:"internal network"},top:true},{x:460,y:40,w:330,h:440,l:"DMZ",top:true},{x:800,y:40,w:190,h:440,l:"internet",top:true}]},
@@ -261,7 +263,7 @@ quiz:[
 };
 })();
 </script>
-<script src="../assets/engine.js?v=3"></script>
+<script src="../assets/engine.js?v=4"></script>
 <script src="../assets/labs-data.js?v=6"></script>
 <script src="../assets/lab.js?v=1"></script>
 <script type="module" src="../assets/auth.js?v=13"></script>

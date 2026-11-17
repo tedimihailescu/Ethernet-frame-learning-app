@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
 <link rel="stylesheet" href="../assets/site.css">
 <link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/diagram.css?v=1">
 <link rel="stylesheet" href="../assets/theme.css">
 </head>
 <body>
@@ -49,6 +50,7 @@ nodes:{
   api:{type:"server",name:"api-1",lines:[API]}
 },
 links:[["cl","l4"],["l4","pa"],["l4","pb"],["pa","w1"],["pa","w2"],["pa","api"],["pb","w1"],["pb","w2"],["pb","api"]],
+linkLabels:{"cl-l4":"TCP 443","l4-pa":"TCP 443","l4-pb":"TCP 443","pa-w1":":8080","pa-w2":":8080","pa-api":":8080","pb-w1":":8080","pb-w2":":8080","pb-api":":8080"},
 layouts:{
   wide:{vb:[0,0,1000,520],n:{cl:[80,260],l4:[290,260],pa:[520,140],pb:[520,380],w1:[840,90],w2:[840,260],api:[840,430]},
     zones:[{x:430,y:40,w:190,h:450,top:true,l:{ro:"Nivel L7",en:"L7 tier"}},{x:740,y:40,w:250,h:450,top:true,l:{ro:"Servere",en:"Servers"}}]},
@@ -283,7 +285,7 @@ quiz:[
 };
 })();
 </script>
-<script src="../assets/engine.js?v=3"></script>
+<script src="../assets/engine.js?v=4"></script>
 <script src="../assets/labs-data.js?v=6"></script>
 <script src="../assets/lab.js?v=1"></script>
 <script type="module" src="../assets/auth.js?v=13"></script>

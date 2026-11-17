@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
 <link rel="stylesheet" href="../assets/site.css">
 <link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/diagram.css?v=1">
 <link rel="stylesheet" href="../assets/theme.css">
 </head>
 <body>
@@ -51,6 +52,7 @@ nodes:{
   bad:{type:"router",name:"AS64505",lines:[{ro:"greșeală / atac",en:"mistake / attack"}]}
 },
 links:[["srv","as1"],["as1","t1"],["as1","t2"],["t1","isp"],["t2","isp"],["isp","usr"],["bad","t2"]],
+linkLabels:{"srv-as1":"LAN","as1-t1":"eBGP","as1-t2":"eBGP","t1-isp":"eBGP","t2-isp":"eBGP","isp-usr":{"ro":"acces","en":"access"},"bad-t2":{"ro":"eBGP · rută falsă","en":"eBGP · false route"}},
 layouts:{
   wide:{vb:[0,0,1000,500],n:{srv:[70,250],as1:[230,250],t1:[470,110],t2:[470,370],isp:[720,250],usr:[910,250],bad:[720,430]},
     zones:[{x:10,y:150,w:300,h:200,l:{ro:"AS64501",en:"AS64501"}}]},
@@ -295,7 +297,7 @@ quiz:[
 };
 })();
 </script>
-<script src="../assets/engine.js?v=3"></script>
+<script src="../assets/engine.js?v=4"></script>
 <script src="../assets/labs-data.js?v=6"></script>
 <script src="../assets/lab.js?v=1"></script>
 <script type="module" src="../assets/auth.js?v=13"></script>

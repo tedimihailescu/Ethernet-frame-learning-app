@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
 <link rel="stylesheet" href="../assets/site.css">
 <link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/diagram.css?v=1">
 <link rel="stylesheet" href="../assets/theme.css">
 </head>
 <body>
@@ -46,6 +47,7 @@ nodes:{
   web:{type:"server",name:NAME,lines:[IP.web]}
 },
 links:[["pc","res"],["res","root"],["res","tld"],["res","auth"],["pc","web","virt"]],
+linkLabels:{"pc-res":{"ro":"UDP 53 · recursiv","en":"UDP 53 · recursive"},"res-root":"UDP 53","res-tld":"UDP 53","res-auth":"UDP 53","pc-web":"HTTPS · 443"},
 layouts:{
   wide:{vb:[0,0,1000,450],n:{pc:[110,190],res:[330,190],root:[620,82],tld:[810,200],auth:[620,318],web:[330,375]},
     zones:[{x:10,y:110,w:200,h:190,l:{ro:"Rețeaua ta",en:"Your network"}},{x:230,y:110,w:200,h:190,l:{ro:"Furnizorul de internet",en:"Internet provider"}},
@@ -334,7 +336,7 @@ quiz:[
 };
 })();
 </script>
-<script src="../assets/engine.js?v=3"></script>
+<script src="../assets/engine.js?v=4"></script>
 <script src="../assets/labs-data.js?v=6"></script>
 <script src="../assets/lab.js?v=1"></script>
 <script type="module" src="../assets/auth.js?v=13"></script>

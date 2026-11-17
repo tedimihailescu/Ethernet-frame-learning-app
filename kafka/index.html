@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
 <link rel="stylesheet" href="../assets/site.css">
 <link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/diagram.css?v=1">
 <link rel="stylesheet" href="../assets/theme.css">
 </head>
 <body>
@@ -48,6 +49,7 @@ nodes:{
   mail:{type:"pod",name:"email-1",lines:["group email"]}
 },
 links:[["prod","b1"],["prod","b2"],["prod","b3"],["b1","b2"],["b2","b3"],["b2","pay1"],["b2","pay2"],["b2","mail"],["b1","pay1"],["b3","pay2"],["b3","mail"]],
+linkLabels:{"prod-b1":"produce","prod-b2":"produce · 9092","prod-b3":"produce","b1-b2":{"ro":"replicare","en":"replication"},"b2-b3":{"ro":"replicare","en":"replication"},"b2-pay1":"fetch","b2-pay2":"fetch","b2-mail":"fetch"},
 layouts:{
   wide:{vb:[0,0,1000,520],n:{prod:[90,260],b1:[430,90],b2:[430,260],b3:[430,430],pay1:[820,90],pay2:[820,260],mail:[820,430]},
     zones:[{x:330,y:30,w:200,h:470,top:true,l:{ro:"Cluster Kafka",en:"Kafka cluster"}}]},
@@ -248,7 +250,7 @@ quiz:[
 };
 })();
 </script>
-<script src="../assets/engine.js?v=3"></script>
+<script src="../assets/engine.js?v=4"></script>
 <script src="../assets/labs-data.js?v=6"></script>
 <script src="../assets/lab.js?v=1"></script>
 <script type="module" src="../assets/auth.js?v=13"></script>

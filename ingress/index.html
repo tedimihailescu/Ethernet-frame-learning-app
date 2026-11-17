@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
 <link rel="stylesheet" href="../assets/site.css">
 <link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/diagram.css?v=1">
 <link rel="stylesheet" href="../assets/theme.css">
 </head>
 <body>
@@ -47,6 +48,7 @@ nodes:{
   papi:{type:"pod",name:"api",lines:["10.244.1.9:8080"]}
 },
 links:[["user","lb"],["lb","ing"],["ing","sec","virt"],["ing","sshop","virt"],["ing","sapi","virt"],["sshop","pshop","virt"],["sapi","papi","virt"]],
+linkLabels:{"user-lb":"HTTPS · 443","lb-ing":"TCP 443","ing-sec":{"ro":"cert. TLS","en":"TLS cert"},"ing-sshop":"/","ing-sapi":"/api","sshop-pshop":":3000","sapi-papi":":8080"},
 layouts:{
   wide:{vb:[0,0,1000,500],n:{user:[60,240],lb:[200,240],ing:[400,240],sec:[400,420],sshop:[630,120],sapi:[630,360],pshop:[880,120],papi:[880,360]},hideLinks:["ing-sec"],
     zones:[{x:290,y:30,w:700,h:450,top:true,l:{ro:"Cluster Kubernetes",en:"Kubernetes cluster"}}]},
@@ -297,7 +299,7 @@ quiz:[
 };
 })();
 </script>
-<script src="../assets/engine.js?v=3"></script>
+<script src="../assets/engine.js?v=4"></script>
 <script src="../assets/labs-data.js?v=6"></script>
 <script src="../assets/lab.js?v=1"></script>
 <script type="module" src="../assets/auth.js?v=13"></script>

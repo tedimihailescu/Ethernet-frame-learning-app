@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
 <link rel="stylesheet" href="../assets/site.css">
 <link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/diagram.css?v=1">
 <link rel="stylesheet" href="../assets/theme.css">
 </head>
 <body>
@@ -51,6 +52,7 @@ nodes:{
   web:{type:"server",name:{ro:"Server web",en:"Web server"},lines:[WEB]}
 },
 links:[["lap","sw"],["ph","sw"],["sw","rtr"],["rtr","dns"],["rtr","net"],["net","web"]],
+linkLabels:{"lap-sw":"SLAAC","ph-sw":"SLAAC","sw-rtr":"RA · fe80::1","rtr-dns":"AAAA","rtr-net":"2001:db8::/32","net-web":"HTTPS"},
 layouts:{
   wide:{vb:[0,0,1000,500],n:{lap:[90,130],ph:[90,370],sw:[260,250],rtr:[460,250],dns:[460,420],net:[700,250],web:[900,250]},
     zones:[{x:10,y:40,w:540,h:440,top:true,l:{ro:"Rețeaua locală · "+PFX,en:"Local network · "+PFX}},{x:570,y:40,w:420,h:440,top:true,cls:"virt",l:{ro:"Internet",en:"Internet"}}]},
@@ -291,7 +293,7 @@ quiz:[
 };
 })();
 </script>
-<script src="../assets/engine.js?v=3"></script>
+<script src="../assets/engine.js?v=4"></script>
 <script src="../assets/labs-data.js?v=6"></script>
 <script src="../assets/lab.js?v=1"></script>
 <script type="module" src="../assets/auth.js?v=13"></script>

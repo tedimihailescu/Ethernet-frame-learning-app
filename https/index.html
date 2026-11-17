@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
 <link rel="stylesheet" href="../assets/site.css">
 <link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/diagram.css?v=1">
 <link rel="stylesheet" href="../assets/theme.css">
 </head>
 <body>
@@ -48,6 +49,7 @@ nodes:{
   ca:{type:"box",name:"CA",lines:["Let's Encrypt"]}
 },
 links:[["br","wifi"],["wifi","net"],["net","srv"],["wifi","att","virt"],["srv","ca","virt"]],
+linkLabels:{"br-wifi":"Wi-Fi","wifi-net":"ISP","net-srv":"TCP 443 · TLS","wifi-att":{"ro":"ascultă","en":"eavesdrops"},"srv-ca":{"ro":"certificat","en":"certificate"}},
 layouts:{
   wide:{vb:[0,0,1000,460],n:{br:[80,230],wifi:[290,230],att:[470,410],net:[520,230],srv:[760,230],ca:[760,70]},
     side:{ca:"right",srv:"right"}},
@@ -285,7 +287,7 @@ quiz:[
 function T2(v){return typeof v==="object"&&v?v.en:v}
 })();
 </script>
-<script src="../assets/engine.js?v=3"></script>
+<script src="../assets/engine.js?v=4"></script>
 <script src="../assets/labs-data.js?v=6"></script>
 <script src="../assets/lab.js?v=1"></script>
 <script type="module" src="../assets/auth.js?v=13"></script>

@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
 <link rel="stylesheet" href="../assets/site.css">
 <link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/diagram.css?v=1">
 <link rel="stylesheet" href="../assets/theme.css">
 </head>
 <body>
@@ -56,6 +57,7 @@ nodes:{
   notif:{type:"pod",name:"notification",lines:[{ro:"consumator",en:"consumer"}]}
 },
 links:[["user","gw"],["gw","orders"],["orders","inv"],["orders","pay"],["orders","odb"],["orders","kafka"],["kafka","notif"]],
+linkLabels:{"user-gw":"HTTPS","gw-orders":"REST · 8080","orders-inv":"REST","orders-pay":"REST","orders-odb":"JDBC · 5432","orders-kafka":"9092","kafka-notif":{"ro":"eveniment","en":"event"}},
 layouts:{
   wide:{vb:[0,0,1000,480],n:{user:[60,230],gw:[210,230],orders:[400,230],inv:[640,90],pay:[640,230],odb:[180,400],kafka:[640,390],notif:[860,390]},
     side:{inv:"right"},
@@ -450,7 +452,7 @@ quiz:[
 };
 })();
 </script>
-<script src="../assets/engine.js?v=3"></script>
+<script src="../assets/engine.js?v=4"></script>
 <script src="../assets/labs-data.js?v=6"></script>
 <script src="../assets/lab.js?v=1"></script>
 <script type="module" src="../assets/auth.js?v=13"></script>

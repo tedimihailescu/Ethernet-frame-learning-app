@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
 <link rel="stylesheet" href="../assets/site.css">
 <link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/diagram.css?v=1">
 <link rel="stylesheet" href="../assets/theme.css">
 </head>
 <body>
@@ -50,6 +51,7 @@ nodes:{
   graf:{type:"box",name:"Grafana",lines:["+ Alertmanager"]}
 },
 links:[["usr","api"],["api","co"],["co","pay"],["pay","db"],["api","col","virt"],["co","col","virt"],["pay","col","virt"],["col","prom","virt"],["col","sto","virt"],["prom","graf","virt"],["sto","graf","virt"]],
+linkLabels:{"usr-api":"HTTPS","api-co":"HTTP · traceparent","co-pay":"HTTP · traceparent","pay-db":"SQL","api-col":"OTLP","co-col":"OTLP · 4317","pay-col":"OTLP","col-prom":{"ro":"metrici","en":"metrics"},"col-sto":{"ro":"trace + log","en":"traces + logs"},"prom-graf":"PromQL","sto-graf":"TraceQL · LogQL"},
 layouts:{
   wide:{vb:[0,0,1000,500],n:{usr:[60,110],api:[230,110],co:[430,110],pay:[630,110],db:[840,110],col:[430,290],prom:[230,430],sto:[630,430],graf:[880,330]},
     zones:[{x:150,y:30,w:780,h:150,top:true,l:{ro:"Aplicația (Kubernetes)",en:"The application (Kubernetes)"}},{x:150,y:220,w:840,h:270,top:true,cls:"virt",l:{ro:"Platforma de observabilitate",en:"The observability platform"}}]},
@@ -291,7 +293,7 @@ quiz:[
 };
 })();
 </script>
-<script src="../assets/engine.js?v=3"></script>
+<script src="../assets/engine.js?v=4"></script>
 <script src="../assets/labs-data.js?v=6"></script>
 <script src="../assets/lab.js?v=1"></script>
 <script type="module" src="../assets/auth.js?v=13"></script>
