@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>systemd: un serviciu care nu pornește</title>
+<meta name="description" content="Lecție interactivă: nginx nu pornește după o actualizare. systemctl status, 203/EXEC, systemctl cat și edit, journalctl, nginx -t, ss, ps --forest, semnale, enable --now, is-enabled și is-active. / Interactive lesson: a systemd service that won't start.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/diagram.css?v=1">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<script>
+(function(){
+const RO="READ-ONLY",CH="LAB CHANGE";
+const S1={q:{ro:"De ce nu se deschide site-ul?",en:"Why won't the site open?"},cmd:"curl -I http://web01",mode:RO,out:"curl: (7) Failed to connect to web01 port 80: Connection refused",proves:{ro:"pachetul ajunge, dar pe portul 80 nu ascultă nimeni: nginx nu rulează",en:"the packet arrives, but nothing listens on port 80: nginx isn't running"},bad:"REFUSED"};
+const S2={q:{ro:"De ce nu rulează nginx?",en:"Why isn't nginx running?"},cmd:"systemctl status nginx --no-pager",mode:RO,out:"Active: failed (Result: exit-code) · Process: 2210 ExecStart=/usr/local/sbin/nginx (code=exited, status=203/EXEC)",proves:{ro:"systemd nici n-a putut porni programul: 203/EXEC = execuția a eșuat",en:"systemd couldn't even start the program: 203/EXEC = the exec failed"},bad:"203/EXEC"};
+const S3={q:{ro:"Ce comandă încearcă systemd să pornească?",en:"Which command is systemd trying to start?"},cmd:"systemctl show nginx -p ExecStart · ls -l /usr/local/sbin/nginx · command -v nginx",mode:RO,out:"ExecStart={ path=/usr/local/sbin/nginx … } · ls: cannot access '/usr/local/sbin/nginx': No such file or directory · /usr/sbin/nginx",proves:{ro:"unit-ul indică un binar care nu există; nginx e acum în /usr/sbin",en:"the unit points to a binary that doesn't exist; nginx now lives in /usr/sbin"},bad:"NO FILE"};
+const S4={q:{ro:"Pornește după ce corectăm calea?",en:"Does it start once the path is fixed?"},fix:{ro:"systemctl edit nginx → [Service] ExecStart= și ExecStart=/usr/sbin/nginx (drop-in)",en:"systemctl edit nginx → [Service] ExecStart= and ExecStart=/usr/sbin/nginx (drop-in)"},mode:CH,cmd:"sudo systemctl restart nginx · systemctl status nginx",out:"Active: failed (Result: exit-code) · Process: 2290 ExecStart=/usr/sbin/nginx (code=exited, status=1/FAILURE)",proves:{ro:"acum programul pornește, dar se oprește singur cu eroare: altă problemă",en:"the program now starts, but exits with an error on its own: a different problem"},bad:"EXIT 1"};
+const S5={q:{ro:"Ce a scris nginx înainte să se oprească?",en:"What did nginx log before it stopped?"},cmd:"journalctl -u nginx -b -n 50 --no-pager",mode:RO,out:"nginx[2290]: nginx: [emerg] bind() to 0.0.0.0:80 failed (98: Address already in use)",proves:{ro:"portul 80 e deja ocupat de alt proces",en:"port 80 is already taken by another process"},bad:"EADDRINUSE"};
+const S6={q:{ro:"E configurația nginx greșită?",en:"Is the nginx configuration wrong?"},cmd:"sudo nginx -t",mode:RO,out:"nginx: the configuration file /etc/nginx/nginx.conf syntax is ok · nginx: configuration file /etc/nginx/nginx.conf test is successful",proves:{ro:"sintaxa e corectă; testul nu verifică dacă portul e liber",en:"the syntax is fine; the test doesn't check whether the port is free"}};
+const S7={q:{ro:"Cine ocupă portul TCP 80?",en:"Who occupies TCP port 80?"},cmd:"sudo ss -ltnp \"sport = :80\"",mode:RO,out:"LISTEN 0 511 0.0.0.0:80 0.0.0.0:* users:((\"apache2\",pid=815,fd=4),(\"apache2\",pid=814,fd=4),(\"apache2\",pid=812,fd=4))",proves:{ro:"apache2, rămas instalat dintr-o configurare veche, ține portul 80",en:"apache2, left installed from an old setup, holds port 80"},bad:"apache2"};
+const S8={q:{ro:"Care proces e master-ul și cine l-a pornit?",en:"Which process is the master, and who started it?"},cmd:"ps -eo pid,ppid,stat,cmd --forest | grep [a]pache2 · systemctl status apache2 --no-pager",mode:RO,out:"812 1 Ss /usr/sbin/apache2 -k start · 814 812 S \\_ /usr/sbin/apache2 -k start · 815 812 S \\_ … · apache2.service: active (running); enabled",proves:{ro:"812 e master-ul (părintele e PID 1); apache2 e un serviciu systemd activat la boot",en:"812 is the master (its parent is PID 1); apache2 is a systemd service enabled at boot"}};
+const S9={q:{ro:"Cum oprim apache2 curat și definitiv?",en:"How do we stop apache2 cleanly and for good?"},fix:"sudo systemctl disable --now apache2",mode:CH,cmd:"systemctl is-active apache2; systemctl is-enabled apache2",out:"inactive · disabled",proves:{ro:"oprit acum și nu mai pornește la boot; portul 80 e liber",en:"stopped now and won't start at boot; port 80 is free"}};
+const S10={q:{ro:"Pornește nginx acum și la fiecare boot?",en:"Does nginx start now and at every boot?"},fix:"sudo systemctl enable --now nginx",mode:CH,cmd:"systemctl is-enabled nginx; systemctl is-active nginx",out:"enabled · active",proves:{ro:"rulează acum și e setat să pornească la boot: două lucruri diferite, verificate separat",en:"it runs now and is set to start at boot: two different things, checked separately"}};
+const S11={q:{ro:"Funcționează site-ul?",en:"Does the site work?"},cmd:"curl -I http://web01 · ss -ltnp \"sport = :80\"",mode:RO,out:"HTTP/1.1 200 OK · Server: nginx · LISTEN 0.0.0.0:80 users:((\"nginx\",pid=2401,fd=6),…)",proves:{ro:"același test ca la început trece; nginx ține portul 80",en:"the same test as at the start passes; nginx holds port 80"}};
+
+window.LESSON={
+docTitle:{ro:"systemd: un serviciu care nu pornește",en:"systemd: a service that won't start"},
+eyebrow:{ro:"Lecție interactivă · Linux",en:"Interactive lesson · Linux"},
+title:{ro:"systemd: un serviciu care nu pornește",en:"systemd: a service that won't start"},
+sub:{ro:"După o actualizare, site-ul de pe serverul web01 nu mai răspunde: nginx nu pornește. Urmărim ce face systemd când pornește un serviciu și depanăm pas cu pas: o cale greșită în unit (203/EXEC), apoi un port ocupat de un apache2 uitat. Folosim systemctl, journalctl, nginx -t, ss și ps, și oprim procesele corect, fără kill -9.",en:"After an upgrade, the site on the web01 server stops answering: nginx won't start. We follow what systemd does when it starts a service and troubleshoot step by step: a wrong path in the unit (203/EXEC), then a port taken by a forgotten apache2. We use systemctl, journalctl, nginx -t, ss and ps, and stop processes properly, without kill -9."},
+meta:[{ro:"≈ 25 minute",en:"≈ 25 minutes"},{ro:"12 pași",en:"12 steps"},{ro:"8 întrebări",en:"8 questions"},{ro:"Începător+",en:"Beginner+"}],
+goals:[{ro:"Ce face systemd: unit file, ExecStart, stări și jurnal",en:"What systemd does: unit files, ExecStart, states and the journal"},{ro:"Cum citești systemctl status și journalctl -u",en:"How to read systemctl status and journalctl -u"},{ro:"Ce înseamnă 203/EXEC și „Address already in use”",en:"What 203/EXEC and \"Address already in use\" mean"},{ro:"enable vs. start, is-enabled vs. is-active, SIGTERM vs. SIGKILL",en:"enable vs start, is-enabled vs is-active, SIGTERM vs SIGKILL"}],
+foot:{ro:"Nume de servere fictive. Comenzile marcate LAB CHANGE modifică sistemul: rulează-le doar într-un mediu de test sau cu aprobare.",en:"Fictional server names. Commands marked LAB CHANGE modify the system: run them only in a test environment or with approval."},
+ui:{frameT:{ro:"Investigația (live)",en:"The investigation (live)"},refT:{ro:"Comenzi systemd și procese",en:"systemd and process commands"},refLead:{ro:"Întrebarea de interviu, prima comandă și ce dovedește.",en:"The interview question, the first command and what it proves."}},
+tryT:{ro:"Încearcă (pe o mașină de test)",en:"Try it (on a test machine)"},
+legend:[["lg-ip","READ",{ro:"doar citește",en:"read-only"}],["lg-arp","CHANGE",{ro:"modifică sistemul",en:"changes the system"}],["lg-tcp","ERR",{ro:"dovada problemei",en:"evidence of the problem"}]],
+
+nodes:{
+  adm:{type:"user",name:"admin",lines:["SSH"]},
+  sysd:{type:"box",name:"systemd",lines:["PID 1"]},
+  unit:{type:"box",name:"nginx.service",lines:["unit file"]},
+  ng:{type:"server",name:"nginx",lines:["master + workers"]},
+  jr:{type:"db",name:"journald",lines:[{ro:"jurnalul",en:"the journal"}]},
+  port:{type:"svc",name:"TCP :80",lines:["0.0.0.0"]},
+  ap:{type:"server",name:"apache2",lines:[{ro:"uitat",en:"forgotten"}]},
+  cl:{type:"host",name:"browser",lines:[{ro:"client",en:"client"}]}
+},
+links:[["adm","sysd"],["sysd","unit"],["sysd","ng"],["sysd","ap"],["ng","jr"],["adm","jr"],["ng","port"],["ap","port"],["cl","port"]],
+linkLabels:{"adm-sysd":"systemctl","sysd-unit":{"ro":"citește","en":"reads"},"sysd-ng":"fork + exec","sysd-ap":"SIGTERM","ng-jr":"stdout / stderr","adm-jr":"journalctl","ng-port":"bind()","ap-port":"bind()","cl-port":"HTTP"},
+layouts:{
+  wide:{vb:[0,0,1000,500],n:{adm:[80,250],sysd:[270,250],unit:[270,80],ng:[480,250],jr:[480,400],port:[700,250],ap:[700,80],cl:[910,250]},
+    zones:[{x:180,y:30,w:600,h:450,top:true,cls:"virt",l:{ro:"web01 (Linux)",en:"web01 (Linux)"}}]},
+  narrow:{vb:[0,0,360,860],n:{adm:[60,60],unit:[290,60],sysd:[180,200],jr:[60,360],ng:[270,360],ap:[80,710],port:[270,560],cl:[270,760]},side:{adm:"right"}}
+},
+groups:[
+  {id:"q",color:"l7",fields:["q"],name:{ro:"Întrebarea",en:"The question"},short:"Q",grow:2},
+  {id:"c",color:"l3",fields:["cmd","mode","out"],name:{ro:"Comanda și rezultatul",en:"Command and output"},short:"CMD",grow:4},
+  {id:"e",color:"arp",fields:["proves","fix"],name:{ro:"Dovada și remedierea",en:"Evidence and fix"},short:{ro:"Dovada",en:"Evidence"},grow:3}
+],
+fieldLabels:{q:{ro:"Întrebarea",en:"The question"},cmd:{ro:"Comanda",en:"Command"},mode:{ro:"Tip",en:"Type"},out:{ro:"Ce afișează",en:"Output"},proves:{ro:"Ce dovedește",en:"What it proves"},fix:{ro:"Remediere",en:"Fix"}},
+pdu:f=>f.mode===CH?{badge:{ro:"Schimbare: doar în lab sau cu aprobare",en:"Change: lab only, or with approval"},tok:["CHANGE","k-arp"]}:f.bad?{badge:{ro:"Dovada problemei",en:"Evidence of the problem"},tok:[f.bad,"k-tcp"]}:{badge:{ro:"Doar citește",en:"Read-only"},tok:["READ","k-ip"]},
+
+init:{},
+tables:{
+  start:{title:{ro:"Ce face systemd la systemctl start",en:"What systemd does on systemctl start"},cols:[{ro:"Pas",en:"Step"},{ro:"Ce se întâmplă",en:"What happens"}],plain:[1],
+    rows:()=>[["1",{ro:"citește unit file-ul și drop-in-urile (systemctl cat)",en:"reads the unit file and its drop-ins (systemctl cat)"}],["2",{ro:"rulează ExecStartPre (de ex. nginx -t), dacă există",en:"runs ExecStartPre (e.g. nginx -t), if any"}],["3",{ro:"fork + exec pe ExecStart",en:"fork + exec of ExecStart"}],["4",{ro:"stdout/stderr ajung în journald",en:"stdout/stderr go to journald"}],["5",{ro:"urmărește procesul principal: active, failed, restart",en:"watches the main process: active, failed, restart"}]]},
+  codes:{title:{ro:"Coduri de ieșire systemd frecvente",en:"Common systemd exit codes"},cols:[{ro:"Status",en:"Status"},{ro:"Înseamnă",en:"Means"},{ro:"Verifici",en:"You check"}],plain:[1,2],
+    rows:()=>[["203/EXEC",{ro:"exec() a eșuat: programul nu a pornit deloc",en:"exec() failed: the program never started"},{ro:"calea, bitul x, shebang-ul, mount noexec",en:"the path, the x bit, the shebang, a noexec mount"}],["1/FAILURE",{ro:"programul a pornit și a ieșit cu eroare",en:"the program started and exited with an error"},"journalctl -u"],["217/USER",{ro:"utilizatorul din User= nu există",en:"the User= account doesn't exist"},"getent passwd"],["9/KILL",{ro:"omorât cu SIGKILL (de cineva sau de OOM)",en:"killed with SIGKILL (by someone, or OOM)"},"journalctl -k"]]},
+  sig:{title:{ro:"Semnale",en:"Signals"},cols:[{ro:"Semnal",en:"Signal"},{ro:"Efect",en:"Effect"}],plain:[1],
+    rows:()=>[["SIGTERM (15)",{ro:"cere oprirea; procesul poate închide curat conexiuni și fișiere",en:"asks it to stop; the process can close connections and files cleanly"}],["SIGHUP (1)",{ro:"multe servicii (nginx) recitesc configurația",en:"many services (nginx) reload their config"}],["SIGKILL (9)",{ro:"oprire forțată de kernel, fără cleanup; ultima soluție",en:"forced stop by the kernel, no cleanup; last resort"}]]},
+  states:{title:{ro:"Două întrebări diferite",en:"Two different questions"},cols:[{ro:"Comanda",en:"Command"},{ro:"Răspunde la",en:"Answers"},{ro:"Valori",en:"Values"}],plain:[1],
+    rows:()=>[["systemctl is-active",{ro:"rulează acum?",en:"is it running now?"},"active / inactive / failed"],["systemctl is-enabled",{ro:"pornește la boot?",en:"does it start at boot?"},"enabled / disabled / masked"],["systemctl enable --now",{ro:"le face pe amândouă",en:"does both"},"—"]]}
+},
+log:{title:{ro:"Jurnalul investigației",en:"Investigation log"},lead:{ro:"Fiecare comandă și ce a dovedit.",en:"Every command and what it proved."},first:{ro:"Pas",en:"Step"},minWidth:600,
+  cols:[{h:{ro:"Comanda",en:"Command"},v:f=>f.fix||f.cmd||"",cls:"mac"},{h:{ro:"Ce dovedește",en:"What it proves"},v:f=>f.proves||"",cls:""}]},
+
+steps:[
+{at:"port",frame:S1,kind:"s",move:[[["cl","port"]]],marks:{port:{k:"drop",t:"RST"}},log:{ro:"simptomul",en:"the symptom"},who:{ro:"Simptomul",en:"The symptom"},
+ title:{ro:"Simptomul: „Connection refused” pe portul 80",en:"The symptom: \"Connection refused\" on port 80"},
+ body:{ro:`<p>După actualizarea de aseară, <code>curl -I http://web01</code> răspunde imediat: <strong>Connection refused</strong>.</p>
+<p>„Refused” e o veste bună pentru depanare: pachetul a ajuns la server, iar kernelul a răspuns cu RST pentru că <strong>nimeni nu ascultă</strong> pe portul 80. Rețeaua e în regulă; problema e serviciul.</p>
+<p>Pe Linux, serviciile ca nginx sunt pornite și supravegheate de <strong>systemd</strong> (PID 1). Acolo începem.</p>`,
+ en:`<p>After last night's upgrade, <code>curl -I http://web01</code> answers straight away: <strong>Connection refused</strong>.</p>
+<p>"Refused" is good news for troubleshooting: the packet reached the server, and the kernel answered with a RST because <strong>nothing listens</strong> on port 80. The network is fine; the problem is the service.</p>
+<p>On Linux, services like nginx are started and watched by <strong>systemd</strong> (PID 1). That's where we start.</p>`}},
+
+{at:"sysd",frame:S2,kind:"s",move:[[["adm","sysd"]]],tables:["start"],hl:{start:"3"},log:{ro:"203/EXEC",en:"203/EXEC"},who:"systemctl status",
+ title:{ro:"systemctl status: failed, cu status=203/EXEC",en:"systemctl status: failed, with status=203/EXEC"},
+ body:{ro:`<p><code>systemctl status nginx --no-pager</code> arată într-un singur loc: starea (<strong>failed</strong>), comanda pornită, codul de ieșire și ultimele linii din jurnal.</p>
+<p>Detaliul cheie: <code>status=203/EXEC</code>. Codurile 200+ sunt ale lui systemd, nu ale programului. <strong>203/EXEC</strong> înseamnă că systemd a încercat să execute <code>ExecStart</code> și n-a reușit: nginx <em>nici n-a pornit</em>.</p>
+<p>Cauze tipice: calea nu există, fișierul nu are bitul <code>x</code>, un script are shebang greșit sau stă pe o partiție montată <code>noexec</code>.</p>`,
+ en:`<p><code>systemctl status nginx --no-pager</code> shows in one place: the state (<strong>failed</strong>), the command started, the exit code and the last journal lines.</p>
+<p>The key detail: <code>status=203/EXEC</code>. Codes 200+ belong to systemd, not to the program. <strong>203/EXEC</strong> means systemd tried to execute <code>ExecStart</code> and couldn't: nginx <em>never even started</em>.</p>
+<p>Typical causes: the path doesn't exist, the file lacks the <code>x</code> bit, a script has a wrong shebang or sits on a partition mounted <code>noexec</code>.</p>`},
+ more:{ro:`<p><code>--no-pager</code> afișează tot direct, fără <code>less</code>: util în scripturi și când copiezi rezultatul într-un tichet.</p>`,
+  en:`<p><code>--no-pager</code> prints everything directly, without <code>less</code>: handy in scripts and when you paste the output into a ticket.</p>`},
+ try:[{cmd:"systemctl status nginx --no-pager",d:{ro:"Starea, PID-ul, codul de ieșire, ultimele loguri.",en:"State, PID, exit code, latest logs."}}]},
+
+{at:"unit",frame:S3,kind:"s",move:[[["sysd","unit"]]],tables:["codes"],hl:{codes:"203/EXEC"},log:{ro:"cale greșită în unit",en:"wrong path in the unit"},who:"systemctl cat",
+ title:{ro:"Unit file-ul: o cale care nu mai există",en:"The unit file: a path that no longer exists"},
+ body:{ro:`<p><code>systemctl cat nginx</code> arată unit file-ul și eventualele <em>drop-in</em>-uri care îl modifică. <code>systemctl show nginx -p ExecStart</code> arată exact comanda folosită:</p>
+<p><code>/usr/local/sbin/nginx</code>, dar <code>ls -l</code> spune <em>No such file or directory</em>. <code>command -v nginx</code> găsește programul în <code>/usr/sbin/nginx</code>.</p>
+<p>Ce s-a întâmplat: cineva compilase nginx de mână în <code>/usr/local</code> și scrisese un unit propriu. Actualizarea a trecut la pachetul oficial, care a șters vechiul binar.</p>`,
+ en:`<p><code>systemctl cat nginx</code> shows the unit file and any <em>drop-ins</em> that change it. <code>systemctl show nginx -p ExecStart</code> shows the exact command used:</p>
+<p><code>/usr/local/sbin/nginx</code>, but <code>ls -l</code> says <em>No such file or directory</em>. <code>command -v nginx</code> finds the program in <code>/usr/sbin/nginx</code>.</p>
+<p>What happened: someone had built nginx by hand in <code>/usr/local</code> and written their own unit. The upgrade switched to the official package, which removed the old binary.</p>`},
+ more:{ro:`<p>În unit-ul nginx mai apare de obicei <code>ExecStartPre=/usr/sbin/nginx -t</code>: pregătește și verifică înainte de pornire. <code>ExecStart</code> e cel care pornește efectiv serviciul.</p>`,
+  en:`<p>The nginx unit usually also has <code>ExecStartPre=/usr/sbin/nginx -t</code>: it prepares and checks before starting. <code>ExecStart</code> is what actually starts the service.</p>`},
+ try:[{cmd:"systemctl cat nginx",d:{ro:"Unit-ul și drop-in-urile.",en:"The unit and its drop-ins."}},{cmd:"systemctl show nginx -p ExecStart",d:{ro:"Comanda exactă.",en:"The exact command."}}]},
+
+{at:"ng",frame:S4,kind:"s",move:[[["adm","sysd"]],[["sysd","unit"]],[["sysd","ng"]]],marks:{ng:{k:"drop",t:"exit 1"}},log:{ro:"cale corectată, altă eroare",en:"path fixed, another error"},who:"systemctl edit",
+ title:{ro:"Corectăm calea cu un drop-in. Pornește… și cade",en:"We fix the path with a drop-in. It starts… and falls over"},
+ body:{ro:`<p>Nu editezi direct fișierul din <code>/lib/systemd/system</code>: o actualizare l-ar suprascrie. <code>systemctl edit nginx</code> creează un <strong>drop-in</strong> în <code>/etc/systemd/system/nginx.service.d/override.conf</code>:</p>
+<ul><li><code>ExecStart=</code> (gol): șterge valoarea veche;</li>
+<li><code>ExecStart=/usr/sbin/nginx</code>: noua comandă.</li></ul>
+<p><code>systemctl edit</code> face singur <code>daemon-reload</code>. Restart: de data asta status e <code>1/FAILURE</code>. Progres: programul a pornit (nu mai e 203), dar a ieșit singur cu o eroare. Acum ne spune nginx ce are.</p>`,
+ en:`<p>You don't edit the file in <code>/lib/systemd/system</code> directly: an upgrade would overwrite it. <code>systemctl edit nginx</code> creates a <strong>drop-in</strong> in <code>/etc/systemd/system/nginx.service.d/override.conf</code>:</p>
+<ul><li><code>ExecStart=</code> (empty): clears the old value;</li>
+<li><code>ExecStart=/usr/sbin/nginx</code>: the new command.</li></ul>
+<p><code>systemctl edit</code> runs <code>daemon-reload</code> itself. Restart: this time the status is <code>1/FAILURE</code>. Progress: the program started (no more 203), but exited with an error on its own. Now nginx will tell us what's wrong.</p>`},
+ more:{ro:`<p>Dacă editezi un unit de mână, cu un editor, trebuie <code>systemctl daemon-reload</code>: altfel systemd folosește încă versiunea veche din memorie.</p>`,
+  en:`<p>If you edit a unit by hand, with an editor, you need <code>systemctl daemon-reload</code>: otherwise systemd keeps using the old version in memory.</p>`}},
+
+{at:"jr",frame:S5,kind:"s",move:[[["ng","jr"]],[["adm","jr"]]],log:{ro:"port ocupat",en:"port in use"},who:"journalctl",
+ title:{ro:"journalctl: „Address already in use”",en:"journalctl: \"Address already in use\""},
+ body:{ro:`<p>Tot ce scrie un serviciu pe stdout/stderr ajunge în <strong>journald</strong>. <code>journalctl -u nginx -b -n 50 --no-pager</code> filtrează:</p>
+<ul><li><code>-u nginx</code>: doar unitatea asta;</li>
+<li><code>-b</code>: doar boot-ul curent;</li>
+<li><code>-n 50</code>: ultimele 50 de linii.</li></ul>
+<p>Linia importantă: <code>bind() to 0.0.0.0:80 failed (98: Address already in use)</code>. nginx a încercat să deschidă portul 80 și kernelul a refuzat: <strong>alt proces îl folosește deja</strong>.</p>`,
+ en:`<p>Everything a service writes to stdout/stderr goes to <strong>journald</strong>. <code>journalctl -u nginx -b -n 50 --no-pager</code> filters:</p>
+<ul><li><code>-u nginx</code>: only this unit;</li>
+<li><code>-b</code>: only the current boot;</li>
+<li><code>-n 50</code>: the last 50 lines.</li></ul>
+<p>The important line: <code>bind() to 0.0.0.0:80 failed (98: Address already in use)</code>. nginx tried to open port 80 and the kernel refused: <strong>another process already uses it</strong>.</p>`},
+ more:{ro:`<p><code>journalctl -u nginx -f</code> urmărește jurnalul live, ca <code>tail -f</code>. <code>journalctl -b -1</code> arată boot-ul anterior: util după un restart neașteptat.</p>`,
+  en:`<p><code>journalctl -u nginx -f</code> follows the journal live, like <code>tail -f</code>. <code>journalctl -b -1</code> shows the previous boot: handy after an unexpected restart.</p>`},
+ try:[{cmd:"journalctl -u nginx -b -n 50 --no-pager",d:{ro:"Ultimele 50 de linii ale unității, boot-ul curent.",en:"The unit's last 50 lines, current boot."}}]},
+
+{at:"ng",frame:S6,kind:"s",log:{ro:"sintaxa e corectă",en:"the syntax is fine"},who:"nginx -t",
+ title:{ro:"nginx -t: configurația e bună, dar asta nu e tot",en:"nginx -t: the config is fine, but that's not everything"},
+ body:{ro:`<p>Mulți încep cu <code>nginx -t</code>: testează sintaxa configurației fără să pornească serverul. Rezultat: <em>syntax is ok</em>, <em>test is successful</em>.</p>
+<p>Util, dar trebuie să știi ce <strong>nu</strong> dovedește: nu verifică dacă portul 80 e liber, dacă certificatele pot fi citite de utilizatorul serviciului sau dacă upstream-urile răspund.</p>
+<p class="key">Pentru fiecare comandă, întreabă-te: ce dovedește rezultatul, și ce nu?</p>`,
+ en:`<p>Many people start with <code>nginx -t</code>: it tests the configuration's syntax without starting the server. Result: <em>syntax is ok</em>, <em>test is successful</em>.</p>
+<p>Useful, but you need to know what it does <strong>not</strong> prove: it doesn't check whether port 80 is free, whether the service user can read the certificates, or whether upstreams answer.</p>
+<p class="key">For every command, ask yourself: what does the output prove, and what doesn't it?</p>`},
+ try:[{cmd:"sudo nginx -t",d:{ro:"Testează configurația.",en:"Tests the configuration."}}]},
+
+{at:"port",frame:S7,kind:"s",move:[[["ap","port"]]],marks:{port:{k:"drop",t:"apache2"}},log:{ro:"apache2 ține portul",en:"apache2 holds the port"},who:"ss",
+ title:{ro:"ss: apache2 ține portul 80",en:"ss: apache2 holds port 80"},
+ body:{ro:`<p><code>sudo ss -ltnp "sport = :80"</code> arată socket-ul în ascultare pe portul 80 și procesele care îl țin: <code>apache2</code>, PID-urile 812, 814, 815.</p>
+<p>Apache rămăsese instalat de la o configurare veche. Până ieri nu conta, pentru că nginx pornea primul la boot. După actualizare, ordinea s-a schimbat și apache2 a prins portul.</p>
+<p>Nu opri nimic încă: întâi află ce e procesul și cine îl gestionează.</p>`,
+ en:`<p><code>sudo ss -ltnp "sport = :80"</code> shows the socket listening on port 80 and the processes holding it: <code>apache2</code>, PIDs 812, 814, 815.</p>
+<p>Apache had been left installed from an old setup. Until yesterday it didn't matter, because nginx started first at boot. After the upgrade the order changed and apache2 grabbed the port.</p>
+<p>Don't stop anything yet: first find out what the process is and who manages it.</p>`},
+ try:[{cmd:"sudo ss -ltnp \"sport = :80\"",d:{ro:"Cine ascultă pe 80.",en:"Who listens on 80."}}]},
+
+{at:"ap",frame:S8,kind:"s",log:{ro:"master-ul și unit-ul apache2",en:"apache2's master and unit"},who:"ps --forest",
+ title:{ro:"ps --forest: master-ul, copiii și cine i-a pornit",en:"ps --forest: the master, the children and who started them"},
+ body:{ro:`<p>Un server web are de obicei un proces <strong>master</strong> și mai mulți <strong>workeri</strong>. <code>ps -eo pid,ppid,stat,cmd --forest</code> arată arborele:</p>
+<ul><li><code>812</code> are părintele <code>1</code> (systemd): el e master-ul;</li>
+<li><code>814</code>, <code>815</code> au părintele <code>812</code>: workeri.</li></ul>
+<p>Părintele 1 sugerează un serviciu systemd. <code>systemctl status apache2</code> confirmă: <strong>active (running)</strong> și <strong>enabled</strong>. Deci dacă omori doar procesul, systemd îl poate reporni, iar la boot pornește din nou.</p>`,
+ en:`<p>A web server usually has one <strong>master</strong> process and several <strong>workers</strong>. <code>ps -eo pid,ppid,stat,cmd --forest</code> shows the tree:</p>
+<ul><li><code>812</code> has parent <code>1</code> (systemd): it's the master;</li>
+<li><code>814</code>, <code>815</code> have parent <code>812</code>: workers.</li></ul>
+<p>Parent 1 hints at a systemd service. <code>systemctl status apache2</code> confirms: <strong>active (running)</strong> and <strong>enabled</strong>. So if you just kill the process, systemd may restart it, and it comes back at boot.</p>`},
+ more:{ro:`<p>Trucul <code>grep [a]pache2</code> evită ca grep să se găsească pe el însuși în listă: textul căutat e „apache2”, dar linia lui grep conține „[a]pache2”.</p>`,
+  en:`<p>The <code>grep [a]pache2</code> trick stops grep from finding itself in the list: the pattern matches "apache2", but grep's own line contains "[a]pache2".</p>`},
+ try:[{cmd:"ps -eo pid,ppid,stat,cmd --forest",d:{ro:"Arborele proceselor.",en:"The process tree."}}]},
+
+{at:"ap",frame:S9,kind:"s",move:[[["adm","sysd"]],[["sysd","ap"]]],marks:{ap:{k:"ok",t:{ro:"oprit",en:"stopped"}}},tables:["sig"],hl:{sig:"SIGTERM (15)"},log:{ro:"apache2 oprit și dezactivat",en:"apache2 stopped and disabled"},who:{ro:"Oprire curată",en:"Clean stop"},
+ title:{ro:"Oprim apache2 prin systemd, nu cu kill -9",en:"We stop apache2 through systemd, not with kill -9"},
+ body:{ro:`<p>Pentru că apache2 e un serviciu, îl oprești prin <strong>managerul lui</strong>: <code>systemctl disable --now apache2</code>.</p>
+<ul><li><code>--now</code>: îl oprește acum (systemd trimite SIGTERM master-ului și așteaptă să termine curat);</li>
+<li><code>disable</code>: nu mai pornește la boot.</li></ul>
+<p>Dacă procesul nu ar fi fost un serviciu, ai fi trimis <code>kill -TERM 812</code>, doar după ce ai verificat PID-ul. <code>kill -9</code> (SIGKILL) e ultima soluție: procesul nu mai apucă să închidă fișiere și conexiuni.</p>`,
+ en:`<p>Because apache2 is a service, you stop it through <strong>its manager</strong>: <code>systemctl disable --now apache2</code>.</p>
+<ul><li><code>--now</code>: stops it now (systemd sends SIGTERM to the master and waits for a clean exit);</li>
+<li><code>disable</code>: it no longer starts at boot.</li></ul>
+<p>If the process hadn't been a service, you'd have sent <code>kill -TERM 812</code>, only after checking the PID. <code>kill -9</code> (SIGKILL) is the last resort: the process gets no chance to close files and connections.</p>`},
+ more:{ro:`<p>Dacă apache2 nu mai trebuie deloc, îl dezinstalezi. <code>systemctl mask apache2</code> îl blochează complet: nu poate fi pornit nici manual, nici ca dependență.</p>`,
+  en:`<p>If apache2 isn't needed at all, uninstall it. <code>systemctl mask apache2</code> blocks it completely: it can't be started manually or as a dependency.</p>`}},
+
+{at:"ng",frame:S10,kind:"s",move:[[["adm","sysd"]],[["sysd","ng"]],[["ng","port"]]],marks:{ng:{k:"ok",t:"active"}},tables:["states"],hl:{states:"systemctl is-enabled"},log:{ro:"nginx pornit și activat",en:"nginx started and enabled"},who:"enable --now",
+ title:{ro:"enable --now: pornit acum și la fiecare boot",en:"enable --now: started now and at every boot"},
+ body:{ro:`<p><code>systemctl enable --now nginx</code> face două lucruri diferite deodată:</p>
+<ul><li><strong>start</strong>: pornește serviciul acum;</li>
+<li><strong>enable</strong>: creează legătura care îl pornește la boot.</li></ul>
+<p>La interviu, întrebarea „pornește la boot?” și „rulează acum?” au răspunsuri separate: <code>is-enabled</code> → <em>enabled</em>, <code>is-active</code> → <em>active</em>. Un serviciu poate fi enabled dar failed, sau active dar disabled (pornit de mână, dispare la restart).</p>`,
+ en:`<p><code>systemctl enable --now nginx</code> does two different things at once:</p>
+<ul><li><strong>start</strong>: starts the service now;</li>
+<li><strong>enable</strong>: creates the link that starts it at boot.</li></ul>
+<p>In an interview, "does it start at boot?" and "is it running now?" have separate answers: <code>is-enabled</code> → <em>enabled</em>, <code>is-active</code> → <em>active</em>. A service can be enabled but failed, or active but disabled (started by hand, gone after a reboot).</p>`},
+ try:[{cmd:"systemctl is-enabled nginx; systemctl is-active nginx",d:{ro:"Boot și starea curentă, separat.",en:"Boot and current state, separately."}}]},
+
+{at:["cl","ng"],frame:S11,kind:"s",move:[[["cl","port"],["port","ng"]],[["ng","port"],["port","cl"]]],marks:{cl:{k:"ok",t:"200 OK"}},log:{ro:"verificat",en:"verified"},who:{ro:"Verificarea",en:"Verification"},
+ title:{ro:"Verificarea: același curl ca la început",en:"Verification: the same curl as at the start"},
+ body:{ro:`<p>Refacem testul de la pasul 1: <code>curl -I http://web01</code> → <strong>HTTP/1.1 200 OK</strong>, <code>Server: nginx</code>.</p>
+<ul><li><code>ss -ltnp "sport = :80"</code> arată acum nginx pe portul 80;</li>
+<li><code>journalctl -u nginx -b</code> nu mai are erori;</li>
+<li>un restart de test (într-o fereastră de mentenanță) confirmă că pornește nginx, nu apache2.</li></ul>
+<p class="key">Două cauze, găsite pe rând: o cale greșită în unit (203/EXEC) și un port ocupat (Address already in use).</p>`,
+ en:`<p>We repeat the test from step 1: <code>curl -I http://web01</code> → <strong>HTTP/1.1 200 OK</strong>, <code>Server: nginx</code>.</p>
+<ul><li><code>ss -ltnp "sport = :80"</code> now shows nginx on port 80;</li>
+<li><code>journalctl -u nginx -b</code> has no more errors;</li>
+<li>a test reboot (in a maintenance window) confirms nginx starts, not apache2.</li></ul>
+<p class="key">Two causes, found one after the other: a wrong path in the unit (203/EXEC) and a taken port (Address already in use).</p>`}},
+
+{at:["sysd","unit","ng","jr","port"],frame:null,kind:"none",summary:true,
+ title:{ro:"Recapitulare",en:"Recap"},
+ body:{ro:`<ul><li><strong>Refused</strong> = nimeni nu ascultă: te uiți la serviciu, nu la rețea.</li>
+<li><code>systemctl status</code>: starea, PID-ul, codul de ieșire. Codurile 200+ sunt ale lui systemd: <strong>203/EXEC</strong> = programul n-a putut fi executat.</li>
+<li><code>systemctl cat</code> / <code>show -p ExecStart</code>: ce pornește de fapt; schimbările se fac cu <code>systemctl edit</code> (drop-in).</li>
+<li><code>journalctl -u NUME -b</code>: ce a spus programul; <code>nginx -t</code> verifică doar sintaxa.</li>
+<li><code>ss -ltnp</code>: cine ține portul; <code>ps --forest</code>: master, workeri, părinte.</li>
+<li>Oprești prin systemd; <code>kill -TERM</code> înainte de <code>kill -9</code>. <code>enable</code> ≠ <code>start</code>.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Mergi la laborator ↓</button></p>`,
+ en:`<ul><li><strong>Refused</strong> = nothing listens: you look at the service, not the network.</li>
+<li><code>systemctl status</code>: the state, PID and exit code. Codes 200+ are systemd's: <strong>203/EXEC</strong> = the program couldn't be executed.</li>
+<li><code>systemctl cat</code> / <code>show -p ExecStart</code>: what actually starts; changes go through <code>systemctl edit</code> (a drop-in).</li>
+<li><code>journalctl -u NAME -b</code>: what the program said; <code>nginx -t</code> only checks the syntax.</li>
+<li><code>ss -ltnp</code>: who holds the port; <code>ps --forest</code>: master, workers, parent.</li>
+<li>Stop through systemd; <code>kill -TERM</code> before <code>kill -9</code>. <code>enable</code> ≠ <code>start</code>.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Go to the lab ↓</button></p>`}}
+],
+
+reference:(T,lang)=>{
+  const ro=lang==="ro";
+  return `<div class="ref-grid"><section class="card refcard"><h2>${ro?"Drop-in pentru nginx":"A drop-in for nginx"}</h2>
+<pre class="yaml"><span class="c"># /etc/systemd/system/nginx.service.d/override.conf</span>
+[Service]
+ExecStart=
+ExecStart=/usr/sbin/nginx -g 'daemon on; master_process on;'</pre>
+<h3>${ro?"Servicii":"Services"}</h3>
+<pre class="yaml">systemctl status nginx --no-pager
+systemctl cat nginx
+systemctl show nginx -p ExecStart
+sudo systemctl edit nginx            <span class="c"># ${ro?"drop-in + daemon-reload":"drop-in + daemon-reload"}</span>
+sudo systemctl enable --now nginx
+systemctl is-enabled nginx; systemctl is-active nginx
+systemctl list-units --failed
+journalctl -u nginx -b -n 50 --no-pager
+journalctl -u nginx -f               <span class="c"># ${ro?"live":"live"}</span></pre></section>
+<section class="card refcard"><h2>${ro?"Procese și porturi":"Processes and ports"}</h2>
+<pre class="yaml">sudo ss -ltnp "sport = :80"
+ps -eo pid,ppid,stat,cmd --forest
+pgrep -a nginx
+kill -TERM 12345                     <span class="c"># ${ro?"doar un PID verificat":"only a verified PID"}</span>
+sudo nginx -t
+sudo systemctl reload nginx          <span class="c"># ${ro?"recitește configurația":"rereads the config"}</span></pre>
+<h3>${ro?"Întrebări de interviu":"Interview questions"}</h3>
+<pre class="yaml">${ro?"Serviciu failed?":"Service failed?"}        → systemctl status + journalctl -u
+${ro?"Port ocupat?":"Port occupied?"}           → ss -ltnp
+${ro?"status=203/EXEC?":"status=203/EXEC?"}        → systemctl show -p ExecStart
+${ro?"Pornește la boot?":"Starts at boot?"}         → systemctl is-enabled
+${ro?"Care e master-ul?":"Which is the master?"}     → ps --forest</pre></section></div>`;
+},
+
+gloss:[
+ ["systemd",null,{ro:"Primul proces (PID 1): pornește, oprește și supraveghează serviciile.",en:"The first process (PID 1): starts, stops and watches services."}],
+ ["Unit file",null,{ro:"Fișierul care descrie un serviciu: ce rulează, ca cine, când.",en:"The file describing a service: what runs, as whom, when."}],
+ ["Drop-in",null,{ro:"Fișier în nume.service.d/ care modifică un unit fără să-l editezi.",en:"A file in name.service.d/ that changes a unit without editing it."}],
+ ["ExecStart",null,{ro:"Comanda pe care systemd o execută ca să pornească serviciul.",en:"The command systemd executes to start the service."}],
+ ["203/EXEC",null,{ro:"Cod systemd: programul din ExecStart nu a putut fi executat.",en:"A systemd code: the ExecStart program couldn't be executed."}],
+ ["journald",null,{ro:"Jurnalul systemd; se citește cu journalctl.",en:"systemd's journal; read with journalctl."}],
+ ["SIGTERM",null,{ro:"Semnal care cere oprirea curată a unui proces.",en:"A signal asking a process to stop cleanly."}],
+ ["SIGKILL",null,{ro:"Semnal care oprește forțat un proces, fără cleanup.",en:"A signal that forcibly stops a process, with no cleanup."}],
+ ["PPID",null,{ro:"PID-ul părintelui unui proces.",en:"A process's parent PID."}]
+],
+glossEx:{
+ "203/EXEC":{ro:"ExecStart=/usr/local/sbin/nginx, un fișier care nu mai exista.",en:"ExecStart=/usr/local/sbin/nginx, a file that no longer existed."},
+ "Drop-in":{ro:"/etc/systemd/system/nginx.service.d/override.conf.",en:"/etc/systemd/system/nginx.service.d/override.conf."}
+},
+
+quiz:[
+ {"q":{"ro":"Ce înseamnă status=203/EXEC în systemctl status?","en":"What does status=203/EXEC in systemctl status mean?"},"o":[{"ro":"Programul a pornit și a ieșit cu codul 203","en":"The program started and exited with code 203"},{"ro":"systemd nu a putut executa programul din ExecStart (cale, bit x, shebang, noexec)","en":"systemd couldn't execute the ExecStart program (path, x bit, shebang, noexec)"},{"ro":"Portul e ocupat","en":"The port is taken"},{"ro":"Lipsește memoria","en":"Out of memory"}],"a":1,"e":{"ro":"Codurile 200+ sunt ale lui systemd.","en":"Codes 200+ are systemd's."}},
+ {"q":{"ro":"Cum vezi logurile unui serviciu doar pentru boot-ul curent?","en":"How do you see a service's logs for the current boot only?"},"o":["journalctl -u nginx -b","journalctl -k","dmesg | grep nginx","cat /var/log/nginx"],"a":0,"e":{"ro":"-u = unitatea, -b = boot-ul.","en":"-u = the unit, -b = the boot."}},
+ {"q":{"ro":"nginx -t spune „syntax is ok”, dar nginx nu pornește. Ce NU verifică nginx -t?","en":"nginx -t says \"syntax is ok\", but nginx won't start. What does nginx -t NOT check?"},"o":[{"ro":"Sintaxa fișierelor incluse","en":"The syntax of included files"},{"ro":"Directivele necunoscute","en":"Unknown directives"},{"ro":"Acoladele lipsă","en":"Missing braces"},{"ro":"Dacă portul pe care trebuie să asculte e liber","en":"Whether the port it must listen on is free"}],"a":3,"e":{"ro":"„Address already in use” apare abia la pornire.","en":"\"Address already in use\" only shows up at start."}},
+ {"q":{"ro":"Cum afli ce proces ține portul TCP 80?","en":"How do you find which process holds TCP port 80?"},"o":["ip route","systemctl list-units","sudo ss -ltnp \"sport = :80\"","ping localhost"],"a":2,"e":{"ro":"-l ascultă, -t TCP, -n numeric, -p procesul.","en":"-l listening, -t TCP, -n numeric, -p process."}},
+ {"q":{"ro":"De ce schimbi un unit cu systemctl edit, nu editând /lib/systemd/system/nginx.service?","en":"Why change a unit with systemctl edit rather than editing /lib/systemd/system/nginx.service?"},"o":[{"ro":"E mai rapid","en":"It's faster"},{"ro":"Fișierul din /lib e suprascris la actualizarea pachetului; drop-in-ul din /etc rămâne","en":"The file in /lib is overwritten on package upgrade; the drop-in in /etc stays"},{"ro":"/lib e doar citire","en":"/lib is read-only"},{"ro":"Nu e nicio diferență","en":"There's no difference"}],"a":1,"e":{"ro":"systemctl edit face și daemon-reload.","en":"systemctl edit also runs daemon-reload."}},
+ {"q":{"ro":"Procesul apache2 cu PID 812 are PPID 1 și e un serviciu enabled. Cum îl oprești corect?","en":"The apache2 process with PID 812 has PPID 1 and is an enabled service. How do you stop it properly?"},"o":["sudo systemctl disable --now apache2","kill -9 812","kill -9 814",{"ro":"Repornești serverul","en":"Reboot the server"}],"a":0,"e":{"ro":"Altfel systemd îl poate reporni și pornește iar la boot.","en":"Otherwise systemd may restart it, and it starts again at boot."}},
+ {"q":{"ro":"Care e diferența dintre SIGTERM și SIGKILL?","en":"What's the difference between SIGTERM and SIGKILL?"},"o":[{"ro":"Niciuna","en":"None"},{"ro":"SIGKILL repornește procesul","en":"SIGKILL restarts the process"},{"ro":"SIGTERM e doar pentru root","en":"SIGTERM is root-only"},{"ro":"SIGTERM cere oprirea curată; SIGKILL oprește forțat, fără cleanup","en":"SIGTERM asks for a clean stop; SIGKILL forces it, with no cleanup"}],"a":3,"e":{"ro":"SIGKILL e ultima soluție.","en":"SIGKILL is the last resort."}},
+ {"q":{"ro":"systemctl is-active nginx spune active, iar is-enabled spune disabled. Ce se întâmplă la restart?","en":"systemctl is-active nginx says active and is-enabled says disabled. What happens on reboot?"},"o":[{"ro":"nginx pornește","en":"nginx starts"},{"ro":"nginx intră în failed","en":"nginx goes into failed"},{"ro":"nginx nu pornește: rulează acum, dar nu e setat pentru boot","en":"nginx doesn't start: it runs now but isn't set to start at boot"},{"ro":"Serverul nu pornește","en":"The server doesn't boot"}],"a":2,"e":{"ro":"enable --now le rezolvă pe amândouă.","en":"enable --now handles both."}}
+]
+};
+})();
+</script>
+<script src="../assets/engine.js?v=4"></script>
+<script src="../assets/labs-data.js?v=8"></script>
+<script src="../assets/lab.js?v=1"></script>
+<script type="module" src="../assets/auth.js?v=15"></script>
+</body>
+</html>

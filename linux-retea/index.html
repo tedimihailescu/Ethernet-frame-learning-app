@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rețeaua în Linux: de ce dă timeout conexiunea?</title>
+<meta name="description" content="Lecție interactivă: depanarea unei conexiuni TCP care dă timeout pe un server Linux: ip addr, ip route, ip route get, ip rule, ss, tcpdump, nftables, rp_filter și policy routing. / Interactive lesson: troubleshooting a TCP timeout on a Linux server.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/diagram.css?v=1">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<script>
+(function(){
+const RO="READ-ONLY",CH="LAB CHANGE";
+const N1={q:{ro:"De ce primește clientul timeout pe 10.10.20.15:8080?",en:"Why does the client time out on 10.10.20.15:8080?"},cmd:"curl -v --connect-timeout 5 http://10.10.20.15:8080/health",mode:RO,out:"* Trying 10.10.20.15:8080... · * Connection timed out after 5001 milliseconds",proves:{ro:"timeout, nu „refused”: pachetele se pierd undeva și nimeni nu răspunde, nici măcar cu RST",en:"a timeout, not \"refused\": packets get lost somewhere and nobody answers, not even with a RST"},bad:"TIMEOUT"};
+const N2={q:{ro:"Ce adrese IPv4 are serverul?",en:"Which IPv4 addresses does the server have?"},cmd:"ip -br addr",mode:RO,out:"lo UNKNOWN 127.0.0.1/8 · eth0 UP 10.10.20.15/24 · eth1 UP 10.10.30.5/24",proves:{ro:"ambele interfețe sunt UP; app01 e în două rețele, iar a doua e chiar rețeaua clientului",en:"both interfaces are UP; app01 is on two networks, and the second one is the client's own network"}};
+const N3={q:{ro:"Care e gateway-ul și ce rețele sunt conectate direct?",en:"What is the gateway and which networks are directly connected?"},cmd:"ip route show default · ip route",mode:RO,out:"default via 10.10.20.1 dev eth0 · 10.10.20.0/24 dev eth0 src 10.10.20.15 · 10.10.30.0/24 dev eth1 src 10.10.30.5",proves:{ro:"traficul spre alte rețele iese prin router, pe eth0; 10.10.30.0/24 e conectată direct, pe eth1",en:"traffic to other networks leaves through the router, on eth0; 10.10.30.0/24 is directly connected, on eth1"}};
+const N4={q:{ro:"Ascultă cineva pe portul TCP 8080?",en:"Is anything listening on TCP port 8080?"},cmd:"sudo ss -ltnp \"sport = :8080\"",mode:RO,out:"LISTEN 0 511 127.0.0.1:8080 0.0.0.0:* users:((\"orders-api\",pid=1432,fd=7))",proves:{ro:"aplicația ascultă doar pe loopback (127.0.0.1): din rețea nu se poate ajunge la ea",en:"the app listens on loopback only (127.0.0.1): it can't be reached from the network"},bad:"127.0.0.1"};
+const N5={q:{ro:"Merge aplicația după ce ascultă pe toate adresele?",en:"Does the app work once it listens on every address?"},fix:{ro:"în /etc/orders-api/config.yaml: listen: 0.0.0.0:8080 · systemctl restart orders-api",en:"in /etc/orders-api/config.yaml: listen: 0.0.0.0:8080 · systemctl restart orders-api"},mode:CH,cmd:"ss -ltnp \"sport = :8080\" · curl -s http://127.0.0.1:8080/health",out:"LISTEN 0 511 0.0.0.0:8080 · {\"status\":\"ok\"}",proves:{ro:"aplicația răspunde local; din rețea clientul primește tot timeout",en:"the app answers locally; from the network the client still times out"}};
+const N6={q:{ro:"Ajunge SYN-ul clientului până la server?",en:"Does the client's SYN reach the server?"},cmd:"sudo tcpdump -ni eth0 \"tcp port 8080\"",mode:RO,out:"IP 10.10.30.50.51544 > 10.10.20.15.8080: Flags [S], seq 3170… (de 3 ori: după 1 s, 2 s, 4 s)",proves:{ro:"SYN-ul ajunge pe eth0, dar nu pleacă niciun SYN-ACK: pachetul e aruncat chiar în app01",en:"the SYN arrives on eth0, but no SYN-ACK leaves: the packet is dropped inside app01 itself"},bad:"NO SYN-ACK"};
+const N7={q:{ro:"Aruncă firewall-ul local pachetul?",en:"Is the local firewall dropping the packet?"},cmd:"sudo nft list ruleset",mode:RO,out:"chain input { type filter hook input priority 0; policy drop; ct state established,related accept; tcp dport { 22, 8080 } counter packets 0 bytes 0 accept }",proves:{ro:"regula pentru 8080 există, dar contorul e 0: pachetele nu ajung nici măcar la firewall",en:"the 8080 rule exists, but its counter is 0: the packets don't even reach the firewall"}};
+const N8={q:{ro:"Pe unde ar pleca răspunsul către client?",en:"Which way would the reply to the client go?"},cmd:"ip route get 10.10.30.50 · ip rule show",mode:RO,out:"10.10.30.50 dev eth1 src 10.10.30.5 · 0: from all lookup local · 32766: from all lookup main · 32767: from all lookup default",proves:{ro:"SYN-ul a intrat pe eth0, dar drumul înapoi spre client e pe eth1: drum asimetric",en:"the SYN came in on eth0, but the way back to the client is on eth1: an asymmetric path"},bad:"ASYMMETRIC"};
+const N9={q:{ro:"Poate reverse-path filtering să arunce SYN-ul?",en:"Could reverse-path filtering drop the SYN?"},cmd:"sysctl net.ipv4.conf.all.rp_filter net.ipv4.conf.eth0.rp_filter · nstat -az TcpExtIPReversePathFilter",mode:RO,out:"net.ipv4.conf.all.rp_filter = 1 · net.ipv4.conf.eth0.rp_filter = 1 · TcpExtIPReversePathFilter 37",proves:{ro:"rp_filter strict: kernelul aruncă SYN-ul pentru că sursa 10.10.30.50 nu s-ar întoarce prin eth0; contorul crește la fiecare încercare",en:"strict rp_filter: the kernel drops the SYN because the source 10.10.30.50 wouldn't be routed back out of eth0; the counter grows with every attempt"},bad:"RP_FILTER"};
+const N10={q:{ro:"Cum facem ca răspunsul să plece pe aceeași interfață?",en:"How do we make the reply leave on the same interface?"},fix:"ip rule add from 10.10.20.15 table 100 · ip route add default via 10.10.20.1 dev eth0 table 100",mode:CH,cmd:"ip route get 10.10.30.50 from 10.10.20.15",out:"10.10.30.50 from 10.10.20.15 via 10.10.20.1 dev eth0 table 100",proves:{ro:"traficul care pleacă de pe adresa lui eth0 se întoarce acum tot pe eth0, prin router",en:"traffic leaving from eth0's address now goes back out of eth0 too, through the router"}};
+const N11={q:{ro:"Funcționează acum de la client?",en:"Does it work from the client now?"},cmd:"curl -s -o /dev/null -w \"%{http_code}\" http://10.10.20.15:8080/health · ss -tn state established \"sport = :8080\"",mode:RO,out:"200 · ESTAB 10.10.20.15:8080 10.10.30.50:51560",proves:{ro:"SYN, SYN-ACK și ACK trec pe eth0; contorul rp_filter nu mai crește",en:"SYN, SYN-ACK and ACK go through eth0; the rp_filter counter no longer grows"}};
+
+window.LESSON={
+docTitle:{ro:"Rețeaua în Linux: de ce dă timeout conexiunea?",en:"Linux networking: why does the connection time out?"},
+eyebrow:{ro:"Lecție interactivă · Linux",en:"Interactive lesson · Linux"},
+title:{ro:"Rețeaua în Linux: de ce dă timeout conexiunea?",en:"Linux networking: why does the connection time out?"},
+sub:{ro:"Un client din rețeaua 10.10.30.0/24 nu se poate conecta la aplicația orders-api de pe serverul Linux app01, portul 8080: „Connection timed out”. Depanăm ca la un interviu LFCS: simptom, ipoteză, comandă, dovadă, remediere sigură, verificare. Găsim două probleme suprapuse: o aplicație care ascultă doar local și un drum asimetric pe care kernelul îl blochează cu rp_filter.",en:"A client on the 10.10.30.0/24 network can't connect to the orders-api app on the Linux server app01, port 8080: \"Connection timed out\". We troubleshoot the way you would in an LFCS interview: symptom, hypothesis, command, evidence, safe fix, verification. We find two stacked problems: an app listening only locally, and an asymmetric path the kernel blocks with rp_filter."},
+meta:[{ro:"≈ 25 minute",en:"≈ 25 minutes"},{ro:"12 pași",en:"12 steps"},{ro:"8 întrebări",en:"8 questions"},{ro:"Intermediar",en:"Intermediate"}],
+goals:[{ro:"Ordinea de depanare: de la simptom la dovadă, fără schimbări la întâmplare",en:"The troubleshooting order: from symptom to evidence, without random changes"},{ro:"ip addr, ip route, ip route get și ip rule: cum decide Linux drumul unui pachet",en:"ip addr, ip route, ip route get and ip rule: how Linux decides a packet's path"},{ro:"ss, curl și tcpdump: cine ascultă, ce ajunge, ce pleacă",en:"ss, curl and tcpdump: who listens, what arrives, what leaves"},{ro:"nftables, rp_filter și policy routing",en:"nftables, rp_filter and policy routing"}],
+foot:{ro:"Nume de servere, adrese și aplicații fictive. Comenzile marcate LAB CHANGE modifică sistemul: rulează-le doar într-un mediu de test sau cu aprobare.",en:"Fictional server, address and app names. Commands marked LAB CHANGE modify the system: run them only in a test environment or with approval."},
+ui:{frameT:{ro:"Investigația (live)",en:"The investigation (live)"},refT:{ro:"Comenzi de rețea Linux",en:"Linux networking commands"},refLead:{ro:"Întrebarea de interviu, prima comandă și ce dovedește.",en:"The interview question, the first command and what it proves."}},
+tryT:{ro:"Încearcă (pe o mașină de test)",en:"Try it (on a test machine)"},
+legend:[["lg-ip","READ",{ro:"doar citește",en:"read-only"}],["lg-arp","CHANGE",{ro:"modifică sistemul",en:"changes the system"}],["lg-tcp","ERR",{ro:"dovada problemei",en:"evidence of the problem"}]],
+
+nodes:{
+  cl:{type:"host",name:"client",lines:["10.10.30.50"]},
+  rtr:{type:"router",name:"router",lines:["10.10.20.1"]},
+  eth0:{type:"box",name:"eth0",lines:["10.10.20.15"]},
+  eth1:{type:"box",name:"eth1",lines:["10.10.30.5"]},
+  krn:{type:"router",name:{ro:"kernel",en:"kernel"},lines:[{ro:"rutare · rp_filter",en:"routing · rp_filter"}]},
+  nft:{type:"box",name:"nftables",lines:["input"]},
+  app:{type:"server",name:"orders-api",lines:[":8080"]}
+},
+links:[["cl","rtr"],["rtr","eth0"],["eth0","krn"],["krn","nft"],["nft","app"],["krn","eth1"],["eth1","cl"]],
+linkLabels:{"cl-rtr":"gateway","rtr-eth0":"10.10.20.0/24","eth0-krn":{"ro":"intră","en":"in"},"krn-nft":"INPUT","nft-app":"TCP 8080","krn-eth1":{"ro":"iese","en":"out"},"eth1-cl":{"ro":"10.10.30.0/24 direct","en":"10.10.30.0/24 direct"}},
+layouts:{
+  wide:{vb:[0,0,1000,500],n:{cl:[90,370],rtr:[250,120],eth0:[460,120],krn:[600,260],nft:[760,260],app:[910,260],eth1:[460,370]},
+    zones:[{x:390,y:40,w:600,h:420,top:true,cls:"virt",l:{ro:"app01 (Linux)",en:"app01 (Linux)"}}]},
+  narrow:{vb:[0,0,360,860],n:{cl:[180,60],rtr:[60,210],eth1:[300,330],eth0:[60,370],krn:[180,500],nft:[180,650],app:[180,800]}}
+},
+groups:[
+  {id:"q",color:"l7",fields:["q"],name:{ro:"Întrebarea",en:"The question"},short:"Q",grow:2},
+  {id:"c",color:"l3",fields:["cmd","mode","out"],name:{ro:"Comanda și rezultatul",en:"Command and output"},short:"CMD",grow:4},
+  {id:"e",color:"arp",fields:["proves","fix"],name:{ro:"Dovada și remedierea",en:"Evidence and fix"},short:{ro:"Dovada",en:"Evidence"},grow:3}
+],
+fieldLabels:{q:{ro:"Întrebarea",en:"The question"},cmd:{ro:"Comanda",en:"Command"},mode:{ro:"Tip",en:"Type"},out:{ro:"Ce afișează",en:"Output"},proves:{ro:"Ce dovedește",en:"What it proves"},fix:{ro:"Remediere",en:"Fix"}},
+pdu:f=>f.mode===CH?{badge:{ro:"Schimbare: doar în lab sau cu aprobare",en:"Change: lab only, or with approval"},tok:["CHANGE","k-arp"]}:f.bad?{badge:{ro:"Dovada problemei",en:"Evidence of the problem"},tok:[f.bad,"k-tcp"]}:{badge:{ro:"Doar citește",en:"Read-only"},tok:["READ","k-ip"]},
+
+init:{},
+tables:{
+  method:{title:{ro:"Ordinea unui răspuns bun",en:"The order of a good answer"},cols:[{ro:"Pas",en:"Step"},{ro:"Ce faci",en:"What you do"}],plain:[1],
+    rows:()=>[[{ro:"1. Simptom",en:"1. Symptom"},{ro:"exact ce vede clientul: timeout, refused, eroare DNS",en:"exactly what the client sees: timeout, refused, DNS error"}],[{ro:"2. Ipoteze",en:"2. Hypotheses"},{ro:"unde se poate pierde pachetul",en:"where the packet could get lost"}],[{ro:"3. Comandă",en:"3. Command"},{ro:"întâi comenzi care doar citesc",en:"read-only commands first"}],[{ro:"4. Dovadă",en:"4. Evidence"},{ro:"ce dovedește rezultatul, și ce nu",en:"what the output proves, and what it doesn't"}],[{ro:"5. Remediere",en:"5. Fix"},{ro:"cea mai mică schimbare sigură",en:"the smallest safe change"}],[{ro:"6. Verificare",en:"6. Verification"},{ro:"refaci testul de la început",en:"repeat the original test"}]]},
+  errs:{title:{ro:"Ce înseamnă eroarea",en:"What the error means"},cols:[{ro:"Eroare",en:"Error"},{ro:"Pachetul",en:"The packet"},{ro:"Cauze tipice",en:"Typical causes"}],plain:[1,2],
+    rows:()=>[["Connection refused",{ro:"a ajuns; serverul a răspuns cu RST",en:"arrived; the server answered with a RST"},{ro:"nimeni nu ascultă pe port",en:"nothing listens on the port"}],["Connection timed out",{ro:"pierdut, niciun răspuns",en:"lost, no answer"},{ro:"firewall cu drop, rutare, rp_filter",en:"a dropping firewall, routing, rp_filter"}],["No route to host",{ro:"respins de un router/firewall cu ICMP",en:"rejected by a router/firewall with ICMP"},{ro:"rută lipsă, regulă reject",en:"a missing route, a reject rule"}],["Could not resolve host",{ro:"nici n-a plecat",en:"never left"},{ro:"DNS",en:"DNS"}]]},
+  bind:{title:{ro:"Pe ce adresă ascultă aplicația",en:"Which address the app listens on"},cols:[{ro:"Adresă locală în ss",en:"Local address in ss"},{ro:"Cine se poate conecta",en:"Who can connect"}],plain:[1],
+    rows:()=>[["127.0.0.1:8080",{ro:"doar procese de pe același server",en:"only processes on the same server"}],["10.10.20.15:8080",{ro:"doar prin adresa lui eth0",en:"only through eth0's address"}],["0.0.0.0:8080",{ro:"prin orice adresă IPv4 a serverului",en:"through any of the server's IPv4 addresses"}],["*:8080 / [::]:8080",{ro:"orice adresă, IPv4 și IPv6",en:"any address, IPv4 and IPv6"}]]},
+  rpf:{title:{ro:"Valorile rp_filter",en:"rp_filter values"},cols:[{ro:"Valoare",en:"Value"},{ro:"Mod",en:"Mode"},{ro:"Aruncă pachetul dacă",en:"Drops the packet if"}],plain:[1,2],
+    rows:()=>[["0",{ro:"oprit",en:"off"},{ro:"niciodată",en:"never"}],["1",{ro:"strict",en:"strict"},{ro:"drumul înapoi spre sursă nu e prin interfața pe care a intrat",en:"the way back to the source isn't through the interface it came in on"}],["2",{ro:"loose",en:"loose"},{ro:"nu există niciun drum înapoi spre sursă",en:"there's no way back to the source at all"}]]}
+},
+log:{title:{ro:"Jurnalul investigației",en:"Investigation log"},lead:{ro:"Fiecare comandă și ce a dovedit.",en:"Every command and what it proved."},first:{ro:"Pas",en:"Step"},minWidth:600,
+  cols:[{h:{ro:"Comanda",en:"Command"},v:f=>f.fix||f.cmd||"",cls:"mac"},{h:{ro:"Ce dovedește",en:"What it proves"},v:f=>f.proves||"",cls:""}]},
+
+steps:[
+{at:"cl",frame:N1,kind:"n",move:[[["cl","rtr"]],[["rtr","eth0"]]],marks:{cl:{k:"drop",t:"timeout"}},tables:["errs"],hl:{errs:"Connection timed out"},log:{ro:"simptomul",en:"the symptom"},who:{ro:"Simptomul",en:"The symptom"},
+ title:{ro:"Simptomul: „Connection timed out” după 5 secunde",en:"The symptom: \"Connection timed out\" after 5 seconds"},
+ body:{ro:`<p>Clientul <code>10.10.30.50</code> încearcă <code>http://10.10.20.15:8080/health</code> și primește <strong>Connection timed out</strong>.</p>
+<p>Cuvântul exact contează. <strong>Refused</strong> ar însemna că pachetul a ajuns și serverul a răspuns „aici nu ascultă nimeni” (un RST). <strong>Timeout</strong> înseamnă că nu a venit <em>niciun</em> răspuns: pachetul s-a pierdut pe drum sau a fost aruncat în tăcere.</p>
+<p class="key">Nu începe cu restart-uri și schimbări. Ordinea bună: simptom → ipoteze → comandă care doar citește → dovadă → remediere mică → verificare.</p>`,
+ en:`<p>The client <code>10.10.30.50</code> tries <code>http://10.10.20.15:8080/health</code> and gets <strong>Connection timed out</strong>.</p>
+<p>The exact word matters. <strong>Refused</strong> would mean the packet arrived and the server answered "nothing listens here" (a RST). <strong>Timeout</strong> means <em>no</em> answer came at all: the packet got lost on the way or was dropped silently.</p>
+<p class="key">Don't start with restarts and changes. The good order: symptom → hypotheses → read-only command → evidence → small fix → verification.</p>`},
+ more:{ro:`<p>Dacă eroarea ar fi <em>Could not resolve host</em>, pachetul nici n-ar fi plecat: problema e DNS. Pe un sistem cu systemd-resolved verifici cu <code>resolvectl status</code> și <code>resolvectl query nume</code>. <code>/etc/resolv.conf</code> poate arăta doar stub-ul local <code>127.0.0.53</code>, nu serverele DNS reale.</p>`,
+  en:`<p>If the error were <em>Could not resolve host</em>, the packet would never have left: the problem is DNS. On a system with systemd-resolved you check with <code>resolvectl status</code> and <code>resolvectl query name</code>. <code>/etc/resolv.conf</code> may show only the local stub <code>127.0.0.53</code>, not the real DNS servers.</p>`},
+ try:[{cmd:"curl -v --connect-timeout 5 http://10.10.20.15:8080/health",d:{ro:"Separă conectarea TCP de răspunsul HTTP.",en:"Separates the TCP connect from the HTTP response."}}]},
+
+{at:["eth0","eth1"],frame:N2,kind:"n",log:{ro:"interfețele",en:"the interfaces"},who:"ip addr",
+ title:{ro:"Pe server: ce interfețe și adrese are?",en:"On the server: which interfaces and addresses does it have?"},
+ body:{ro:`<p>Intrăm pe app01 și pornim de jos: interfețele. <code>ip -br addr</code> le arată compact, câte una pe linie:</p>
+<ul><li><code>eth0 UP 10.10.20.15/24</code>: rețeaua serverelor;</li>
+<li><code>eth1 UP 10.10.30.5/24</code>: o a doua placă, în <strong>aceeași rețea cu clientul</strong>.</li></ul>
+<p>Ambele sunt UP și au adrese, deci nu e o placă oprită. Dar ținem minte detaliul: serverul are două drumuri posibile spre client.</p>`,
+ en:`<p>We log in to app01 and start from the bottom: the interfaces. <code>ip -br addr</code> shows them compactly, one per line:</p>
+<ul><li><code>eth0 UP 10.10.20.15/24</code>: the server network;</li>
+<li><code>eth1 UP 10.10.30.5/24</code>: a second card, on <strong>the same network as the client</strong>.</li></ul>
+<p>Both are UP and have addresses, so it's not a card that's down. But we note the detail: the server has two possible paths to the client.</p>`},
+ more:{ro:`<p>O interfață DOWN și o rută lipsă sunt probleme diferite. <code>ip -br link</code> arată doar starea legăturii (UP/DOWN, adresa MAC), fără IP-uri.</p>`,
+  en:`<p>An interface that's DOWN and a missing route are different problems. <code>ip -br link</code> shows only the link state (UP/DOWN, MAC address), without IPs.</p>`},
+ try:[{cmd:"ip -br addr",d:{ro:"Interfețele și adresele, pe scurt.",en:"Interfaces and addresses, briefly."}}]},
+
+{at:"krn",frame:N3,kind:"n",log:{ro:"tabela de rutare",en:"the routing table"},who:"ip route",
+ title:{ro:"Tabela de rutare: default și rețelele conectate",en:"The routing table: default and connected networks"},
+ body:{ro:`<p><code>ip route</code> arată unde trimite kernelul pachetele:</p>
+<ul><li><code>default via 10.10.20.1 dev eth0</code>: orice destinație fără rută mai specifică merge la router, pe eth0;</li>
+<li><code>10.10.30.0/24 dev eth1</code>: rețeaua clientului e <strong>conectată direct</strong> pe eth1, fără router.</li></ul>
+<p>Kernelul alege mereu ruta <strong>cea mai specifică</strong> (prefixul cel mai lung). Ruta default se folosește doar când nu există alta.</p>`,
+ en:`<p><code>ip route</code> shows where the kernel sends packets:</p>
+<ul><li><code>default via 10.10.20.1 dev eth0</code>: any destination without a more specific route goes to the router, on eth0;</li>
+<li><code>10.10.30.0/24 dev eth1</code>: the client's network is <strong>directly connected</strong> on eth1, with no router.</li></ul>
+<p>The kernel always picks the <strong>most specific</strong> route (the longest prefix). The default route is used only when there's no other.</p>`},
+ try:[{cmd:"ip route show default",d:{ro:"Doar ruta default.",en:"Just the default route."}},{cmd:"ip route",d:{ro:"Toată tabela main.",en:"The whole main table."}}]},
+
+{at:"app",frame:N4,kind:"n",marks:{app:{k:"drop",t:"127.0.0.1"}},tables:["bind"],hl:{bind:"127.0.0.1:8080"},log:{ro:"aplicația ascultă local",en:"the app listens locally"},who:"ss",
+ title:{ro:"Cine ascultă pe 8080? Prima problemă",en:"Who listens on 8080? The first problem"},
+ body:{ro:`<p><code>ss -ltnp</code> listează socket-urile TCP (<code>-t</code>) în ascultare (<code>-l</code>), cu numere (<code>-n</code>) și procesul (<code>-p</code>, cere sudo). Filtrul <code>"sport = :8080"</code> păstrează doar portul nostru.</p>
+<p>Rezultatul: <code>127.0.0.1:8080</code>, procesul <code>orders-api</code>. Aplicația ascultă doar pe <strong>loopback</strong>: o poate apela doar un proces de pe app01.</p>
+<p>Dar atenție: un SYN spre un port fără ascultător ar fi primit RST, deci „refused”, nu timeout. Faptul că vedem timeout înseamnă că <strong>mai e ceva</strong> care aruncă pachetele înainte. Avem cel puțin două probleme.</p>`,
+ en:`<p><code>ss -ltnp</code> lists TCP (<code>-t</code>) listening (<code>-l</code>) sockets, with numbers (<code>-n</code>) and the process (<code>-p</code>, needs sudo). The filter <code>"sport = :8080"</code> keeps only our port.</p>
+<p>The result: <code>127.0.0.1:8080</code>, the <code>orders-api</code> process. The app listens on <strong>loopback</strong> only: only a process on app01 can call it.</p>
+<p>But careful: a SYN to a port with no listener would have got a RST, so "refused", not a timeout. Seeing a timeout means <strong>something else</strong> is dropping the packets first. We have at least two problems.</p>`},
+ try:[{cmd:"sudo ss -ltnp \"sport = :8080\"",d:{ro:"Socket-ul, adresa și procesul.",en:"The socket, the address and the process."}}]},
+
+{at:"app",frame:N5,kind:"n",marks:{app:{k:"ok",t:"0.0.0.0:8080"}},log:{ro:"aplicația ascultă pe toate adresele",en:"the app listens on every address"},who:{ro:"Remedierea 1",en:"Fix 1"},
+ title:{ro:"Prima remediere: aplicația ascultă pe toate adresele",en:"First fix: the app listens on every address"},
+ body:{ro:`<p>În configurația aplicației, <code>listen: 127.0.0.1:8080</code> devine <code>0.0.0.0:8080</code>, apoi restart. Asta e o schimbare (LAB CHANGE): în producție o faci cu aprobare, știind cine mai folosește serviciul.</p>
+<p>Verificăm imediat: <code>ss</code> arată acum <code>0.0.0.0:8080</code>, iar <code>curl</code> local răspunde <code>{"status":"ok"}</code>.</p>
+<p>Clientul încearcă din nou: <strong>tot timeout</strong>. Era de așteptat după pasul anterior. Mergem mai departe, la pachete.</p>`,
+ en:`<p>In the app's config, <code>listen: 127.0.0.1:8080</code> becomes <code>0.0.0.0:8080</code>, then a restart. This is a change (LAB CHANGE): in production you do it with approval, knowing who else uses the service.</p>
+<p>We check straight away: <code>ss</code> now shows <code>0.0.0.0:8080</code>, and a local <code>curl</code> answers <code>{"status":"ok"}</code>.</p>
+<p>The client tries again: <strong>still a timeout</strong>. That was expected after the previous step. We move on, to the packets.</p>`}},
+
+{at:"krn",frame:N6,kind:"n",move:[[["cl","rtr"]],[["rtr","eth0"]],[["eth0","krn"]]],marks:{krn:{k:"drop",t:{ro:"SYN pierdut",en:"SYN lost"}}},log:{ro:"SYN-ul ajunge, răspunsul lipsește",en:"the SYN arrives, no reply"},who:"tcpdump",
+ title:{ro:"tcpdump: SYN-ul ajunge, dar nu pleacă nimic înapoi",en:"tcpdump: the SYN arrives, but nothing goes back"},
+ body:{ro:`<p><code>tcpdump -ni eth0 "tcp port 8080"</code> arată pachetele de pe eth0 (<code>-n</code>: fără rezolvare de nume). Clientul reîncearcă:</p>
+<ul><li>apare <code>Flags [S]</code>: SYN-ul clientului <strong>ajunge</strong> pe eth0;</li>
+<li>după 1 s, 2 s, 4 s apare din nou același SYN: retransmisii, pentru că nu vine răspuns;</li>
+<li>nu apare niciun <code>[S.]</code> (SYN-ACK).</li></ul>
+<p class="key">Concluzia e precisă: rețeaua până la server funcționează. Pachetul e aruncat <strong>în interiorul</strong> lui app01.</p>`,
+ en:`<p><code>tcpdump -ni eth0 "tcp port 8080"</code> shows the packets on eth0 (<code>-n</code>: no name resolution). The client retries:</p>
+<ul><li><code>Flags [S]</code> appears: the client's SYN <strong>arrives</strong> on eth0;</li>
+<li>after 1 s, 2 s, 4 s the same SYN appears again: retransmissions, because no reply comes;</li>
+<li>no <code>[S.]</code> (SYN-ACK) ever appears.</li></ul>
+<p class="key">The conclusion is precise: the network up to the server works. The packet is dropped <strong>inside</strong> app01.</p>`},
+ more:{ro:`<p>Cu <code>-i any</code> vezi toate interfețele deodată: nici pe eth1 nu pleacă vreun SYN-ACK. Capturează doar ce-ți trebuie (un port, un host): o captură poate conține date private.</p>`,
+  en:`<p>With <code>-i any</code> you see every interface at once: no SYN-ACK leaves on eth1 either. Capture only what you need (one port, one host): a capture can contain private data.</p>`},
+ try:[{cmd:"sudo tcpdump -ni eth0 \"tcp port 8080\"",d:{ro:"Pachetele spre/dinspre 8080 pe eth0.",en:"Packets to/from 8080 on eth0."}}]},
+
+{at:"nft",frame:N7,kind:"n",marks:{nft:{k:"ok",t:"counter 0"}},log:{ro:"firewall-ul nu e de vină",en:"the firewall isn't to blame"},who:"nftables",
+ title:{ro:"Firewall-ul? Contorul spune că nu",en:"The firewall? The counter says no"},
+ body:{ro:`<p>Prima bănuială pentru un drop în tăcere: firewall-ul local. <code>nft list ruleset</code> arată lanțul <code>input</code> cu <code>policy drop</code>, dar și o regulă care acceptă <code>tcp dport { 22, 8080 }</code>.</p>
+<p>Detaliul important e <strong>contorul</strong> regulii: <code>counter packets 0</code>. Nici măcar un pachet nu a ajuns la regula asta. Dacă firewall-ul ar fi aruncat SYN-ul, l-am fi văzut ajungând în lanțul input.</p>
+<p>Deci pachetul dispare <strong>înainte</strong> de firewall: în decizia de rutare a kernelului.</p>`,
+ en:`<p>The first suspect for a silent drop: the local firewall. <code>nft list ruleset</code> shows the <code>input</code> chain with <code>policy drop</code>, but also a rule accepting <code>tcp dport { 22, 8080 }</code>.</p>
+<p>The important detail is the rule's <strong>counter</strong>: <code>counter packets 0</code>. Not a single packet reached this rule. If the firewall had dropped the SYN, we'd have seen it reach the input chain.</p>
+<p>So the packet disappears <strong>before</strong> the firewall: in the kernel's routing decision.</p>`},
+ more:{ro:`<p>Pe multe sisteme, <code>iptables</code> e de fapt <code>iptables-nft</code> și scrie tot în nftables. Docker și Kubernetes adaugă reguli automat, deci regulile pe care le vezi nu sunt toate scrise de tine.</p>`,
+  en:`<p>On many systems, <code>iptables</code> is actually <code>iptables-nft</code> and writes into nftables too. Docker and Kubernetes add rules automatically, so not every rule you see was written by you.</p>`},
+ try:[{cmd:"sudo nft list ruleset",d:{ro:"Toate tabelele, lanțurile și regulile.",en:"Every table, chain and rule."}}]},
+
+{at:"krn",frame:N8,kind:"n",move:[[["krn","eth1"]],[["eth1","cl"]]],marks:{eth0:{k:"drop",t:{ro:"SYN intră aici",en:"SYN comes in here"}},eth1:{k:"drop",t:{ro:"răspunsul ar ieși aici",en:"the reply would leave here"}}},log:{ro:"drum asimetric",en:"asymmetric path"},who:"ip route get",
+ title:{ro:"ip route get: răspunsul ar pleca pe altă interfață",en:"ip route get: the reply would leave on another interface"},
+ body:{ro:`<p><code>ip route get 10.10.30.50</code> întreabă kernelul: „dacă aș trimite acum un pachet spre client, pe unde ar pleca?”. Răspuns: <code>dev eth1 src 10.10.30.5</code>, pentru că rețeaua clientului e conectată direct pe eth1.</p>
+<p>Dar SYN-ul a venit prin router, pe <strong>eth0</strong>. Drumul dus și drumul întors nu sunt aceleași: un <strong>drum asimetric</strong>.</p>
+<p><code>ip rule show</code> arată doar regulile implicite (<code>local</code>, <code>main</code>, <code>default</code>): nu există policy routing care să schimbe asta.</p>`,
+ en:`<p><code>ip route get 10.10.30.50</code> asks the kernel: "if I sent a packet to the client now, which way would it go?". The answer: <code>dev eth1 src 10.10.30.5</code>, because the client's network is directly connected on eth1.</p>
+<p>But the SYN came through the router, on <strong>eth0</strong>. The way in and the way out aren't the same: an <strong>asymmetric path</strong>.</p>
+<p><code>ip rule show</code> shows only the default rules (<code>local</code>, <code>main</code>, <code>default</code>): no policy routing changes that.</p>`},
+ more:{ro:`<p>Pentru trafic cu o adresă sursă anume adaugi <code>from</code>: <code>ip route get 10.10.30.50 from 10.10.20.15</code>. Tabela <code>local</code> (adresele serverului însuși) are prioritatea 0, înaintea tabelei <code>main</code>.</p>`,
+  en:`<p>For traffic with a specific source address you add <code>from</code>: <code>ip route get 10.10.30.50 from 10.10.20.15</code>. The <code>local</code> table (the server's own addresses) has priority 0, before the <code>main</code> table.</p>`},
+ try:[{cmd:"ip route get 10.10.30.50",d:{ro:"Decizia de rutare spre client.",en:"The routing decision towards the client."}},{cmd:"ip rule show",d:{ro:"Regulile și tabelele consultate.",en:"The rules and the tables they consult."}}]},
+
+{at:"krn",frame:N9,kind:"n",move:[[["cl","rtr"]],[["rtr","eth0"]],[["eth0","krn"]]],marks:{krn:{k:"drop",t:"rp_filter = 1"}},tables:["rpf"],hl:{rpf:"1"},log:{ro:"rp_filter strict aruncă SYN-ul",en:"strict rp_filter drops the SYN"},who:"rp_filter",
+ title:{ro:"Cauza: reverse-path filtering în modul strict",en:"The cause: reverse-path filtering in strict mode"},
+ body:{ro:`<p>Linux are o protecție împotriva adreselor sursă falsificate: <strong>reverse-path filtering</strong>. Pentru fiecare pachet care intră, kernelul se întreabă: „dacă aș răspunde la sursa asta, aș pleca pe aceeași interfață pe care a venit pachetul?”.</p>
+<ul><li>SYN-ul de la <code>10.10.30.50</code> a intrat pe <strong>eth0</strong>;</li>
+<li>răspunsul spre <code>10.10.30.50</code> ar pleca pe <strong>eth1</strong>;</li>
+<li>cu <code>rp_filter = 1</code> (strict), kernelul consideră sursa suspectă și <strong>aruncă pachetul în tăcere</strong>, înainte de firewall.</li></ul>
+<p>Dovada directă: contorul <code>TcpExtIPReversePathFilter</code> din <code>nstat</code> crește cu fiecare încercare a clientului.</p>`,
+ en:`<p>Linux has a protection against spoofed source addresses: <strong>reverse-path filtering</strong>. For every incoming packet, the kernel asks: "if I replied to this source, would I leave through the same interface the packet came in on?".</p>
+<ul><li>the SYN from <code>10.10.30.50</code> came in on <strong>eth0</strong>;</li>
+<li>the reply to <code>10.10.30.50</code> would leave on <strong>eth1</strong>;</li>
+<li>with <code>rp_filter = 1</code> (strict), the kernel considers the source suspicious and <strong>drops the packet silently</strong>, before the firewall.</li></ul>
+<p>The direct evidence: the <code>TcpExtIPReversePathFilter</code> counter in <code>nstat</code> grows with every client attempt.</p>`},
+ more:{ro:`<p>Valoarea efectivă pentru o interfață e maximul dintre <code>conf.all.rp_filter</code> și <code>conf.eth0.rp_filter</code>. Deci dacă <code>all</code> e 1, interfața e strictă chiar dacă a ei e 0.</p>`,
+  en:`<p>The effective value for an interface is the maximum of <code>conf.all.rp_filter</code> and <code>conf.eth0.rp_filter</code>. So if <code>all</code> is 1, the interface is strict even if its own value is 0.</p>`},
+ try:[{cmd:"sysctl net.ipv4.conf.all.rp_filter net.ipv4.conf.eth0.rp_filter",d:{ro:"Modul curent.",en:"The current mode."}},{cmd:"nstat -az TcpExtIPReversePathFilter",d:{ro:"Câte pachete a aruncat rp_filter.",en:"How many packets rp_filter dropped."}}]},
+
+{at:"krn",frame:N10,kind:"n",move:[[["krn","eth0"]],[["eth0","rtr"]],[["rtr","cl"]]],log:{ro:"policy routing",en:"policy routing"},who:{ro:"Remedierea 2",en:"Fix 2"},
+ title:{ro:"A doua remediere: policy routing, nu oprirea protecției",en:"Second fix: policy routing, not switching the protection off"},
+ body:{ro:`<p>Soluția rapidă și greșită ar fi <code>rp_filter = 0</code>: oprești o protecție ca să treacă traficul. Soluția corectă e ca răspunsul să plece pe <strong>aceeași interfață</strong>:</p>
+<ul><li><code>ip rule add from 10.10.20.15 table 100</code>: pachetele cu sursa adresa lui eth0 folosesc tabela 100;</li>
+<li><code>ip route add default via 10.10.20.1 dev eth0 table 100</code>: în tabela 100, totul pleacă pe eth0, prin router.</li></ul>
+<p>Acum <code>ip route get 10.10.30.50 from 10.10.20.15</code> spune <code>dev eth0 table 100</code>. Verificarea rp_filter folosește aceeași decizie, deci SYN-ul nu mai e aruncat.</p>
+<p>Comenzile <code>ip</code> se pierd la restart: regula și ruta trebuie puse și în configurația rețelei (netplan <code>routing-policy</code>, NetworkManager sau systemd-networkd).</p>`,
+ en:`<p>The quick, wrong fix would be <code>rp_filter = 0</code>: switching a protection off so the traffic gets through. The right fix is for the reply to leave on <strong>the same interface</strong>:</p>
+<ul><li><code>ip rule add from 10.10.20.15 table 100</code>: packets whose source is eth0's address use table 100;</li>
+<li><code>ip route add default via 10.10.20.1 dev eth0 table 100</code>: in table 100, everything leaves on eth0, through the router.</li></ul>
+<p>Now <code>ip route get 10.10.30.50 from 10.10.20.15</code> says <code>dev eth0 table 100</code>. The rp_filter check uses the same decision, so the SYN is no longer dropped.</p>
+<p><code>ip</code> commands are lost on reboot: the rule and route must also go into the network config (netplan <code>routing-policy</code>, NetworkManager or systemd-networkd).</p>`},
+ more:{ro:`<p>Alte variante: clienții din 10.10.30.0/24 folosesc adresa serverului din rețeaua lor (<code>10.10.30.5</code>), deci nu mai trec prin router; sau <code>rp_filter = 2</code> (loose), care verifică doar că există <em>vreun</em> drum înapoi. Loose e mai permisiv: alege-l conștient.</p>`,
+  en:`<p>Other options: clients in 10.10.30.0/24 use the server's address on their own network (<code>10.10.30.5</code>), so they no longer go through the router; or <code>rp_filter = 2</code> (loose), which only checks that <em>some</em> way back exists. Loose is more permissive: choose it deliberately.</p>`}},
+
+{at:["cl","app"],frame:N11,kind:"n",move:[[["cl","rtr"],["rtr","eth0"],["eth0","krn"],["krn","nft"],["nft","app"]],[["app","nft"],["nft","krn"],["krn","eth0"],["eth0","rtr"],["rtr","cl"]]],marks:{cl:{k:"ok",t:"200 OK"}},log:{ro:"verificat de la client",en:"verified from the client"},who:{ro:"Verificarea",en:"Verification"},
+ title:{ro:"Verificarea: același test ca la început",en:"Verification: the same test as at the start"},
+ body:{ro:`<p>Refacem exact testul de la pasul 1, de pe client: <strong>200</strong>. Și ne uităm la dovezi, nu doar la rezultat:</p>
+<ul><li><code>tcpdump</code> pe eth0 arată acum <code>[S]</code>, <code>[S.]</code>, <code>[.]</code>: handshake complet, dus și întors pe eth0;</li>
+<li><code>ss -tn state established "sport = :8080"</code> arată conexiunea <code>ESTAB</code> de la 10.10.30.50;</li>
+<li>contorul regulii 8080 din nftables crește, iar <code>TcpExtIPReversePathFilter</code> nu mai crește.</li></ul>
+<p class="key">Două probleme suprapuse: aplicația asculta doar local, iar răspunsul ar fi plecat pe altă interfață. Fiecare a fost găsită cu o dovadă, nu ghicită.</p>`,
+ en:`<p>We repeat exactly the test from step 1, from the client: <strong>200</strong>. And we look at the evidence, not just the result:</p>
+<ul><li><code>tcpdump</code> on eth0 now shows <code>[S]</code>, <code>[S.]</code>, <code>[.]</code>: a full handshake, in and out on eth0;</li>
+<li><code>ss -tn state established "sport = :8080"</code> shows the <code>ESTAB</code> connection from 10.10.30.50;</li>
+<li>the nftables 8080 rule counter grows, and <code>TcpExtIPReversePathFilter</code> no longer does.</li></ul>
+<p class="key">Two stacked problems: the app listened only locally, and the reply would have left on another interface. Each one was found with evidence, not guessed.</p>`}},
+
+{at:["cl","rtr","eth0","eth1","krn","nft","app"],frame:null,kind:"none",tables:["method"],summary:true,
+ title:{ro:"Recapitulare",en:"Recap"},
+ body:{ro:`<ul><li><strong>Refused</strong> = a ajuns, nu ascultă nimeni. <strong>Timeout</strong> = pierdut sau aruncat în tăcere.</li>
+<li><code>ip -br addr</code>: interfețe și adrese. <code>ip route</code>: unde pleacă pachetele. <code>ip route get</code>: decizia exactă pentru o destinație. <code>ip rule</code>: ce tabele se consultă.</li>
+<li><code>ss -ltnp</code>: cine ascultă și pe ce adresă; <code>127.0.0.1</code> nu se vede din rețea.</li>
+<li><code>tcpdump</code>: ce ajunge și ce pleacă; <code>nft list ruleset</code> cu contoarele regulilor.</li>
+<li><strong>rp_filter</strong> strict aruncă pachetele cu drum asimetric; repari cu <strong>policy routing</strong>, nu oprind protecția.</li>
+<li>Comenzile care doar citesc vin primele; schimbările (LAB CHANGE) se fac mici, cu aprobare, și se verifică.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Mergi la laborator ↓</button></p>`,
+ en:`<ul><li><strong>Refused</strong> = it arrived, nothing listens. <strong>Timeout</strong> = lost or silently dropped.</li>
+<li><code>ip -br addr</code>: interfaces and addresses. <code>ip route</code>: where packets go. <code>ip route get</code>: the exact decision for one destination. <code>ip rule</code>: which tables are consulted.</li>
+<li><code>ss -ltnp</code>: who listens and on which address; <code>127.0.0.1</code> can't be seen from the network.</li>
+<li><code>tcpdump</code>: what arrives and what leaves; <code>nft list ruleset</code> with the rule counters.</li>
+<li>Strict <strong>rp_filter</strong> drops packets on an asymmetric path; you fix it with <strong>policy routing</strong>, not by switching the protection off.</li>
+<li>Read-only commands come first; changes (LAB CHANGE) are small, approved and verified.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Go to the lab ↓</button></p>`}}
+],
+
+reference:(T,lang)=>{
+  const ro=lang==="ro";
+  const row=(q,c,p)=>`<tr><td>${q}</td><td><code>${c}</code></td><td>${p}</td></tr>`;
+  return `<div class="ref-grid"><section class="card refcard"><h2>${ro?"Întrebare → prima comandă":"Question → first command"}</h2>
+<div class="tbl"><div class="scroll"><table><thead><tr><th>${ro?"Întrebarea":"Question"}</th><th>${ro?"Comanda":"Command"}</th><th>${ro?"Ce dovedește":"What it proves"}</th></tr></thead><tbody>
+${row(ro?"Ce IP-uri are serverul?":"Which IPs does the host have?","ip -br addr",ro?"interfețe, stare, adrese":"interfaces, state, addresses")}
+${row(ro?"Care e gateway-ul?":"What's the default gateway?","ip route show default",ro?"next hop-ul implicit":"the default next hop")}
+${row(ro?"Pe unde ajung la un client?":"Which interface reaches a client?","ip route get 10.10.30.50",ro?"decizia de rutare":"the routing decision")}
+${row(ro?"Schimbă policy routing drumul?":"Could policy routing change the path?","ip rule show",ro?"regulile și tabelele":"rules and tables")}
+${row(ro?"Ascultă cineva pe 8080?":"Is anything listening on 8080?","ss -ltnp \"sport = :8080\"",ro?"adresa de bind și procesul":"bind address and process")}
+${row(ro?"Ajunge SYN-ul?":"Does the SYN arrive?","tcpdump -ni eth0 \"tcp port 8080\"",ro?"SYN, SYN-ACK, retransmisii":"SYN, SYN-ACK, retransmissions")}
+${row(ro?"Merge HTTP?":"Does HTTP work?","curl -v --connect-timeout 5 URL",ro?"TCP separat de HTTP":"TCP separate from HTTP")}
+${row(ro?"Aruncă firewall-ul?":"Is the firewall dropping?","nft list ruleset",ro?"reguli și contoare":"rules and counters")}
+${row(ro?"Ce DNS folosesc?":"Which DNS resolvers?","resolvectl status",ro?"serverele DNS reale":"the real DNS servers")}
+${row(ro?"Aruncă rp_filter?":"Is rp_filter dropping?","sysctl net.ipv4.conf.all.rp_filter",ro?"strict / loose / oprit":"strict / loose / off")}
+</tbody></table></div></div></section>
+<section class="card refcard"><h2>${ro?"Policy routing persistent (netplan)":"Persistent policy routing (netplan)"}</h2>
+<pre class="yaml">network:
+  version: 2
+  ethernets:
+    eth0:
+      addresses: [10.10.20.15/24]
+      routes:
+        - to: default
+          via: 10.10.20.1
+        - to: default
+          via: 10.10.20.1
+          table: 100
+      routing-policy:
+        - from: 10.10.20.15
+          table: 100
+    eth1:
+      addresses: [10.10.30.5/24]</pre>
+<h3>${ro?"Comenzi":"Commands"}</h3>
+<pre class="yaml">sudo netplan try          <span class="c"># ${ro?"revine singur dacă pierzi accesul":"rolls back if you lose access"}</span>
+ip rule show
+ip route show table 100
+nstat -az TcpExtIPReversePathFilter</pre></section></div>`;
+},
+
+gloss:[
+ ["SYN",null,{ro:"Primul pachet al conexiunii TCP; serverul răspunde cu SYN-ACK.",en:"The first packet of a TCP connection; the server answers with a SYN-ACK."}],
+ ["RST",null,{ro:"Pachet TCP care refuză sau închide brusc o conexiune („Connection refused”).",en:"A TCP packet that refuses or abruptly closes a connection (\"Connection refused\")."}],
+ ["Loopback",null,{ro:"Interfața lo, 127.0.0.1: trafic doar în interiorul aceluiași sistem.",en:"The lo interface, 127.0.0.1: traffic only inside the same system."}],
+ [{ro:"Rută default",en:"Default route"},null,{ro:"Ruta folosită când nu există una mai specifică; duce la gateway.",en:"The route used when there's no more specific one; it leads to the gateway."}],
+ [{ro:"Drum asimetric",en:"Asymmetric path"},null,{ro:"Pachetele intră pe o interfață, iar răspunsurile ar ieși pe alta.",en:"Packets come in on one interface while replies would leave on another."}],
+ ["rp_filter",null,{ro:"Reverse-path filtering: aruncă pachetele a căror sursă nu s-ar întoarce pe aceeași interfață.",en:"Reverse-path filtering: drops packets whose source wouldn't be routed back out of the same interface."}],
+ ["Policy routing",null,{ro:"Reguli (ip rule) care aleg tabela de rutare după sursă, marcaj etc.",en:"Rules (ip rule) that pick the routing table by source, mark and so on."}],
+ ["nftables",null,{ro:"Firewall-ul modern din kernelul Linux (comanda nft).",en:"The modern firewall in the Linux kernel (the nft command)."}],
+ ["tcpdump",null,{ro:"Captură de pachete în linia de comandă.",en:"Command-line packet capture."}],
+ ["ss",null,{ro:"Arată socket-urile: cine ascultă, conexiuni, procese.",en:"Shows sockets: who listens, connections, processes."}]
+],
+glossEx:{
+ "rp_filter":{ro:"SYN-ul a intrat pe eth0, dar răspunsul ar fi ieșit pe eth1: aruncat.",en:"the SYN came in on eth0, but the reply would have left on eth1: dropped."},
+ "Loopback":{ro:"orders-api asculta pe 127.0.0.1:8080, invizibil din rețea.",en:"orders-api listened on 127.0.0.1:8080, invisible from the network."}
+},
+
+quiz:[
+ {"q":{"ro":"Ce înseamnă „Connection refused”, spre deosebire de „Connection timed out”?","en":"What does \"Connection refused\" mean, as opposed to \"Connection timed out\"?"},"o":[{"ro":"Pachetul a ajuns și serverul a răspuns cu RST: nimeni nu ascultă pe port","en":"The packet arrived and the server answered with a RST: nothing listens on the port"},{"ro":"E același lucru","en":"They're the same"},{"ro":"DNS-ul nu merge","en":"DNS doesn't work"},{"ro":"Pachetul s-a pierdut","en":"The packet was lost"}],"a":0,"e":{"ro":"Timeout = niciun răspuns: pachet pierdut sau aruncat în tăcere.","en":"Timeout = no answer: the packet was lost or silently dropped."}},
+ {"q":{"ro":"ss arată 127.0.0.1:8080. Cine se poate conecta?","en":"ss shows 127.0.0.1:8080. Who can connect?"},"o":[{"ro":"Oricine din rețea","en":"Anyone on the network"},{"ro":"Doar clienții din aceeași rețea","en":"Only clients on the same network"},{"ro":"Nimeni","en":"Nobody"},{"ro":"Doar procesele de pe același server","en":"Only processes on the same server"}],"a":3,"e":{"ro":"Pentru acces din rețea: 0.0.0.0 sau adresa interfeței.","en":"For network access: 0.0.0.0 or the interface's address."}},
+ {"q":{"ro":"Ce comandă arată pe ce interfață ar pleca un pachet spre 10.10.30.50?","en":"Which command shows which interface a packet to 10.10.30.50 would leave on?"},"o":["ip -br addr","ss -ltnp","ip route get 10.10.30.50","ping 10.10.30.50"],"a":2,"e":{"ro":"ip route get arată decizia exactă de rutare.","en":"ip route get shows the exact routing decision."}},
+ {"q":{"ro":"tcpdump arată SYN-uri repetate de la client și niciun SYN-ACK. Ce știi sigur?","en":"tcpdump shows repeated SYNs from the client and no SYN-ACK. What do you know for sure?"},"o":[{"ro":"Aplicația e oprită","en":"The app is stopped"},{"ro":"Pachetul ajunge la server, dar serverul nu răspunde: e aruncat în server","en":"The packet reaches the server, but the server doesn't answer: it's dropped inside the server"},{"ro":"Routerul e defect","en":"The router is broken"},{"ro":"DNS-ul e greșit","en":"DNS is wrong"}],"a":1,"e":{"ro":"O aplicație oprită ar fi dus la RST, nu la tăcere.","en":"A stopped app would have led to a RST, not silence."}},
+ {"q":{"ro":"Regula nftables pentru 8080 are counter packets 0. Ce înseamnă?","en":"The nftables rule for 8080 has counter packets 0. What does it mean?"},"o":[{"ro":"Pachetele nu au ajuns la regulă: se pierd înainte de firewall","en":"The packets never reached the rule: they're lost before the firewall"},{"ro":"Firewall-ul aruncă pachetele","en":"The firewall drops the packets"},{"ro":"Regula e greșită","en":"The rule is wrong"},{"ro":"nftables e oprit","en":"nftables is off"}],"a":0,"e":{"ro":"Aici, decizia de rutare (rp_filter) le arunca înainte.","en":"Here, the routing decision (rp_filter) dropped them first."}},
+ {"q":{"ro":"Ce face rp_filter = 1 (strict)?","en":"What does rp_filter = 1 (strict) do?"},"o":[{"ro":"Blochează tot traficul extern","en":"Blocks all external traffic"},{"ro":"Criptează traficul","en":"Encrypts traffic"},{"ro":"Limitează viteza","en":"Limits the speed"},{"ro":"Aruncă pachetele a căror sursă nu s-ar întoarce pe interfața pe care au intrat","en":"Drops packets whose source wouldn't be routed back out of the interface they came in on"}],"a":3,"e":{"ro":"2 = loose: doar să existe vreun drum înapoi.","en":"2 = loose: there just has to be some way back."}},
+ {"q":{"ro":"Care e cea mai bună remediere pentru drumul asimetric?","en":"What's the best fix for the asymmetric path?"},"o":[{"ro":"rp_filter = 0 pe tot serverul","en":"rp_filter = 0 on the whole server"},{"ro":"Oprirea nftables","en":"Stopping nftables"},{"ro":"Policy routing: răspunsurile de pe adresa lui eth0 pleacă tot pe eth0","en":"Policy routing: replies from eth0's address leave on eth0 too"},{"ro":"Repornirea serverului","en":"Rebooting the server"}],"a":2,"e":{"ro":"Nu oprești o protecție ca să treacă traficul.","en":"You don't switch a protection off to let traffic through."}},
+ {"q":{"ro":"Ai adăugat regula cu ip rule add. Ce se întâmplă după restart?","en":"You added the rule with ip rule add. What happens after a reboot?"},"o":[{"ro":"Rămâne","en":"It stays"},{"ro":"Se pierde; trebuie pusă și în configurația rețelei (netplan, NetworkManager)","en":"It's lost; it must also go into the network config (netplan, NetworkManager)"},{"ro":"Se transformă în rp_filter","en":"It turns into rp_filter"},{"ro":"Se mută în tabela main","en":"It moves to the main table"}],"a":1,"e":{"ro":"Comenzile ip schimbă doar starea curentă a kernelului.","en":"ip commands only change the kernel's current state."}}
+]
+};
+})();
+</script>
+<script src="../assets/engine.js?v=4"></script>
+<script src="../assets/labs-data.js?v=8"></script>
+<script src="../assets/lab.js?v=1"></script>
+<script type="module" src="../assets/auth.js?v=15"></script>
+</body>
+</html>

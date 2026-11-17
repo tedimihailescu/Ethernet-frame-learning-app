@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Server lent: CPU, memorie, swap și OOM</title>
+<meta name="description" content="Lecție interactivă: un server Linux lent: uptime și load average, top și I/O wait, vmstat, free, swap, iostat, ps, OOM killer, exit 137, limite de memorie cu systemd și OOMKilled în Kubernetes. / Interactive lesson: a slow Linux server, memory pressure and the OOM killer.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/diagram.css?v=1">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<script>
+(function(){
+const RO="READ-ONLY",CH="LAB CHANGE";
+const P1={q:{ro:"De ce e serverul lent?",en:"Why is the server slow?"},cmd:"uptime · nproc",mode:RO,out:"14:02:11 up 41 days, load average: 18.20, 12.51, 6.07 · 4",proves:{ro:"load-ul crește (6 → 12 → 18) pe doar 4 nuclee; încă nu știm dacă e CPU sau așteptare",en:"the load is rising (6 → 12 → 18) on just 4 cores; we don't yet know if it's CPU or waiting"},bad:"LOAD 18"};
+const P2={q:{ro:"Unde merge timpul procesoarelor?",en:"Where is the CPU time going?"},cmd:"top",mode:RO,out:"%Cpu(s): 9.8 us, 3.1 sy, 0.0 ni, 21.0 id, 65.9 wa · 14 procese în starea D",proves:{ro:"CPU-ul stă mai mult degeaba: 66% din timp așteaptă I/O (wa); procesele în D sunt blocate pe disc",en:"the CPU is mostly idle: 66% of the time it waits for I/O (wa); processes in D are stuck on disk"},bad:"WA 66%"};
+const P3={q:{ro:"E presiune pe memorie sau pe coada de execuție?",en:"Is there memory or run-queue pressure?"},cmd:"vmstat 1 5",mode:RO,out:"r 2 · b 14 · swpd 3.9G · free 120M · si 2900 · so 3400 · wa 66 (rândurile 2-5)",proves:{ro:"puține procese așteaptă CPU (r), multe sunt blocate (b), iar swap-ul se citește și se scrie continuu (si/so)",en:"few processes wait for CPU (r), many are blocked (b), and swap is read and written constantly (si/so)"},bad:"SI/SO"};
+const P4={q:{ro:"Câtă memorie mai e disponibilă?",en:"How much memory is still available?"},cmd:"free -h · swapon --show",mode:RO,out:"Mem: total 15Gi used 14Gi free 118Mi buff/cache 410Mi available 160Mi · Swap: 4.0Gi used 3.9Gi · /dev/sda2 partition 4G",proves:{ro:"doar 160 MiB disponibili, iar swap-ul e aproape plin, pe același disc",en:"only 160 MiB available, and swap is almost full, on the same disk"},bad:"160Mi"};
+const P5={q:{ro:"Ce disc e sufocat?",en:"Which disk is choking?"},cmd:"iostat -xz 1 3",mode:RO,out:"sda r/s 820 w/s 910 r_await 95 ms w_await 180 ms %util 99.8",proves:{ro:"sda e ocupat 100% din timp, cu latențe de sute de ms: e traficul de swap",en:"sda is busy 100% of the time, with latencies of hundreds of ms: it's the swap traffic"},bad:"%util 99.8"};
+const P6={q:{ro:"Cine consumă memoria?",en:"Who is using the memory?"},cmd:"ps -eo pid,ppid,%cpu,%mem,rss,comm --sort=-%mem | head -4",mode:RO,out:"PID 3388 report-job %MEM 74.1 RSS 11.6G · PID 2211 java (api) %MEM 20.3 RSS 3.1G",proves:{ro:"jobul de rapoarte (pornit la 13:30) folosește 11,6 GB din 16: el împinge api-ul în swap",en:"the report job (started at 13:30) uses 11.6 GB of 16: it pushes the api into swap"},bad:"11.6G"};
+const P7={q:{ro:"Cine a omorât procesul?",en:"Who killed the process?"},cmd:"systemctl status report-job · journalctl -k -b | grep -iE \"oom|out of memory|killed process\"",mode:RO,out:"Main process exited, code=killed, status=9/KILL · Out of memory: Killed process 3388 (java) total-vm:15872412kB, anon-rss:12141220kB, oom_score_adj:0",proves:{ro:"kernelul a rămas fără memorie și a ales jobul (cel mai mare consumator); exit 137 singur n-ar fi dovedit asta",en:"the kernel ran out of memory and picked the job (the biggest consumer); exit 137 alone wouldn't have proven that"},bad:"OOM"};
+const P8={q:{ro:"Cum oprim repetarea, fără să sacrificăm api-ul?",en:"How do we stop it repeating, without sacrificing the api?"},fix:{ro:"report-job.service: MemoryMax=5G, -Xmx4g, rulare la 02:00 · api.service: OOMScoreAdjust=-500",en:"report-job.service: MemoryMax=5G, -Xmx4g, run at 02:00 · api.service: OOMScoreAdjust=-500"},mode:CH,cmd:"systemctl show report-job -p MemoryMax · sysctl vm.swappiness",out:"MemoryMax=5368709120 · vm.swappiness = 60",proves:{ro:"jobul nu mai poate lua mai mult de 5 GB; swappiness rămâne neatins, nu el era cauza",en:"the job can no longer take more than 5 GB; swappiness is left alone, it wasn't the cause"}};
+const P9={q:{ro:"S-a întors serverul la normal?",en:"Is the server back to normal?"},cmd:"vmstat 1 5 · free -h · uptime",mode:RO,out:"r 1 b 0 si 0 so 0 wa 1 · available 9.8Gi · load average: 0.92, 1.40, 4.85",proves:{ro:"fără swap, fără așteptare pe disc; load-ul scade, latența api-ului revine la 120 ms",en:"no swapping, no waiting on disk; the load falls, the api's latency is back to 120 ms"}};
+const P10={q:{ro:"Cum arată același lucru în Kubernetes?",en:"What does the same thing look like in Kubernetes?"},cmd:"kubectl describe pod report-job-7f9c -n reports · kubectl logs report-job-7f9c -n reports --previous",mode:RO,out:"Last State: Terminated · Reason: OOMKilled · Exit Code: 137 · Limits: memory 5Gi · Restart Count: 4",proves:{ro:"containerul a depășit limita de memorie și a fost omorât; --previous arată logul de dinainte",en:"the container exceeded its memory limit and was killed; --previous shows the log from before"},bad:"OOMKilled"};
+
+window.LESSON={
+docTitle:{ro:"Server lent: CPU, memorie, swap și OOM",en:"A slow server: CPU, memory, swap and OOM"},
+eyebrow:{ro:"Lecție interactivă · Linux",en:"Interactive lesson · Linux"},
+title:{ro:"Server lent: CPU, memorie, swap și OOM",en:"A slow server: CPU, memory, swap and OOM"},
+sub:{ro:"API-ul de pe serverul api01 răspunde în 8 secunde în loc de 120 ms, iar load average-ul e 18 pe 4 nuclee. Toată lumea bănuiește procesorul. Urmărim dovezile: top arată I/O wait, vmstat arată swap, free arată memoria terminată, iar la final kernelul omoară un proces. Aflăm cine a consumat memoria, de ce exit 137 nu e o dovadă suficientă și cum limităm un proces cu systemd și în Kubernetes.",en:"The api on server api01 answers in 8 seconds instead of 120 ms, and the load average is 18 on 4 cores. Everyone suspects the CPU. We follow the evidence: top shows I/O wait, vmstat shows swapping, free shows memory exhausted, and finally the kernel kills a process. We find out who used the memory, why exit 137 isn't enough evidence, and how to limit a process with systemd and in Kubernetes."},
+meta:[{ro:"≈ 25 minute",en:"≈ 25 minutes"},{ro:"11 pași",en:"11 steps"},{ro:"8 întrebări",en:"8 questions"},{ro:"Intermediar",en:"Intermediate"}],
+goals:[{ro:"Ce înseamnă load average și de ce nu e doar CPU",en:"What load average means and why it isn't only CPU"},{ro:"top, vmstat, free, iostat: CPU, I/O wait, swap, memorie disponibilă",en:"top, vmstat, free, iostat: CPU, I/O wait, swap, available memory"},{ro:"OOM killer: cum îl dovedești cu journalctl -k",en:"The OOM killer: how to prove it with journalctl -k"},{ro:"Limite de memorie cu systemd și OOMKilled în Kubernetes",en:"Memory limits with systemd, and OOMKilled in Kubernetes"}],
+foot:{ro:"Nume de servere și procese fictive. Comenzile marcate LAB CHANGE modifică sistemul: rulează-le doar într-un mediu de test sau cu aprobare.",en:"Fictional server and process names. Commands marked LAB CHANGE modify the system: run them only in a test environment or with approval."},
+ui:{frameT:{ro:"Investigația (live)",en:"The investigation (live)"},refT:{ro:"Comenzi pentru CPU, memorie și I/O",en:"CPU, memory and I/O commands"},refLead:{ro:"Întrebarea de interviu, prima comandă și ce dovedește.",en:"The interview question, the first command and what it proves."}},
+tryT:{ro:"Încearcă (pe o mașină de test)",en:"Try it (on a test machine)"},
+legend:[["lg-ip","READ",{ro:"doar citește",en:"read-only"}],["lg-arp","CHANGE",{ro:"modifică sistemul",en:"changes the system"}],["lg-tcp","ERR",{ro:"dovada problemei",en:"evidence of the problem"}]],
+
+nodes:{
+  usr:{type:"user",name:{ro:"clienți",en:"customers"},lines:["HTTP"]},
+  api:{type:"server",name:"api",lines:["Java · 3 GB"]},
+  job:{type:"server",name:"report-job",lines:["Java · -Xmx12g"]},
+  ram:{type:"box",name:"RAM",lines:["16 GiB"]},
+  swap:{type:"db",name:"swap",lines:["4 GiB · sda2"]},
+  disk:{type:"db",name:"sda",lines:["SSD"]},
+  oom:{type:"box",name:{ro:"kernel",en:"kernel"},lines:["OOM killer"]}
+},
+links:[["usr","api"],["api","ram"],["job","ram"],["ram","swap"],["swap","disk"],["oom","ram"],["oom","job"]],
+linkLabels:{"usr-api":"HTTP · p99","api-ram":"3 GB","job-ram":"11.6 GB","ram-swap":"swap out / in","swap-disk":"I/O","oom-ram":{"ro":"memorie terminată","en":"memory exhausted"},"oom-job":"SIGKILL"},
+layouts:{
+  wide:{vb:[0,0,1000,500],n:{usr:[80,250],api:[270,140],job:[270,380],ram:[500,260],swap:[710,260],disk:[910,260],oom:[700,400]},
+    zones:[{x:190,y:30,w:800,h:450,top:true,cls:"virt",l:{ro:"api01 (Linux) · 4 nuclee",en:"api01 (Linux) · 4 cores"}}]},
+  narrow:{vb:[0,0,360,850],n:{usr:[70,60],oom:[290,60],api:[70,270],job:[290,290],ram:[180,460],swap:[70,620],disk:[70,780]}}
+},
+groups:[
+  {id:"q",color:"l7",fields:["q"],name:{ro:"Întrebarea",en:"The question"},short:"Q",grow:2},
+  {id:"c",color:"l3",fields:["cmd","mode","out"],name:{ro:"Comanda și rezultatul",en:"Command and output"},short:"CMD",grow:4},
+  {id:"e",color:"arp",fields:["proves","fix"],name:{ro:"Dovada și remedierea",en:"Evidence and fix"},short:{ro:"Dovada",en:"Evidence"},grow:3}
+],
+fieldLabels:{q:{ro:"Întrebarea",en:"The question"},cmd:{ro:"Comanda",en:"Command"},mode:{ro:"Tip",en:"Type"},out:{ro:"Ce afișează",en:"Output"},proves:{ro:"Ce dovedește",en:"What it proves"},fix:{ro:"Remediere",en:"Fix"}},
+pdu:f=>f.mode===CH?{badge:{ro:"Schimbare: doar în lab sau cu aprobare",en:"Change: lab only, or with approval"},tok:["CHANGE","k-arp"]}:f.bad?{badge:{ro:"Dovada problemei",en:"Evidence of the problem"},tok:[f.bad,"k-tcp"]}:{badge:{ro:"Doar citește",en:"Read-only"},tok:["READ","k-ip"]},
+
+init:{},
+tables:{
+  load:{title:{ro:"Ce intră în load average",en:"What goes into the load average"},cols:[{ro:"Stare",en:"State"},{ro:"Înseamnă",en:"Means"},{ro:"Intră în load?",en:"In the load?"}],plain:[1,2],
+    rows:()=>[["R",{ro:"rulează sau așteaptă CPU",en:"running or waiting for CPU"},{ro:"da",en:"yes"}],["D",{ro:"blocat necontrolabil, de obicei pe I/O",en:"uninterruptible sleep, usually on I/O"},{ro:"da (pe Linux)",en:"yes (on Linux)"}],["S",{ro:"doarme, așteaptă un eveniment",en:"sleeping, waiting for an event"},{ro:"nu",en:"no"}]]},
+  top:{title:{ro:"Linia %Cpu din top",en:"The %Cpu line in top"},cols:[{ro:"Câmp",en:"Field"},{ro:"Înseamnă",en:"Means"}],plain:[1],
+    rows:()=>[["us",{ro:"cod de aplicație",en:"application code"}],["sy",{ro:"kernel",en:"kernel"}],["id",{ro:"CPU liber",en:"idle CPU"}],["wa",{ro:"CPU liber, dar cu I/O în așteptare",en:"idle CPU with I/O pending"}],["st",{ro:"timp furat de hypervisor (VM)",en:"time stolen by the hypervisor (VM)"}]]},
+  vm:{title:{ro:"Coloanele importante din vmstat",en:"The important vmstat columns"},cols:[{ro:"Coloană",en:"Column"},{ro:"Înseamnă",en:"Means"},{ro:"Aici",en:"Here"}],plain:[1],
+    rows:()=>[["r",{ro:"procese care vor CPU",en:"processes wanting CPU"},"2"],["b",{ro:"procese blocate (I/O)",en:"blocked processes (I/O)"},"14"],["si / so",{ro:"KB/s citiți din / scriși în swap",en:"KB/s read from / written to swap"},"2900 / 3400"],["wa",{ro:"% I/O wait",en:"% I/O wait"},"66"]]},
+  mem:{title:{ro:"free -h: ce coloană contează",en:"free -h: which column matters"},cols:[{ro:"Coloană",en:"Column"},{ro:"Înseamnă",en:"Means"}],plain:[1],
+    rows:()=>[["free",{ro:"memorie nefolosită deloc; de obicei mică, și e normal",en:"memory not used at all; usually small, and that's normal"}],["buff/cache",{ro:"cache de fișiere, eliberat la nevoie",en:"file cache, released when needed"}],["available",{ro:"cât poate primi un program nou fără swap: cifra importantă",en:"how much a new program can get without swapping: the number that matters"}]]},
+  k8s:{idx:true,title:{ro:"Limitele în Kubernetes",en:"Limits in Kubernetes"},cols:[{ro:"Depășești",en:"You exceed"},{ro:"Ce se întâmplă",en:"What happens"}],plain:[0,1],
+    rows:()=>[[{ro:"limita de CPU",en:"the CPU limit"},{ro:"throttling: containerul e încetinit, nu omorât",en:"throttling: the container is slowed down, not killed"}],[{ro:"limita de memorie",en:"the memory limit"},{ro:"OOMKilled, exit 137, restart",en:"OOMKilled, exit 137, restart"}],[{ro:"memoria nodului",en:"the node's memory"},{ro:"evacuare (eviction) după prioritate",en:"eviction by priority"}]]}
+},
+log:{title:{ro:"Jurnalul investigației",en:"Investigation log"},lead:{ro:"Fiecare comandă și ce a dovedit.",en:"Every command and what it proved."},first:{ro:"Pas",en:"Step"},minWidth:600,
+  cols:[{h:{ro:"Comanda",en:"Command"},v:f=>f.fix||f.cmd||"",cls:"mac"},{h:{ro:"Ce dovedește",en:"What it proves"},v:f=>f.proves||"",cls:""}]},
+
+steps:[
+{at:"api",frame:P1,kind:"p",move:[[["usr","api"]]],marks:{api:{k:"drop",t:"p99 8 s"}},tables:["load"],hl:{load:"D"},log:{ro:"load 18 pe 4 nuclee",en:"load 18 on 4 cores"},who:"uptime",
+ title:{ro:"Simptomul: api-ul răspunde în 8 secunde, load 18",en:"The symptom: the api answers in 8 seconds, load 18"},
+ body:{ro:`<p>De la 13:40, alarmele arată că api-ul răspunde în <strong>8 secunde</strong> (p99), față de 120 ms de obicei. Pe server, <code>uptime</code> arată <code>load average: 18.20, 12.51, 6.07</code>: media pe 1, 5 și 15 minute. Crește, deci problema e recentă.</p>
+<p><code>nproc</code>: 4 nuclee. Un load de 18 pe 4 nuclee pare un CPU sufocat. Dar pe Linux, load average-ul numără și procesele <strong>blocate pe I/O</strong> (starea D), nu doar pe cele care vor CPU.</p>
+<p class="key">Load mare nu înseamnă automat CPU. Înseamnă doar „multe procese nu pot avansa”.</p>`,
+ en:`<p>Since 13:40, alerts show the api answering in <strong>8 seconds</strong> (p99), versus 120 ms normally. On the server, <code>uptime</code> shows <code>load average: 18.20, 12.51, 6.07</code>: the average over 1, 5 and 15 minutes. It's rising, so the problem is recent.</p>
+<p><code>nproc</code>: 4 cores. A load of 18 on 4 cores looks like a choking CPU. But on Linux, the load average also counts processes <strong>blocked on I/O</strong> (state D), not just those wanting CPU.</p>
+<p class="key">A high load doesn't automatically mean CPU. It only means "many processes can't make progress".</p>`},
+ try:[{cmd:"uptime",d:{ro:"Load average pe 1, 5, 15 minute.",en:"Load average over 1, 5, 15 minutes."}},{cmd:"nproc",d:{ro:"Câte nuclee are serverul.",en:"How many cores the server has."}}]},
+
+{at:"api",frame:P2,kind:"p",tables:["top"],hl:{top:"wa"},log:{ro:"I/O wait, nu CPU",en:"I/O wait, not CPU"},who:"top",
+ title:{ro:"top: procesorul așteaptă discul",en:"top: the processor is waiting for the disk"},
+ body:{ro:`<p>În <code>top</code>, linia <code>%Cpu(s)</code> spune unde merge timpul procesoarelor: doar <strong>9,8% us</strong> (aplicații) și <strong>65,9% wa</strong> (I/O wait).</p>
+<p><strong>wa</strong> e timp în care CPU-ul nu are ce face pentru că procesele așteaptă discul. Lista de procese confirmă: 14 sunt în starea <code>D</code>, blocate pe I/O.</p>
+<p>Deci nu procesorul e problema. Ceva sufocă discul. Întrebarea devine: cine scrie și citește atât?</p>`,
+ en:`<p>In <code>top</code>, the <code>%Cpu(s)</code> line shows where CPU time goes: only <strong>9.8% us</strong> (applications) and <strong>65.9% wa</strong> (I/O wait).</p>
+<p><strong>wa</strong> is time when the CPU has nothing to do because processes are waiting for the disk. The process list confirms it: 14 are in state <code>D</code>, blocked on I/O.</p>
+<p>So the processor isn't the problem. Something is choking the disk. The question becomes: who is reading and writing so much?</p>`},
+ more:{ro:`<p>În top, tasta <code>1</code> arată fiecare nucleu separat, <code>M</code> sortează după memorie, <code>P</code> după CPU. <code>%CPU</code> din <code>ps</code> e o medie pe toată viața procesului, nu o măsurare de acum.</p>`,
+  en:`<p>In top, the <code>1</code> key shows each core separately, <code>M</code> sorts by memory, <code>P</code> by CPU. <code>%CPU</code> in <code>ps</code> is an average over the process's whole life, not a current measurement.</p>`},
+ try:[{cmd:"top",d:{ro:"Procese, load, CPU, memorie, live.",en:"Processes, load, CPU, memory, live."}}]},
+
+{at:["ram","swap"],frame:P3,kind:"p",move:[[["ram","swap"]],[["swap","disk"]]],tables:["vm"],hl:{vm:"si / so"},log:{ro:"swap continuu",en:"constant swapping"},who:"vmstat",
+ title:{ro:"vmstat: sistemul face swap fără oprire",en:"vmstat: the system is swapping non-stop"},
+ body:{ro:`<p><code>vmstat 1 5</code> afișează un rând pe secundă, de 5 ori. <strong>Primul rând e o medie de la pornire</strong>: îl ignori și citești următoarele.</p>
+<ul><li><code>r 2</code>: doar 2 procese vor CPU, deci CPU-ul nu e coada;</li>
+<li><code>b 14</code>: 14 procese sunt blocate;</li>
+<li><code>si 2900</code>, <code>so 3400</code>: în fiecare secundă se citesc și se scriu mii de KB în <strong>swap</strong>.</li></ul>
+<p>Swap în ambele direcții, continuu, înseamnă că RAM-ul nu ajunge: kernelul mută pagini pe disc ca să facă loc, apoi le aduce înapoi când sunt cerute.</p>`,
+ en:`<p><code>vmstat 1 5</code> prints a row every second, 5 times. <strong>The first row is an average since boot</strong>: you ignore it and read the next ones.</p>
+<ul><li><code>r 2</code>: only 2 processes want CPU, so the CPU isn't the queue;</li>
+<li><code>b 14</code>: 14 processes are blocked;</li>
+<li><code>si 2900</code>, <code>so 3400</code>: every second, thousands of KB are read from and written to <strong>swap</strong>.</li></ul>
+<p>Swapping both ways, continuously, means RAM isn't enough: the kernel moves pages to disk to make room, then brings them back when they're needed.</p>`},
+ try:[{cmd:"vmstat 1 5",d:{ro:"5 rânduri, unul pe secundă; ignoră primul.",en:"5 rows, one per second; ignore the first."}}]},
+
+{at:"ram",frame:P4,kind:"p",marks:{ram:{k:"drop",t:"160 MiB"}},tables:["mem"],hl:{mem:"available"},log:{ro:"memoria terminată",en:"memory exhausted"},who:"free",
+ title:{ro:"free -h: „available” e cifra care contează",en:"free -h: \"available\" is the number that matters"},
+ body:{ro:`<p><code>free -h</code> arată memoria. Mulți se uită la coloana <code>free</code>, dar ea e aproape mereu mică: Linux folosește RAM-ul liber ca <strong>cache</strong> de fișiere, pe care îl eliberează la nevoie.</p>
+<p>Cifra importantă e <strong>available</strong>: cât poate primi un program nou fără swap. Aici: <strong>160 MiB din 15 GiB</strong>. Swap-ul: 3,9 din 4 GiB, iar <code>swapon --show</code> arată că e o partiție pe <code>sda</code>, același disc pe care scrie și api-ul.</p>`,
+ en:`<p><code>free -h</code> shows memory. Many people look at the <code>free</code> column, but it's almost always small: Linux uses free RAM as a file <strong>cache</strong>, which it releases when needed.</p>
+<p>The number that matters is <strong>available</strong>: how much a new program can get without swapping. Here: <strong>160 MiB out of 15 GiB</strong>. Swap: 3.9 of 4 GiB, and <code>swapon --show</code> shows it's a partition on <code>sda</code>, the same disk the api writes to.</p>`},
+ more:{ro:`<p>Swap folosit nu înseamnă singur o problemă: pagini rar folosite pot sta liniștite în swap. Problema e <em>activitatea</em> de swap (si/so mari în vmstat), nu cantitatea.</p>`,
+  en:`<p>Used swap alone isn't a problem: rarely used pages can sit quietly in swap. The problem is swap <em>activity</em> (high si/so in vmstat), not the amount.</p>`},
+ try:[{cmd:"free -h",d:{ro:"Memorie și swap.",en:"Memory and swap."}},{cmd:"swapon --show",d:{ro:"Unde e swap-ul.",en:"Where the swap is."}}]},
+
+{at:"disk",frame:P5,kind:"p",move:[[["swap","disk"]]],marks:{disk:{k:"drop",t:"%util 99.8"}},log:{ro:"discul saturat",en:"disk saturated"},who:"iostat",
+ title:{ro:"iostat: discul e ocupat 100% din timp",en:"iostat: the disk is busy 100% of the time"},
+ body:{ro:`<p><code>iostat -xz 1 3</code> (din pachetul sysstat) arată fiecare disc: operații pe secundă, latență și cât e de ocupat.</p>
+<ul><li><code>r/s 820</code>, <code>w/s 910</code>: peste 1700 de operații pe secundă;</li>
+<li><code>w_await 180 ms</code>: fiecare scriere așteaptă în medie 180 ms (normal: sub 5 ms pe SSD);</li>
+<li><code>%util 99.8</code>: discul nu stă niciodată liber.</li></ul>
+<p>Lanțul e complet: memoria s-a terminat → swap → discul sufocat → procesele așteaptă (wa, starea D) → load 18 → api-ul răspunde în 8 s.</p>`,
+ en:`<p><code>iostat -xz 1 3</code> (from the sysstat package) shows each disk: operations per second, latency and how busy it is.</p>
+<ul><li><code>r/s 820</code>, <code>w/s 910</code>: over 1700 operations per second;</li>
+<li><code>w_await 180 ms</code>: each write waits 180 ms on average (normal: under 5 ms on an SSD);</li>
+<li><code>%util 99.8</code>: the disk is never idle.</li></ul>
+<p>The chain is complete: memory ran out → swapping → the disk is choked → processes wait (wa, state D) → load 18 → the api answers in 8 s.</p>`},
+ more:{ro:`<p>IOPS (operații pe secundă) și MB/s sunt lucruri diferite: swap-ul face multe operații mici. <code>iotop -o</code> arată care proces face I/O, dacă e instalat.</p>`,
+  en:`<p>IOPS (operations per second) and MB/s are different things: swapping does many small operations. <code>iotop -o</code> shows which process does the I/O, if installed.</p>`}},
+
+{at:["job","api"],frame:P6,kind:"p",move:[[["job","ram"]]],marks:{job:{k:"drop",t:"11.6 GB"}},log:{ro:"jobul de rapoarte",en:"the report job"},who:"ps --sort",
+ title:{ro:"ps --sort=-%mem: jobul de rapoarte ia 11,6 GB",en:"ps --sort=-%mem: the report job takes 11.6 GB"},
+ body:{ro:`<p><code>ps -eo pid,ppid,%cpu,%mem,rss,comm --sort=-%mem | head</code> sortează procesele după memorie. <strong>RSS</strong> e memoria fizică folosită acum.</p>
+<ul><li><code>report-job</code>: <strong>11,6 GB</strong> (74%). Un job Java pornit cu <code>-Xmx12g</code>, mutat de curând pe acest server „pentru că avea loc”, rulează de la 13:30;</li>
+<li><code>api</code>: 3,1 GB.</li></ul>
+<p>Împreună depășesc 16 GB. Kernelul a mutat în swap pagini din amândouă, iar api-ul, care servește clienți, plătește prețul.</p>`,
+ en:`<p><code>ps -eo pid,ppid,%cpu,%mem,rss,comm --sort=-%mem | head</code> sorts processes by memory. <strong>RSS</strong> is the physical memory in use right now.</p>
+<ul><li><code>report-job</code>: <strong>11.6 GB</strong> (74%). A Java job started with <code>-Xmx12g</code>, recently moved to this server "because it had room", running since 13:30;</li>
+<li><code>api</code>: 3.1 GB.</li></ul>
+<p>Together they exceed 16 GB. The kernel moved pages from both into swap, and the api, which serves customers, pays the price.</p>`},
+ try:[{cmd:"ps -eo pid,ppid,%cpu,%mem,rss,comm --sort=-%mem | head",d:{ro:"Cei mai mari consumatori de memorie.",en:"The biggest memory users."}}]},
+
+{at:"job",frame:P7,kind:"p",move:[[["oom","ram"]],[["oom","job"]]],marks:{job:{k:"drop",t:"OOM killed"}},log:{ro:"OOM killer",en:"OOM killer"},who:"OOM",
+ title:{ro:"14:07: kernelul omoară jobul. Cum dovedești că a fost OOM?",en:"14:07: the kernel kills the job. How do you prove it was OOM?"},
+ body:{ro:`<p>La 14:07, jobul dispare. <code>systemctl status report-job</code>: <code>code=killed, status=9/KILL</code>. Un script ar fi văzut <strong>exit 137</strong> (128 + 9).</p>
+<p>Dar 137 înseamnă doar „omorât cu SIGKILL”: putea fi un <code>kill -9</code> trimis de un om sau de alt program. Dovada vine din jurnalul <strong>kernelului</strong>:</p>
+<p><code>journalctl -k -b | grep -iE "oom|out of memory|killed process"</code> → <code>Out of memory: Killed process 3388 (java) … anon-rss:12141220kB</code>.</p>
+<p>Când memoria și swap-ul se termină, <strong>OOM killer</strong>-ul alege un proces de sacrificat, după un scor bazat mai ales pe memoria folosită. Aici a ales jobul, cel mai mare.</p>`,
+ en:`<p>At 14:07, the job disappears. <code>systemctl status report-job</code>: <code>code=killed, status=9/KILL</code>. A script would have seen <strong>exit 137</strong> (128 + 9).</p>
+<p>But 137 only means "killed with SIGKILL": it could have been a <code>kill -9</code> from a person or another program. The proof comes from the <strong>kernel's</strong> log:</p>
+<p><code>journalctl -k -b | grep -iE "oom|out of memory|killed process"</code> → <code>Out of memory: Killed process 3388 (java) … anon-rss:12141220kB</code>.</p>
+<p>When memory and swap run out, the <strong>OOM killer</strong> picks a process to sacrifice, by a score based mostly on memory used. Here it chose the job, the biggest one.</p>`},
+ more:{ro:`<p>Nu era garantat: dacă api-ul ar fi avut cel mai mare scor, clienții ar fi pierdut serviciul. Scorul se vede în <code>/proc/PID/oom_score</code> și se poate ajusta cu <code>oom_score_adj</code>.</p>`,
+  en:`<p>That wasn't guaranteed: had the api had the highest score, customers would have lost the service. The score shows in <code>/proc/PID/oom_score</code> and can be adjusted with <code>oom_score_adj</code>.</p>`},
+ try:[{cmd:"journalctl -k -b | grep -iE \"oom|out of memory|killed process\"",d:{ro:"Dovezi OOM în jurnalul kernelului.",en:"OOM evidence in the kernel log."}}]},
+
+{at:["job","api"],frame:P8,kind:"p",marks:{job:{k:"ok",t:"MemoryMax 5G"}},log:{ro:"limite de memorie",en:"memory limits"},who:{ro:"Remedierea",en:"The fix"},
+ title:{ro:"Remedierea: limite, nu noroc",en:"The fix: limits, not luck"},
+ body:{ro:`<p>Problema reală: două procese puse pe același server fără limite. Remedierea, în ordinea impactului:</p>
+<ul><li>jobul primește un drop-in systemd cu <code>MemoryMax=5G</code>: cgroup-ul lui nu poate trece de 5 GB, deci la nevoie e omorât <em>el</em>, nu altcineva; Java primește <code>-Xmx4g</code>, sub limită;</li>
+<li>jobul rulează noaptea, la 02:00, când api-ul are puțin trafic;</li>
+<li>api-ul primește <code>OOMScoreAdjust=-500</code>: OOM killer-ul îl alege mai greu.</li></ul>
+<p>Ce <strong>nu</strong> facem ca prim pas: nu schimbăm <code>vm.swappiness</code> (60 e valoarea implicită, nu ea era cauza) și nu adăugăm swap: ar fi prelungit agonia.</p>`,
+ en:`<p>The real problem: two processes on the same server with no limits. The fix, in order of impact:</p>
+<ul><li>the job gets a systemd drop-in with <code>MemoryMax=5G</code>: its cgroup can't go past 5 GB, so if needed <em>it</em> gets killed, not someone else; Java gets <code>-Xmx4g</code>, below the limit;</li>
+<li>the job runs at night, at 02:00, when the api has little traffic;</li>
+<li>the api gets <code>OOMScoreAdjust=-500</code>: the OOM killer is less likely to pick it.</li></ul>
+<p>What we <strong>don't</strong> do first: we don't change <code>vm.swappiness</code> (60 is the default, it wasn't the cause) and we don't add swap: that would have dragged the agony out.</p>`},
+ more:{ro:`<p><code>sysctl vm.swappiness</code> citește valoarea curentă. O schimbare persistentă merge într-un fișier din <code>/etc/sysctl.d/</code>, nu doar cu <code>sysctl -w</code>, care se pierde la restart.</p>`,
+  en:`<p><code>sysctl vm.swappiness</code> reads the current value. A persistent change goes into a file in <code>/etc/sysctl.d/</code>, not just <code>sysctl -w</code>, which is lost on reboot.</p>`}},
+
+{at:["api","ram"],frame:P9,kind:"p",move:[[["usr","api"]],[["api","usr"]]],marks:{api:{k:"ok",t:"p99 120 ms"}},log:{ro:"înapoi la normal",en:"back to normal"},who:{ro:"Verificarea",en:"Verification"},
+ title:{ro:"Verificarea: aceleași comenzi, alte cifre",en:"Verification: the same commands, different numbers"},
+ body:{ro:`<p>Refacem măsurătorile de la început, ca dovadă că problema a dispărut, nu doar că „pare mai bine”:</p>
+<ul><li><code>vmstat 1 5</code>: <code>si 0</code>, <code>so 0</code>, <code>b 0</code>, <code>wa 1</code>;</li>
+<li><code>free -h</code>: <strong>9,8 GiB available</strong>;</li>
+<li><code>uptime</code>: <code>0.92, 1.40, 4.85</code>: valoarea pe 1 minut a scăzut deja, cea pe 15 minute urmează;</li>
+<li>alarmele: p99 al api-ului înapoi la 120 ms.</li></ul>
+<p>Noaptea, jobul rulează cu limita lui: termină în 40 de minute, fără swap.</p>`,
+ en:`<p>We repeat the measurements from the start, as proof the problem is gone, not just that it "looks better":</p>
+<ul><li><code>vmstat 1 5</code>: <code>si 0</code>, <code>so 0</code>, <code>b 0</code>, <code>wa 1</code>;</li>
+<li><code>free -h</code>: <strong>9.8 GiB available</strong>;</li>
+<li><code>uptime</code>: <code>0.92, 1.40, 4.85</code>: the 1-minute value has already dropped, the 15-minute one will follow;</li>
+<li>the alerts: the api's p99 back at 120 ms.</li></ul>
+<p>At night, the job runs within its limit: it finishes in 40 minutes, without swapping.</p>`}},
+
+{at:"job",frame:P10,kind:"p",marks:{job:{k:"drop",t:"OOMKilled"}},tables:["k8s"],hl:{k8s:1},log:{ro:"același lucru în Kubernetes",en:"the same in Kubernetes"},who:"Kubernetes",
+ title:{ro:"Același lucru în Kubernetes: OOMKilled",en:"The same in Kubernetes: OOMKilled"},
+ body:{ro:`<p>Mai târziu, jobul e mutat în Kubernetes, cu <code>limits.memory: 5Gi</code>. Kubernetes folosește aceleași cgroup-uri ca systemd. Când containerul trece de limită, kernelul îl omoară:</p>
+<ul><li><code>kubectl describe pod</code>: <code>Last State: Terminated</code>, <code>Reason: OOMKilled</code>, <code>Exit Code: 137</code>, <code>Restart Count: 4</code>;</li>
+<li><code>kubectl logs … --previous</code>: logul instanței dinainte de restart, unde vezi ce făcea când a murit.</li></ul>
+<p><strong>CrashLoopBackOff</strong> descrie doar pauza dintre restarturi, nu cauza. Iar depășirea limitei de <em>CPU</em> nu omoară containerul: îl încetinește (throttling).</p>`,
+ en:`<p>Later, the job moves to Kubernetes, with <code>limits.memory: 5Gi</code>. Kubernetes uses the same cgroups as systemd. When the container goes over the limit, the kernel kills it:</p>
+<ul><li><code>kubectl describe pod</code>: <code>Last State: Terminated</code>, <code>Reason: OOMKilled</code>, <code>Exit Code: 137</code>, <code>Restart Count: 4</code>;</li>
+<li><code>kubectl logs … --previous</code>: the log of the instance before the restart, where you see what it was doing when it died.</li></ul>
+<p><strong>CrashLoopBackOff</strong> only describes the pause between restarts, not the cause. And going over the <em>CPU</em> limit doesn't kill the container: it slows it down (throttling).</p>`},
+ more:{ro:`<p>Înainte de orice schimbare în Kubernetes, <code>kubectl config current-context</code>: un context greșit poate însemna că modifici producția.</p>`,
+  en:`<p>Before any change in Kubernetes, <code>kubectl config current-context</code>: the wrong context can mean you're changing production.</p>`},
+ try:[{cmd:"kubectl describe pod POD -n NAMESPACE",d:{ro:"Last State, Reason, Exit Code, limite, evenimente.",en:"Last State, Reason, Exit Code, limits, events."}},{cmd:"kubectl logs POD -n NAMESPACE --previous",d:{ro:"Logul instanței anterioare.",en:"The previous instance's log."}}]},
+
+{at:["api","job","ram","swap","disk","oom"],frame:null,kind:"none",summary:true,
+ title:{ro:"Recapitulare",en:"Recap"},
+ body:{ro:`<ul><li><strong>Load average</strong> numără procesele care vor CPU și pe cele blocate pe I/O: load mare ≠ CPU.</li>
+<li><code>top</code>: <strong>wa</strong> mare = CPU-ul așteaptă discul. <code>vmstat 1 5</code>: <strong>si/so</strong> = swap activ, <strong>b</strong> = procese blocate; ignori primul rând.</li>
+<li><code>free -h</code>: te uiți la <strong>available</strong>, nu la free. <code>iostat -xz</code>: <strong>%util</strong> și <strong>await</strong> pe fiecare disc.</li>
+<li><code>ps --sort=-%mem</code>: cine consumă. <code>journalctl -k -b | grep -i oom</code>: dovada OOM; <strong>exit 137 singur nu e o dovadă</strong>.</li>
+<li>Remedierea: limite (<code>MemoryMax</code>, <code>-Xmx</code>, <code>limits.memory</code>), program separat, protecție pentru serviciul important.</li>
+<li>Kubernetes: memorie peste limită → <strong>OOMKilled</strong>; CPU peste limită → throttling.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Mergi la laborator ↓</button></p>`,
+ en:`<ul><li>The <strong>load average</strong> counts processes wanting CPU and those blocked on I/O: a high load ≠ CPU.</li>
+<li><code>top</code>: high <strong>wa</strong> = the CPU is waiting for the disk. <code>vmstat 1 5</code>: <strong>si/so</strong> = active swapping, <strong>b</strong> = blocked processes; ignore the first row.</li>
+<li><code>free -h</code>: look at <strong>available</strong>, not free. <code>iostat -xz</code>: <strong>%util</strong> and <strong>await</strong> per disk.</li>
+<li><code>ps --sort=-%mem</code>: who's using it. <code>journalctl -k -b | grep -i oom</code>: the OOM proof; <strong>exit 137 alone isn't proof</strong>.</li>
+<li>The fix: limits (<code>MemoryMax</code>, <code>-Xmx</code>, <code>limits.memory</code>), a separate schedule, protection for the important service.</li>
+<li>Kubernetes: memory over the limit → <strong>OOMKilled</strong>; CPU over the limit → throttling.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Go to the lab ↓</button></p>`}}
+],
+
+reference:(T,lang)=>{
+  const ro=lang==="ro";
+  return `<div class="ref-grid"><section class="card refcard"><h2>${ro?"Ordinea de investigare":"Investigation order"}</h2>
+<pre class="yaml">uptime; nproc                        <span class="c"># ${ro?"load vs. nuclee":"load vs cores"}</span>
+top                                  <span class="c"># us / sy / wa / st</span>
+vmstat 1 5                           <span class="c"># r b si so wa (${ro?"ignoră primul rând":"ignore row 1"})</span>
+free -h                              <span class="c"># available</span>
+swapon --show
+iostat -xz 1 3                       <span class="c"># %util, await</span>
+sudo iotop -o
+ps -eo pid,ppid,%cpu,%mem,rss,comm --sort=-%mem | head
+journalctl -k -b | grep -iE "oom|out of memory|killed process"
+cat /proc/PID/oom_score</pre></section>
+<section class="card refcard"><h2>${ro?"Limite":"Limits"}</h2>
+<pre class="yaml"><span class="c"># sudo systemctl edit report-job</span>
+[Service]
+MemoryMax=5G
+<span class="c"># sudo systemctl edit api</span>
+[Service]
+OOMScoreAdjust=-500</pre>
+<pre class="yaml"><span class="c"># Kubernetes</span>
+resources:
+  requests: { memory: 4Gi, cpu: "1" }
+  limits:   { memory: 5Gi }</pre>
+<h3>${ro?"Întrebări de interviu":"Interview questions"}</h3>
+<pre class="yaml">${ro?"Server lent?":"Slow server?"}           → uptime + top (wa?)
+${ro?"RAM puțin?":"Low RAM?"}              → free -h (available) + vmstat
+${ro?"Proces omorât?":"Process killed?"}         → journalctl -k -b | grep -i oom
+${ro?"Pod repornit?":"Pod restarted?"}          → kubectl describe pod + logs --previous</pre></section></div>`;
+},
+
+gloss:[
+ ["Load average",null,{ro:"Media proceselor care rulează, așteaptă CPU sau sunt blocate pe I/O, pe 1, 5 și 15 minute.",en:"The average number of processes running, waiting for CPU or blocked on I/O, over 1, 5 and 15 minutes."}],
+ ["I/O wait",null,{ro:"Timp în care CPU-ul e liber, dar procesele așteaptă discul (wa).",en:"Time when the CPU is idle but processes are waiting for the disk (wa)."}],
+ ["Swap",null,{ro:"Spațiu pe disc unde kernelul mută pagini de memorie când RAM-ul nu ajunge.",en:"Disk space where the kernel moves memory pages when RAM isn't enough."}],
+ ["RSS",null,{ro:"Resident Set Size: memoria fizică folosită acum de un proces.",en:"Resident Set Size: the physical memory a process uses right now."}],
+ [{ro:"Starea D",en:"State D"},null,{ro:"Proces blocat necontrolabil, de obicei pe I/O; nu poate fi întrerupt nici de semnale.",en:"A process in uninterruptible sleep, usually on I/O; even signals can't interrupt it."}],
+ ["OOM killer",null,{ro:"Mecanismul kernelului care omoară un proces când memoria se termină.",en:"The kernel mechanism that kills a process when memory runs out."}],
+ ["cgroup",null,{ro:"Grup de procese cu limite de resurse; folosit de systemd și Kubernetes.",en:"A group of processes with resource limits; used by systemd and Kubernetes."}],
+ ["OOMKilled",null,{ro:"Motivul din Kubernetes pentru un container omorât la depășirea limitei de memorie.",en:"Kubernetes' reason for a container killed for exceeding its memory limit."}],
+ ["Exit 137",null,{ro:"128 + 9: procesul a fost omorât cu SIGKILL; nu spune de cine.",en:"128 + 9: the process was killed with SIGKILL; it doesn't say by whom."}]
+],
+glossEx:{
+ "Load average":{ro:"18 pe 4 nuclee, dar CPU-ul era 66% în I/O wait.",en:"18 on 4 cores, yet the CPU was 66% in I/O wait."},
+ "OOM killer":{ro:"a omorât report-job (11,6 GB) la 14:07.",en:"it killed report-job (11.6 GB) at 14:07."}
+},
+
+quiz:[
+ {"q":{"ro":"Load average 18 pe 4 nuclee. Ce știi sigur?","en":"Load average 18 on 4 cores. What do you know for sure?"},"o":[{"ro":"CPU-ul e la 100%","en":"The CPU is at 100%"},{"ro":"Memoria s-a terminat","en":"Memory has run out"},{"ro":"Rețeaua e lentă","en":"The network is slow"},{"ro":"Multe procese nu pot avansa: așteaptă CPU sau sunt blocate pe I/O","en":"Many processes can't make progress: they're waiting for CPU or blocked on I/O"}],"a":3,"e":{"ro":"Pe Linux, load-ul include și starea D.","en":"On Linux, the load includes state D too."}},
+ {"q":{"ro":"top arată 10% us și 66% wa. Unde e problema?","en":"top shows 10% us and 66% wa. Where's the problem?"},"o":[{"ro":"Procesorul","en":"The processor"},{"ro":"Rețeaua","en":"The network"},{"ro":"I/O: procesele așteaptă discul","en":"I/O: processes are waiting for the disk"},{"ro":"Nu e nicio problemă","en":"There's no problem"}],"a":2,"e":{"ro":"wa = CPU liber, cu I/O în așteptare.","en":"wa = idle CPU with I/O pending."}},
+ {"q":{"ro":"În vmstat 1 5, de ce ignori primul rând?","en":"In vmstat 1 5, why do you ignore the first row?"},"o":[{"ro":"E antetul","en":"It's the header"},{"ro":"E o medie de la pornirea sistemului, nu valoarea de acum","en":"It's an average since boot, not the current value"},{"ro":"E mereu zero","en":"It's always zero"},{"ro":"E în alte unități","en":"It's in different units"}],"a":1,"e":{"ro":"Rândurile următoare sunt pe intervalul de 1 s.","en":"The following rows cover each 1 s interval."}},
+ {"q":{"ro":"Ce coloană din free -h arată câtă memorie poate primi un program nou?","en":"Which free -h column shows how much memory a new program can get?"},"o":["available","free","used","shared"],"a":0,"e":{"ro":"free e de obicei mic, pentru că RAM-ul liber e folosit ca cache.","en":"free is usually small, because free RAM is used as cache."}},
+ {"q":{"ro":"Ce arată si și so mari în vmstat?","en":"What do high si and so in vmstat show?"},"o":[{"ro":"Trafic de rețea","en":"Network traffic"},{"ro":"Semnale","en":"Signals"},{"ro":"Procese noi","en":"New processes"},{"ro":"Swap activ: pagini mutate continuu între RAM și disc","en":"Active swapping: pages constantly moved between RAM and disk"}],"a":3,"e":{"ro":"Swap folosit dar fără si/so nu e o problemă în sine.","en":"Used swap without si/so isn't a problem in itself."}},
+ {"q":{"ro":"Un proces a ieșit cu exit 137. E dovadă de OOM?","en":"A process exited with code 137. Is that proof of OOM?"},"o":[{"ro":"Da, mereu","en":"Yes, always"},{"ro":"Da, dacă e Java","en":"Yes, if it's Java"},{"ro":"Nu: 137 = SIGKILL, trimis de oricine; dovada e în journalctl -k","en":"No: 137 = SIGKILL, sent by anyone; the proof is in journalctl -k"},{"ro":"Nu, 137 e eroare de sintaxă","en":"No, 137 is a syntax error"}],"a":2,"e":{"ro":"Cauți „Out of memory: Killed process” în jurnalul kernelului.","en":"Look for \"Out of memory: Killed process\" in the kernel log."}},
+ {"q":{"ro":"Cum limitezi memoria unui serviciu systemd?","en":"How do you limit a systemd service's memory?"},"o":["vm.swappiness=0","MemoryMax=5G",{"ro":"kill -9 când crește","en":"kill -9 when it grows"},{"ro":"Adaugi swap","en":"Add swap"}],"a":1,"e":{"ro":"Limita se aplică cgroup-ului serviciului.","en":"The limit applies to the service's cgroup."}},
+ {"q":{"ro":"Un container Kubernetes trece de limita de CPU. Ce se întâmplă?","en":"A Kubernetes container goes over its CPU limit. What happens?"},"o":[{"ro":"E încetinit (throttling), nu omorât","en":"It's slowed down (throttling), not killed"},{"ro":"E omorât: OOMKilled","en":"It's killed: OOMKilled"},{"ro":"Nodul repornește","en":"The node reboots"},{"ro":"Nimic","en":"Nothing"}],"a":0,"e":{"ro":"Doar memoria peste limită duce la OOMKilled.","en":"Only memory over the limit leads to OOMKilled."}}
+]
+};
+})();
+</script>
+<script src="../assets/engine.js?v=4"></script>
+<script src="../assets/labs-data.js?v=8"></script>
+<script src="../assets/lab.js?v=1"></script>
+<script type="module" src="../assets/auth.js?v=15"></script>
+</body>
+</html>

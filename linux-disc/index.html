@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Disc plin: inode-uri, fișiere șterse și LVM</title>
+<meta name="description" content="Lecție interactivă: „No space left on device” pe un server Linux: df -hT, df -i, du, lsof +L1, lsblk, findmnt, pvs, vgs, lvs, pvcreate, vgextend și lvextend -r. / Interactive lesson: a full disk on Linux, inodes, deleted open files and LVM.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/diagram.css?v=1">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<script>
+(function(){
+const RO="READ-ONLY",CH="LAB CHANGE";
+const D1={q:{ro:"De ce nu mai poate scrie aplicația?",en:"Why can't the app write any more?"},cmd:"journalctl -u shop-app -n 20 --no-pager",mode:RO,out:"shop-app[1874]: ERROR session save failed: open /var/lib/shop/sessions/sess_8f3a…: no space left on device",proves:{ro:"kernelul a refuzat crearea unui fișier cu ENOSPC: „nu mai e loc”",en:"the kernel refused to create a file with ENOSPC: \"no space left\""},bad:"ENOSPC"};
+const D2={q:{ro:"E plin sistemul de fișiere?",en:"Is the filesystem full?"},cmd:"df -hT /var",mode:RO,out:"/dev/mapper/vg_data-lv_var ext4 99G 61G 34G 65% /var",proves:{ro:"mai sunt 34 GB liberi: nu lipsesc bytes, ci altceva",en:"34 GB are still free: it's not bytes that are missing, it's something else"}};
+const D3={q:{ro:"Spațiu liber, dar „no space”: s-au terminat inode-urile?",en:"Free space, but \"no space\": have the inodes run out?"},cmd:"df -i /var",mode:RO,out:"/dev/mapper/vg_data-lv_var Inodes 6553600 IUsed 6553600 IFree 0 IUse% 100% /var",proves:{ro:"toate cele 6,5 milioane de inode-uri sunt folosite: nu se mai poate crea niciun fișier",en:"all 6.5 million inodes are used: no new file can be created"},bad:"IUse 100%"};
+const D4={q:{ro:"Unde sunt milioanele de fișiere?",en:"Where are the millions of files?"},cmd:"sudo du --inodes -xd2 /var | sort -n | tail -3",mode:RO,out:"38211 /var/log · 6412977 /var/lib/shop/sessions · 6542410 /var",proves:{ro:"6,4 milioane de fișiere mici de sesiune, pe care nu le șterge nimeni",en:"6.4 million small session files that nobody deletes"},bad:"6.4M FILES"};
+const D5={q:{ro:"Cum eliberăm inode-urile în siguranță?",en:"How do we free the inodes safely?"},fix:{ro:"sudo find /var/lib/shop/sessions -type f -mmin +1440 -delete · plus un timer zilnic care face la fel",en:"sudo find /var/lib/shop/sessions -type f -mmin +1440 -delete · plus a daily timer doing the same"},mode:CH,cmd:"df -i /var",out:"IUsed 412088 IFree 6141512 IUse% 7% /var",proves:{ro:"doar sesiunile mai vechi de o zi au fost șterse; aplicația scrie din nou",en:"only sessions older than a day were deleted; the app writes again"}};
+const D6={q:{ro:"df spune 97%, dar du găsește doar 44 GB. Unde e restul?",en:"df says 97%, but du finds only 44 GB. Where's the rest?"},cmd:"df -hT /var · sudo du -xhd1 /var | sort -h | tail -3",mode:RO,out:"99G 96G 3.2G 97% /var · 3.1G /var/log · 39G /var/lib · 44G /var",proves:{ro:"52 GB sunt folosiți de ceva ce du nu vede: fișiere șterse, dar încă deschise",en:"52 GB are used by something du can't see: files deleted but still open"},bad:"df ≠ du"};
+const D7={q:{ro:"Ce proces ține deschis un fișier șters?",en:"Which process holds a deleted file open?"},cmd:"sudo lsof +L1 /var",mode:RO,out:"shop-app 1874 shop 3w REG 253,1 55834574848 0 1311 /var/log/shop/app.log (deleted)",proves:{ro:"un log de 52 GB a fost șters de logrotate, dar shop-app încă scrie în el",en:"a 52 GB log was deleted by logrotate, but shop-app still writes to it"},bad:"(deleted)"};
+const D8={q:{ro:"Cum eliberăm spațiul fără să pierdem date?",en:"How do we free the space without losing data?"},fix:{ro:"sudo systemctl reload shop-app (redeschide logurile) · în logrotate: postrotate cu reload",en:"sudo systemctl reload shop-app (reopens its logs) · in logrotate: postrotate with reload"},mode:CH,cmd:"sudo lsof +L1 /var · df -hT /var",out:{ro:"(nimic) · 99G 44G 51G 47% /var",en:"(nothing) · 99G 44G 51G 47% /var"},proves:{ro:"ultimul descriptor s-a închis, iar kernelul a eliberat cei 52 GB",en:"the last descriptor closed, and the kernel freed the 52 GB"}};
+const D9={q:{ro:"Ce discuri sunt și ce e montat pe /var?",en:"Which disks exist, and what's mounted on /var?"},cmd:"lsblk -f · findmnt /var",mode:RO,out:"sdb LVM2_member → vg_data-lv_var ext4 /var · sdc (fără FSTYPE, fără mountpoint) · TARGET /var SOURCE /dev/mapper/vg_data-lv_var FSTYPE ext4",proves:{ro:"/var e un LV din vg_data, pe sdb; sdc e un disc nou, gol",en:"/var is an LV in vg_data, on sdb; sdc is a new, empty disk"}};
+const D10={q:{ro:"Cât spațiu liber e în Volume Group?",en:"How much free space is in the Volume Group?"},cmd:"sudo pvs; sudo vgs -o vg_name,vg_size,vg_free; sudo lvs",mode:RO,out:"/dev/sdb vg_data lvm2 100.00g 0 · vg_data 100.00g 0 · lv_var vg_data -wi-ao---- 99.00g",proves:{ro:"VG-ul e alocat complet: ca să crească /var, trebuie un PV nou",en:"the VG is fully allocated: for /var to grow, it needs a new PV"},bad:"VFree 0"};
+const D11={q:{ro:"Cum adăugăm discul nou în VG?",en:"How do we add the new disk to the VG?"},fix:"sudo pvcreate /dev/sdc · sudo vgextend vg_data /dev/sdc",mode:CH,cmd:"sudo vgs -o vg_name,vg_size,vg_free · df -hT /var",out:"vg_data 199.99g 100.00g · 99G 44G 51G 47% /var",proves:{ro:"VG-ul are 100 GB liberi, dar /var a rămas la 99 GB: spațiul din VG nu ajunge singur în LV",en:"the VG has 100 GB free, but /var is still 99 GB: VG space doesn't flow into the LV on its own"}};
+const D12={q:{ro:"Cum mărim LV-ul și sistemul de fișiere deodată?",en:"How do we grow the LV and the filesystem together?"},fix:"sudo lvextend -r -L +50G /dev/vg_data/lv_var",mode:CH,cmd:"sudo lvs; sudo vgs; df -hT /var",out:"lv_var 149.00g · vg_data VFree 50.00g · 147G 44G 97G 32% /var",proves:{ro:"LV-ul și ext4 au crescut online cu 50 GB; restul de 50 GB rămâne rezervă în VG",en:"the LV and ext4 grew online by 50 GB; the other 50 GB stays in reserve in the VG"}};
+
+window.LESSON={
+docTitle:{ro:"Disc plin: inode-uri, fișiere șterse și LVM",en:"A full disk: inodes, deleted files and LVM"},
+eyebrow:{ro:"Lecție interactivă · Linux",en:"Interactive lesson · Linux"},
+title:{ro:"Disc plin: inode-uri, fișiere șterse și LVM",en:"A full disk: inodes, deleted files and LVM"},
+sub:{ro:"Aplicația shop-app de pe serverul app02 raportează „No space left on device”, deși df arată 34 GB liberi. Găsim trei probleme de spațiu, fiecare cu altă dovadă: inode-uri terminate, un log șters dar încă deschis, apoi un /var care chiar trebuie mărit. Îl mărim online cu LVM, de la disc nou la sistemul de fișiere.",en:"The shop-app on server app02 reports \"No space left on device\", even though df shows 34 GB free. We find three space problems, each with different evidence: inodes run out, a log deleted but still open, then a /var that really needs to grow. We grow it online with LVM, from a new disk to the filesystem."},
+meta:[{ro:"≈ 25 minute",en:"≈ 25 minutes"},{ro:"13 pași",en:"13 steps"},{ro:"8 întrebări",en:"8 questions"},{ro:"Intermediar",en:"Intermediate"}],
+goals:[{ro:"df -hT vs. df -i: spațiu vs. inode-uri",en:"df -hT vs df -i: space vs inodes"},{ro:"De ce df și du pot da rezultate diferite (lsof +L1)",en:"Why df and du can disagree (lsof +L1)"},{ro:"lsblk, findmnt și blkid: ce disc e montat unde",en:"lsblk, findmnt and blkid: which disk is mounted where"},{ro:"LVM: PV → VG → LV → filesystem → mount, și cum mărești online",en:"LVM: PV → VG → LV → filesystem → mount, and how to grow online"}],
+foot:{ro:"Nume de servere, discuri și aplicații fictive. Nu rula pvcreate, mkfs sau ștergeri pe un disc sau director pe care nu l-ai verificat. Comenzile LAB CHANGE doar în mediul de test sau cu aprobare.",en:"Fictional server, disk and app names. Never run pvcreate, mkfs or deletions on a disk or directory you haven't verified. LAB CHANGE commands only in a test environment or with approval."},
+ui:{frameT:{ro:"Investigația (live)",en:"The investigation (live)"},refT:{ro:"Comenzi pentru stocare și LVM",en:"Storage and LVM commands"},refLead:{ro:"Întrebarea de interviu, prima comandă și ce dovedește.",en:"The interview question, the first command and what it proves."}},
+tryT:{ro:"Încearcă (pe o mașină de test)",en:"Try it (on a test machine)"},
+legend:[["lg-ip","READ",{ro:"doar citește",en:"read-only"}],["lg-arp","CHANGE",{ro:"modifică sistemul",en:"changes the system"}],["lg-tcp","ERR",{ro:"dovada problemei",en:"evidence of the problem"}]],
+
+nodes:{
+  app:{type:"server",name:"shop-app",lines:[{ro:"scrie fișiere",en:"writes files"}]},
+  adm:{type:"user",name:"admin",lines:["SSH"]},
+  lr:{type:"box",name:"logrotate",lines:[{ro:"zilnic",en:"daily"}]},
+  fs:{type:"box",name:"ext4 /var",lines:[{ro:"sistem de fișiere",en:"filesystem"}]},
+  lv:{type:"box",name:"lv_var",lines:["LV"]},
+  vg:{type:"box",name:"vg_data",lines:["VG"]},
+  sdb:{type:"db",name:"/dev/sdb",lines:["PV · 100G"]},
+  sdc:{type:"db",name:"/dev/sdc",lines:[{ro:"disc nou · 100G",en:"new disk · 100G"}]}
+},
+links:[["app","fs"],["lr","fs"],["adm","fs"],["fs","lv"],["lv","vg"],["vg","sdb"],["vg","sdc"],["adm","vg"]],
+linkLabels:{"app-fs":"write()","lr-fs":"rotate","adm-fs":"df · du · lsof","fs-lv":"mount /var","lv-vg":"extents","vg-sdb":"PV","vg-sdc":{"ro":"PV nou","en":"new PV"},"adm-vg":"pvs · vgs · lvs"},
+layouts:{
+  wide:{vb:[0,0,1000,500],n:{app:[90,250],adm:[300,80],lr:[300,420],fs:[300,250],lv:[510,250],vg:[710,250],sdb:[900,130],sdc:[900,370]}},
+  narrow:{vb:[0,0,360,880],n:{app:[60,60],adm:[300,60],lr:[60,330],fs:[180,210],lv:[180,400],vg:[180,580],sdb:[70,760],sdc:[290,760]},lpos:{"app-fs":.4,"adm-fs":.4,"adm-vg":.72}}
+},
+groups:[
+  {id:"q",color:"l7",fields:["q"],name:{ro:"Întrebarea",en:"The question"},short:"Q",grow:2},
+  {id:"c",color:"l3",fields:["cmd","mode","out"],name:{ro:"Comanda și rezultatul",en:"Command and output"},short:"CMD",grow:4},
+  {id:"e",color:"arp",fields:["proves","fix"],name:{ro:"Dovada și remedierea",en:"Evidence and fix"},short:{ro:"Dovada",en:"Evidence"},grow:3}
+],
+fieldLabels:{q:{ro:"Întrebarea",en:"The question"},cmd:{ro:"Comanda",en:"Command"},mode:{ro:"Tip",en:"Type"},out:{ro:"Ce afișează",en:"Output"},proves:{ro:"Ce dovedește",en:"What it proves"},fix:{ro:"Remediere",en:"Fix"}},
+pdu:f=>f.mode===CH?{badge:{ro:"Schimbare: doar în lab sau cu aprobare",en:"Change: lab only, or with approval"},tok:["CHANGE","k-arp"]}:f.bad?{badge:{ro:"Dovada problemei",en:"Evidence of the problem"},tok:[f.bad,"k-tcp"]}:{badge:{ro:"Doar citește",en:"Read-only"},tok:["READ","k-ip"]},
+
+init:{},
+tables:{
+  inode:{title:{ro:"Bytes vs. inode-uri",en:"Bytes vs inodes"},cols:["",{ro:"Spațiu (bytes)",en:"Space (bytes)"},{ro:"Inode-uri",en:"Inodes"}],plain:[0,1,2],
+    rows:()=>[[{ro:"Ce e",en:"What it is"},{ro:"conținutul fișierelor",en:"the files' contents"},{ro:"o fișă per fișier: proprietar, drepturi, unde sunt blocurile",en:"one record per file: owner, permissions, where the blocks are"}],[{ro:"Cum vezi",en:"How to see"},"df -hT","df -i"],[{ro:"Se termină când",en:"Runs out when"},{ro:"puține fișiere mari",en:"a few big files"},{ro:"milioane de fișiere mici",en:"millions of small files"}],[{ro:"La ext4",en:"On ext4"},{ro:"crește odată cu FS-ul",en:"grows with the FS"},{ro:"numărul e fixat la mkfs",en:"the count is fixed at mkfs"}]]},
+  dfdu:{title:{ro:"df vs. du",en:"df vs du"},cols:[{ro:"Comanda",en:"Command"},{ro:"Întreabă",en:"Asks"},{ro:"Nu vede",en:"Can't see"}],plain:[1,2],
+    rows:()=>[["df",{ro:"sistemul de fișiere: câte blocuri sunt ocupate",en:"the filesystem: how many blocks are used"},{ro:"care director le ocupă",en:"which directory uses them"}],["du",{ro:"parcurge directoarele și adună mărimile",en:"walks the directories and adds up sizes"},{ro:"fișierele șterse dar încă deschise",en:"files deleted but still open"}],["lsof +L1",{ro:"fișierele deschise cu 0 legături (șterse)",en:"open files with 0 links (deleted)"},"—"]]},
+  lvm:{title:{ro:"Straturile LVM",en:"The LVM layers"},cols:[{ro:"Strat",en:"Layer"},{ro:"Aici",en:"Here"},{ro:"Comanda",en:"Command"}],plain:[1],
+    rows:()=>[["PV",{ro:"/dev/sdb, /dev/sdc",en:"/dev/sdb, /dev/sdc"},"pvcreate · pvs"],["VG",{ro:"vg_data: toate PV-urile la un loc",en:"vg_data: all PVs pooled"},"vgcreate · vgextend · vgs"],["LV",{ro:"lv_var: o bucată din VG",en:"lv_var: a slice of the VG"},"lvcreate · lvextend · lvs"],["FS",{ro:"ext4 pe LV",en:"ext4 on the LV"},"mkfs.ext4 · resize2fs"],["mount",{ro:"/var",en:"/var"},"mount · findmnt · /etc/fstab"]]}
+},
+log:{title:{ro:"Jurnalul investigației",en:"Investigation log"},lead:{ro:"Fiecare comandă și ce a dovedit.",en:"Every command and what it proved."},first:{ro:"Pas",en:"Step"},minWidth:600,
+  cols:[{h:{ro:"Comanda",en:"Command"},v:f=>f.fix||f.cmd||"",cls:"mac"},{h:{ro:"Ce dovedește",en:"What it proves"},v:f=>f.proves||"",cls:""}]},
+
+steps:[
+{at:"app",frame:D1,kind:"d",move:[[["app","fs"]]],marks:{app:{k:"drop",t:"ENOSPC"}},log:{ro:"simptomul",en:"the symptom"},who:{ro:"Simptomul",en:"The symptom"},
+ title:{ro:"Simptomul: „no space left on device”",en:"The symptom: \"no space left on device\""},
+ body:{ro:`<p>Clienții nu se mai pot loga în magazin. Jurnalul aplicației <code>shop-app</code> arată de sute de ori pe minut: <code>session save failed … no space left on device</code>.</p>
+<p>Mesajul vine de la kernel (eroarea <strong>ENOSPC</strong>) când aplicația încearcă să creeze un fișier în <code>/var/lib/shop/sessions</code>.</p>
+<p>Reflexul greșit e să ștergi repede ce pare mare. Mai întâi aflăm <em>ce</em> anume s-a terminat.</p>`,
+ en:`<p>Customers can no longer log in to the shop. The <code>shop-app</code> log shows, hundreds of times a minute: <code>session save failed … no space left on device</code>.</p>
+<p>The message comes from the kernel (the <strong>ENOSPC</strong> error) when the app tries to create a file in <code>/var/lib/shop/sessions</code>.</p>
+<p>The wrong reflex is to quickly delete whatever looks big. First we find out <em>what</em> exactly ran out.</p>`}},
+
+{at:"fs",frame:D2,kind:"d",move:[[["adm","fs"]]],log:{ro:"34 GB liberi",en:"34 GB free"},who:"df -hT",
+ title:{ro:"df -hT: mai sunt 34 GB liberi",en:"df -hT: 34 GB are still free"},
+ body:{ro:`<p><code>df -hT /var</code> arată sistemul de fișiere pe care stă <code>/var</code>: tipul (<code>-T</code>: ext4), mărimea, cât e folosit și cât e liber, în unități ușor de citit (<code>-h</code>).</p>
+<p>Rezultat: <strong>65% folosit, 34 GB liberi</strong>. Deci nu lipsesc bytes. Totuși, kernelul spune „no space”.</p>
+<p>Un sistem de fișiere poate rămâne fără două lucruri: <strong>blocuri</strong> (spațiu pentru conținut) sau <strong>inode-uri</strong> (fișe pentru fișiere).</p>`,
+ en:`<p><code>df -hT /var</code> shows the filesystem <code>/var</code> lives on: its type (<code>-T</code>: ext4), size, how much is used and how much is free, in readable units (<code>-h</code>).</p>
+<p>The result: <strong>65% used, 34 GB free</strong>. So bytes aren't missing. Yet the kernel says "no space".</p>
+<p>A filesystem can run out of two things: <strong>blocks</strong> (space for contents) or <strong>inodes</strong> (records for files).</p>`},
+ try:[{cmd:"df -hT /var",d:{ro:"Spațiul și tipul sistemului de fișiere.",en:"Space and filesystem type."}}]},
+
+{at:"fs",frame:D3,kind:"d",move:[[["adm","fs"]]],marks:{fs:{k:"drop",t:"IUse 100%"}},tables:["inode"],log:{ro:"inode-uri terminate",en:"inodes exhausted"},who:"df -i",
+ title:{ro:"df -i: inode-urile s-au terminat",en:"df -i: the inodes have run out"},
+ body:{ro:`<p>Fiecare fișier, oricât de mic, are nevoie de un <strong>inode</strong>: fișa cu proprietarul, drepturile, datele și adresa blocurilor. Pe ext4, numărul de inode-uri e stabilit când se creează sistemul de fișiere.</p>
+<p><code>df -i /var</code>: <strong>IUse% 100%</strong>, <code>IFree 0</code>. Toate cele 6,5 milioane de inode-uri sunt luate. Se mai pot scrie bytes în fișiere existente, dar nu se mai poate <em>crea</em> niciun fișier nou.</p>
+<p class="key">„No space left”, dar cu GB liberi → <code>df -i</code>. E una dintre cele mai frecvente capcane de interviu.</p>`,
+ en:`<p>Every file, however small, needs an <strong>inode</strong>: the record holding the owner, permissions, timestamps and the block addresses. On ext4, the number of inodes is set when the filesystem is created.</p>
+<p><code>df -i /var</code>: <strong>IUse% 100%</strong>, <code>IFree 0</code>. All 6.5 million inodes are taken. Bytes can still be written to existing files, but no new file can be <em>created</em>.</p>
+<p class="key">"No space left" but GBs free → <code>df -i</code>. It's one of the most common interview traps.</p>`},
+ more:{ro:`<p><code>ls -li fișier</code> arată numărul inode-ului în prima coloană. Un hard link e același inode cu alt nume; un symlink are inode-ul lui propriu.</p>`,
+  en:`<p><code>ls -li file</code> shows the inode number in the first column. A hard link is the same inode under another name; a symlink has its own inode.</p>`},
+ try:[{cmd:"df -i /var",d:{ro:"Inode-uri folosite și libere.",en:"Inodes used and free."}}]},
+
+{at:"fs",frame:D4,kind:"d",move:[[["adm","fs"]]],log:{ro:"6,4 milioane de sesiuni",en:"6.4 million sessions"},who:"du --inodes",
+ title:{ro:"Unde sunt fișierele? du --inodes",en:"Where are the files? du --inodes"},
+ body:{ro:`<p><code>du --inodes -xd2 /var</code> numără fișierele în loc de bytes, pe două niveluri de directoare (<code>-d2</code>), fără să treacă pe alte sisteme de fișiere (<code>-x</code>).</p>
+<p>Vinovatul: <code>/var/lib/shop/sessions</code>, cu <strong>6,4 milioane</strong> de fișiere mici. Aplicația creează un fișier per sesiune și nu le șterge niciodată. Curățarea automată fusese uitată la migrarea pe serverul nou.</p>`,
+ en:`<p><code>du --inodes -xd2 /var</code> counts files instead of bytes, two directory levels deep (<code>-d2</code>), without crossing onto other filesystems (<code>-x</code>).</p>
+<p>The culprit: <code>/var/lib/shop/sessions</code>, with <strong>6.4 million</strong> small files. The app creates one file per session and never deletes them. The automatic cleanup was forgotten when moving to the new server.</p>`}},
+
+{at:"fs",frame:D5,kind:"d",move:[[["adm","fs"]]],marks:{fs:{k:"ok",t:"IUse 7%"}},log:{ro:"sesiunile vechi șterse",en:"old sessions deleted"},who:{ro:"Remedierea 1",en:"Fix 1"},
+ title:{ro:"Ștergem doar ce e sigur, apoi automatizăm",en:"We delete only what's safe, then automate it"},
+ body:{ro:`<p>Sesiunile mai vechi de o zi sunt expirate oricum. Le ștergem țintit: <code>find /var/lib/shop/sessions -type f -mmin +1440 -delete</code>.</p>
+<ul><li><code>-type f</code>: doar fișiere, nu directoare;</li>
+<li><code>-mmin +1440</code>: modificate acum mai mult de 1440 de minute (24 h);</li>
+<li>întâi rulezi comanda <strong>fără</strong> <code>-delete</code>, ca să vezi ce ar șterge.</li></ul>
+<p><code>df -i</code> scade la 7%. Ca să nu se repete, aceeași comandă devine un timer systemd (sau cron) zilnic.</p>`,
+ en:`<p>Sessions older than a day have expired anyway. We delete them precisely: <code>find /var/lib/shop/sessions -type f -mmin +1440 -delete</code>.</p>
+<ul><li><code>-type f</code>: files only, not directories;</li>
+<li><code>-mmin +1440</code>: modified more than 1440 minutes (24 h) ago;</li>
+<li>first you run the command <strong>without</strong> <code>-delete</code>, to see what it would delete.</li></ul>
+<p><code>df -i</code> drops to 7%. So it doesn't happen again, the same command becomes a daily systemd timer (or cron job).</p>`},
+ more:{ro:`<p>Un <code>rm /var/lib/shop/sessions/*</code> ar fi eșuat cu <em>Argument list too long</em>: shell-ul ar încerca să pună 6 milioane de nume pe linia de comandă. <code>find … -delete</code> nu are problema asta.</p>`,
+  en:`<p>A <code>rm /var/lib/shop/sessions/*</code> would have failed with <em>Argument list too long</em>: the shell would try to put 6 million names on the command line. <code>find … -delete</code> doesn't have that problem.</p>`}},
+
+{at:"fs",frame:D6,kind:"d",move:[[["adm","fs"]]],marks:{fs:{k:"drop",t:"97%"}},tables:["dfdu"],hl:{dfdu:"du"},log:{ro:"df și du nu se potrivesc",en:"df and du disagree"},who:"df vs du",
+ title:{ro:"O săptămână mai târziu: df spune 97%, du găsește 44 GB",en:"A week later: df says 97%, du finds 44 GB"},
+ body:{ro:`<p>Alarma de disc sună din nou. De data asta <code>df -hT /var</code> chiar arată <strong>97%</strong>: 96 GB folosiți.</p>
+<p><code>du -xhd1 /var | sort -h</code> adună mărimea tuturor directoarelor din <code>/var</code>: doar <strong>44 GB</strong>. Lipsesc 52 GB.</p>
+<p>Cele două comenzi întreabă lucruri diferite. <code>df</code> întreabă sistemul de fișiere câte blocuri sunt ocupate. <code>du</code> parcurge directoarele. Dacă un fișier a fost șters din director, dar un proces îl mai ține deschis, blocurile lui sunt încă ocupate, dar <code>du</code> nu-l mai găsește.</p>`,
+ en:`<p>The disk alarm goes off again. This time <code>df -hT /var</code> really shows <strong>97%</strong>: 96 GB used.</p>
+<p><code>du -xhd1 /var | sort -h</code> adds up the size of every directory in <code>/var</code>: only <strong>44 GB</strong>. 52 GB are missing.</p>
+<p>The two commands ask different things. <code>df</code> asks the filesystem how many blocks are used. <code>du</code> walks the directories. If a file was deleted from its directory but a process still holds it open, its blocks are still used, but <code>du</code> can no longer find it.</p>`},
+ try:[{cmd:"sudo du -xhd1 /var | sort -h",d:{ro:"Directoarele din /var, de la mic la mare.",en:"/var's directories, smallest to largest."}}]},
+
+{at:"app",frame:D7,kind:"d",move:[[["lr","fs"]],[["app","fs"]]],marks:{app:{k:"drop",t:"52 GB (deleted)"}},log:{ro:"log șters, încă deschis",en:"log deleted, still open"},who:"lsof +L1",
+ title:{ro:"lsof +L1: un log de 52 GB șters, dar încă deschis",en:"lsof +L1: a 52 GB log, deleted but still open"},
+ body:{ro:`<p><code>lsof +L1</code> listează fișierele deschise care au <strong>mai puțin de o legătură</strong>: adică au fost șterse din director. Rezultatul: <code>/var/log/shop/app.log (deleted)</code>, 52 GB, ținut deschis de <code>shop-app</code> (PID 1874) pentru scriere.</p>
+<p>Ce s-a întâmplat: logrotate a redenumit și apoi a șters logul vechi, dar aplicația n-a fost anunțată. Ea scrie în continuare în fișierul vechi, prin descriptorul pe care îl ține deschis. Kernelul eliberează blocurile abia când se închide ultimul descriptor.</p>`,
+ en:`<p><code>lsof +L1</code> lists open files with <strong>fewer than one link</strong>: that is, deleted from their directory. The result: <code>/var/log/shop/app.log (deleted)</code>, 52 GB, held open for writing by <code>shop-app</code> (PID 1874).</p>
+<p>What happened: logrotate renamed and then deleted the old log, but the app wasn't told. It keeps writing to the old file, through the descriptor it holds open. The kernel frees the blocks only when the last descriptor closes.</p>`},
+ try:[{cmd:"sudo lsof +L1",d:{ro:"Fișiere șterse, dar încă deschise.",en:"Deleted files that are still open."}}]},
+
+{at:"app",frame:D8,kind:"d",move:[[["adm","fs"]]],marks:{fs:{k:"ok",t:"47%"}},log:{ro:"spațiul eliberat",en:"space freed"},who:{ro:"Remedierea 2",en:"Fix 2"},
+ title:{ro:"Eliberăm spațiul: aplicația își redeschide logurile",en:"Freeing the space: the app reopens its logs"},
+ body:{ro:`<p>Nu mai e nimic de șters: fișierul e deja șters. Trebuie doar ca procesul să-l <strong>închidă</strong>. Opțiuni, de la cea mai blândă:</p>
+<ul><li><code>systemctl reload shop-app</code>: multe aplicații își redeschid logurile la reload (SIGHUP);</li>
+<li>un restart, dacă reload nu ajunge (cu impact asupra utilizatorilor);</li>
+<li>pe termen lung: în configurația logrotate, <code>postrotate</code> cu reload, sau <code>copytruncate</code> pentru aplicațiile care nu știu să redeschidă logul.</li></ul>
+<p>După reload: <code>lsof +L1</code> e gol, iar <code>df</code> arată 47%.</p>`,
+ en:`<p>There's nothing left to delete: the file is already deleted. The process just needs to <strong>close</strong> it. Options, gentlest first:</p>
+<ul><li><code>systemctl reload shop-app</code>: many apps reopen their logs on reload (SIGHUP);</li>
+<li>a restart, if reload isn't enough (with impact on users);</li>
+<li>long term: in the logrotate config, <code>postrotate</code> with a reload, or <code>copytruncate</code> for apps that can't reopen their log.</li></ul>
+<p>After the reload: <code>lsof +L1</code> is empty, and <code>df</code> shows 47%.</p>`},
+ more:{ro:`<p>Nu omorî procesul doar ca să eliberezi spațiu fără să știi ce face. Ca soluție de urgență, fișierul poate fi golit prin descriptorul procesului: <code>: &gt; /proc/1874/fd/3</code>, pierzând conținutul logului.</p>`,
+  en:`<p>Don't kill the process just to free space without knowing what it does. As an emergency measure, the file can be emptied through the process's descriptor: <code>: &gt; /proc/1874/fd/3</code>, losing the log's contents.</p>`}},
+
+{at:["fs","lv","vg","sdb","sdc"],frame:D9,kind:"d",move:[[["adm","fs"]]],log:{ro:"inventarul discurilor",en:"the disk inventory"},who:"lsblk",
+ title:{ro:"Datele cresc: inventarul discurilor înainte de orice schimbare",en:"The data keeps growing: a disk inventory before any change"},
+ body:{ro:`<p>Chiar și fără probleme, magazinul crește, iar echipa a cerut un disc nou de 100 GB, <code>/dev/sdc</code>. Înainte să atingi ceva, faci <strong>inventarul</strong>:</p>
+<ul><li><code>lsblk -f</code>: discurile, partițiile, tipul (FSTYPE), UUID-ul și unde sunt montate. <code>sdb</code> e <code>LVM2_member</code> și conține <code>vg_data-lv_var</code>; <code>sdc</code> nu are nimic pe el;</li>
+<li><code>findmnt /var</code>: <code>/var</code> vine din <code>/dev/mapper/vg_data-lv_var</code>, ext4.</li></ul>
+<p class="key">Nu rula pvcreate sau mkfs pe un disc pe care nu l-ai identificat sigur. Un <code>/dev/sdc</code> poate avea alt nume după un restart.</p>`,
+ en:`<p>Even without problems, the shop keeps growing, and the team asked for a new 100 GB disk, <code>/dev/sdc</code>. Before touching anything, you take an <strong>inventory</strong>:</p>
+<ul><li><code>lsblk -f</code>: disks, partitions, type (FSTYPE), UUID and where they're mounted. <code>sdb</code> is <code>LVM2_member</code> and holds <code>vg_data-lv_var</code>; <code>sdc</code> has nothing on it;</li>
+<li><code>findmnt /var</code>: <code>/var</code> comes from <code>/dev/mapper/vg_data-lv_var</code>, ext4.</li></ul>
+<p class="key">Don't run pvcreate or mkfs on a disk you haven't positively identified. A <code>/dev/sdc</code> may have another name after a reboot.</p>`},
+ more:{ro:`<p><code>sudo blkid</code> arată UUID-ul și tipul fiecărui dispozitiv. În <code>/etc/fstab</code>, UUID-ul sau calea <code>/dev/mapper/…</code> sunt stabile; <code>/dev/sdX</code> nu. <code>findmnt --verify</code> verifică fstab înainte de un restart.</p>`,
+  en:`<p><code>sudo blkid</code> shows each device's UUID and type. In <code>/etc/fstab</code>, the UUID or the <code>/dev/mapper/…</code> path is stable; <code>/dev/sdX</code> isn't. <code>findmnt --verify</code> checks fstab before a reboot.</p>`},
+ try:[{cmd:"lsblk -f",d:{ro:"Discuri, FSTYPE, UUID, montări.",en:"Disks, FSTYPE, UUID, mounts."}},{cmd:"findmnt /var",d:{ro:"Ce e montat pe /var.",en:"What's mounted on /var."}}]},
+
+{at:"vg",frame:D10,kind:"d",move:[[["adm","vg"]]],marks:{vg:{k:"drop",t:"VFree 0"}},tables:["lvm"],hl:{lvm:"VG"},log:{ro:"VG plin",en:"VG full"},who:"pvs · vgs · lvs",
+ title:{ro:"LVM: PV → VG → LV, și VG-ul nu mai are loc",en:"LVM: PV → VG → LV, and the VG has no room left"},
+ body:{ro:`<p>LVM pune discurile într-un rezervor comun și taie din el volume:</p>
+<ul><li><strong>PV</strong> (physical volume): un disc sau o partiție pregătită pentru LVM: <code>/dev/sdb</code>;</li>
+<li><strong>VG</strong> (volume group): rezervorul, din unul sau mai multe PV-uri: <code>vg_data</code>;</li>
+<li><strong>LV</strong> (logical volume): un „disc virtual” tăiat din VG: <code>lv_var</code>, pe care stă ext4.</li></ul>
+<p><code>pvs</code>, <code>vgs</code> și <code>lvs</code> le arată pe rând. <code>vgs -o vg_name,vg_size,vg_free</code>: <strong>VFree 0</strong>. Tot VG-ul e dat lui <code>lv_var</code>. Ca să crească, VG-ul are nevoie de un PV nou.</p>`,
+ en:`<p>LVM pools disks into a shared reservoir and carves volumes out of it:</p>
+<ul><li><strong>PV</strong> (physical volume): a disk or partition prepared for LVM: <code>/dev/sdb</code>;</li>
+<li><strong>VG</strong> (volume group): the pool, made of one or more PVs: <code>vg_data</code>;</li>
+<li><strong>LV</strong> (logical volume): a "virtual disk" carved from the VG: <code>lv_var</code>, which holds ext4.</li></ul>
+<p><code>pvs</code>, <code>vgs</code> and <code>lvs</code> show them in turn. <code>vgs -o vg_name,vg_size,vg_free</code>: <strong>VFree 0</strong>. The whole VG is given to <code>lv_var</code>. To grow, the VG needs a new PV.</p>`},
+ try:[{cmd:"sudo pvs; sudo vgs; sudo lvs",d:{ro:"Inventarul LVM.",en:"The LVM inventory."}},{cmd:"sudo lvs -a -o +devices",d:{ro:"Pe ce discuri stă fiecare LV.",en:"Which disks each LV sits on."}}]},
+
+{at:"vg",frame:D11,kind:"d",move:[[["adm","vg"]],[["vg","sdc"]]],marks:{vg:{k:"ok",t:"VFree 100G"}},log:{ro:"PV nou în VG",en:"new PV in the VG"},who:"vgextend",
+ title:{ro:"Discul nou intră în VG… dar /var nu crește singur",en:"The new disk joins the VG… but /var doesn't grow on its own"},
+ body:{ro:`<p>După ce ai confirmat că <code>/dev/sdc</code> e discul nou și gol:</p>
+<ul><li><code>pvcreate /dev/sdc</code>: îl pregătește ca PV (scrie un antet LVM);</li>
+<li><code>vgextend vg_data /dev/sdc</code>: îl adaugă în rezervor.</li></ul>
+<p><code>vgs</code>: VG-ul are acum 200 GB, din care <strong>100 GB liberi</strong>. Dar <code>df -hT /var</code> arată tot 99 GB.</p>
+<p class="key">Spațiul liber din VG nu ajunge automat nici în LV, nici în sistemul de fișiere. E o întrebare clasică de interviu.</p>`,
+ en:`<p>Once you've confirmed <code>/dev/sdc</code> is the new, empty disk:</p>
+<ul><li><code>pvcreate /dev/sdc</code>: prepares it as a PV (writes an LVM header);</li>
+<li><code>vgextend vg_data /dev/sdc</code>: adds it to the pool.</li></ul>
+<p><code>vgs</code>: the VG now has 200 GB, <strong>100 GB of it free</strong>. But <code>df -hT /var</code> still shows 99 GB.</p>
+<p class="key">Free space in the VG doesn't flow automatically into the LV, or into the filesystem. It's a classic interview question.</p>`}},
+
+{at:["lv","fs"],frame:D12,kind:"d",move:[[["vg","lv"]],[["lv","fs"]]],marks:{fs:{k:"ok",t:"147G"}},log:{ro:"/var mărit online",en:"/var grown online"},who:"lvextend -r",
+ title:{ro:"lvextend -r: LV-ul și sistemul de fișiere cresc împreună, online",en:"lvextend -r: the LV and the filesystem grow together, online"},
+ body:{ro:`<p><code>lvextend -r -L +50G /dev/vg_data/lv_var</code>:</p>
+<ul><li><code>-L +50G</code>: adaugă 50 GB din VG la LV;</li>
+<li><code>-r</code>: imediat după, mărește și sistemul de fișiere (pentru ext4 rulează <code>resize2fs</code>). Fără <code>-r</code>, LV-ul ar fi mai mare, dar <code>df</code> ar arăta la fel.</li></ul>
+<p>ext4 se poate mări <strong>online</strong>, cu <code>/var</code> montat și aplicația pornită. Dovezile, toate trei: <code>lvs</code> (149 GB), <code>vgs</code> (50 GB rămași în rezervă), <code>df -hT /var</code> (147 GB).</p>`,
+ en:`<p><code>lvextend -r -L +50G /dev/vg_data/lv_var</code>:</p>
+<ul><li><code>-L +50G</code>: adds 50 GB from the VG to the LV;</li>
+<li><code>-r</code>: right after, grows the filesystem too (for ext4 it runs <code>resize2fs</code>). Without <code>-r</code>, the LV would be bigger but <code>df</code> would look the same.</li></ul>
+<p>ext4 can grow <strong>online</strong>, with <code>/var</code> mounted and the app running. The evidence, all three: <code>lvs</code> (149 GB), <code>vgs</code> (50 GB left in reserve), <code>df -hT /var</code> (147 GB).</p>`},
+ more:{ro:`<p>Micșorarea e altă poveste: ext4 se micșorează doar demontat, iar XFS nu se poate micșora deloc. De aceea mulți lasă intenționat spațiu liber în VG și măresc treptat.</p>`,
+  en:`<p>Shrinking is another story: ext4 shrinks only when unmounted, and XFS can't shrink at all. That's why many leave free space in the VG on purpose and grow gradually.</p>`},
+ try:[{cmd:"sudo lvextend -r -L +50G /dev/vg_data/lv_var",d:{ro:"LAB CHANGE: mărește LV-ul și ext4.",en:"LAB CHANGE: grows the LV and ext4."}}]},
+
+{at:["app","fs","lv","vg","sdb","sdc"],frame:null,kind:"none",summary:true,
+ title:{ro:"Recapitulare",en:"Recap"},
+ body:{ro:`<ul><li>„No space left” cu GB liberi → <code>df -i</code>: inode-urile s-au terminat (milioane de fișiere mici).</li>
+<li><code>du --inodes</code> găsește directorul cu prea multe fișiere; ștergi țintit cu <code>find … -mmin +N -delete</code>, după o rulare fără <code>-delete</code>.</li>
+<li><code>df</code> mare, <code>du</code> mic → <code>lsof +L1</code>: fișiere șterse, încă deschise. Le eliberezi cu reload, nu cu alte ștergeri.</li>
+<li>Înainte de orice schimbare: <code>lsblk -f</code>, <code>findmnt</code>, <code>blkid</code>.</li>
+<li>LVM: <strong>PV → VG → LV → filesystem → mount</strong>. <code>pvcreate</code> + <code>vgextend</code> măresc VG-ul; <code>lvextend -r</code> mărește LV-ul și sistemul de fișiere.</li>
+<li>Dovada unei măriri: <code>lvs</code>, <code>vgs</code> și <code>df -hT</code>, împreună.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Mergi la laborator ↓</button></p>`,
+ en:`<ul><li>"No space left" with GBs free → <code>df -i</code>: the inodes ran out (millions of small files).</li>
+<li><code>du --inodes</code> finds the directory with too many files; you delete precisely with <code>find … -mmin +N -delete</code>, after a run without <code>-delete</code>.</li>
+<li>Big <code>df</code>, small <code>du</code> → <code>lsof +L1</code>: deleted files still open. You free them with a reload, not more deletions.</li>
+<li>Before any change: <code>lsblk -f</code>, <code>findmnt</code>, <code>blkid</code>.</li>
+<li>LVM: <strong>PV → VG → LV → filesystem → mount</strong>. <code>pvcreate</code> + <code>vgextend</code> grow the VG; <code>lvextend -r</code> grows the LV and the filesystem.</li>
+<li>Proof of a resize: <code>lvs</code>, <code>vgs</code> and <code>df -hT</code>, together.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Go to the lab ↓</button></p>`}}
+],
+
+reference:(T,lang)=>{
+  const ro=lang==="ro";
+  return `<div class="ref-grid"><section class="card refcard"><h2>${ro?"Spațiu și fișiere":"Space and files"}</h2>
+<pre class="yaml">df -hT /var                          <span class="c"># ${ro?"spațiu și tip FS":"space and FS type"}</span>
+df -i /var                           <span class="c"># ${ro?"inode-uri":"inodes"}</span>
+sudo du -xhd1 /var | sort -h         <span class="c"># ${ro?"ce director ocupă":"which directory uses it"}</span>
+sudo du --inodes -xd2 /var | sort -n
+sudo lsof +L1                        <span class="c"># ${ro?"șterse, încă deschise":"deleted, still open"}</span>
+ls -li /etc/passwd                   <span class="c"># ${ro?"numărul inode-ului":"the inode number"}</span>
+find DIR -type f -mmin +1440         <span class="c"># ${ro?"întâi fără -delete":"first without -delete"}</span></pre>
+<h3>${ro?"Discuri și montări":"Disks and mounts"}</h3>
+<pre class="yaml">lsblk -f
+findmnt /var
+sudo blkid
+findmnt --verify                     <span class="c"># ${ro?"verifică /etc/fstab":"checks /etc/fstab"}</span></pre></section>
+<section class="card refcard"><h2>LVM</h2>
+<pre class="yaml">sudo pvs; sudo vgs; sudo lvs
+sudo vgs -o vg_name,vg_size,vg_free
+sudo lvs -a -o +devices
+<span class="c"># LAB CHANGE</span>
+sudo pvcreate /dev/sdc
+sudo vgextend vg_data /dev/sdc
+sudo lvextend -r -L +50G /dev/vg_data/lv_var
+<span class="c"># ${ro?"volum nou de la zero":"a new volume from scratch"}</span>
+sudo lvcreate -n lv_backup -L 20G vg_data
+sudo mkfs.ext4 /dev/vg_data/lv_backup
+sudo mkdir -p /backup
+echo '/dev/vg_data/lv_backup /backup ext4 defaults 0 2' | sudo tee -a /etc/fstab
+sudo mount -a</pre>
+<h3>${ro?"Întrebări de interviu":"Interview questions"}</h3>
+<pre class="yaml">${ro?"VG de 10 GB, LV de 4 GB. Unde e restul?":"A 10 GB VG, a 4 GB LV. Where's the rest?"}
+  → ${ro?"VFree în VG; nu ajunge singur în LV sau FS.":"VFree in the VG; it doesn't reach the LV or FS by itself."}
+${ro?"Cum dovedești că LV-ul a crescut?":"How do you prove the LV grew?"}
+  → lvs + vgs + df -hT + findmnt</pre></section></div>`;
+},
+
+gloss:[
+ ["Inode",null,{ro:"Fișa unui fișier: proprietar, drepturi, date, adresa blocurilor. Una per fișier.",en:"A file's record: owner, permissions, timestamps, block addresses. One per file."}],
+ ["ENOSPC",null,{ro:"Eroarea kernelului „No space left on device”: lipsesc blocuri sau inode-uri.",en:"The kernel error \"No space left on device\": blocks or inodes are missing."}],
+ [{ro:"Descriptor de fișier",en:"File descriptor"},null,{ro:"Numărul prin care un proces lucrează cu un fișier deschis.",en:"The number a process uses to work with an open file."}],
+ ["PV",null,{ro:"Physical Volume: disc sau partiție pregătită pentru LVM.",en:"Physical Volume: a disk or partition prepared for LVM."}],
+ ["VG",null,{ro:"Volume Group: rezervorul format din PV-uri.",en:"Volume Group: the pool made of PVs."}],
+ ["LV",null,{ro:"Logical Volume: volum tăiat din VG, pe care pui un sistem de fișiere.",en:"Logical Volume: a volume carved from the VG, holding a filesystem."}],
+ ["LVM",null,{ro:"Logical Volume Manager: discuri puse la un loc și împărțite flexibil.",en:"Logical Volume Manager: disks pooled and split flexibly."}],
+ ["fstab",null,{ro:"/etc/fstab: ce se montează automat la boot și unde.",en:"/etc/fstab: what's mounted automatically at boot, and where."}],
+ ["logrotate",null,{ro:"Unealta care rotește, comprimă și șterge logurile vechi.",en:"The tool that rotates, compresses and deletes old logs."}]
+],
+glossEx:{
+ "Inode":{ro:"6,4 milioane de sesiuni au consumat toate inode-urile, cu 34 GB încă liberi.",en:"6.4 million sessions used up every inode, with 34 GB still free."},
+ "VG":{ro:"vg_data: 100 GB pe sdb, apoi 200 GB după vgextend cu sdc.",en:"vg_data: 100 GB on sdb, then 200 GB after vgextend with sdc."}
+},
+
+quiz:[
+ {"q":{"ro":"„No space left on device”, dar df -hT arată 34 GB liberi. Ce verifici?","en":"\"No space left on device\", but df -hT shows 34 GB free. What do you check?"},"o":["free -h",{"ro":"top","en":"top"},"df -i","lsblk"],"a":2,"e":{"ro":"Inode-urile se pot termina înaintea spațiului.","en":"Inodes can run out before space does."}},
+ {"q":{"ro":"Ce consumă inode-urile cel mai repede?","en":"What uses up inodes fastest?"},"o":[{"ro":"Câteva fișiere foarte mari","en":"A few very big files"},{"ro":"Milioane de fișiere mici","en":"Millions of small files"},{"ro":"Procesele multe","en":"Many processes"},{"ro":"Memoria RAM","en":"RAM"}],"a":1,"e":{"ro":"Un inode per fișier, oricât de mic.","en":"One inode per file, however small."}},
+ {"q":{"ro":"df arată 97%, du găsește doar 44 GB din 96. Ce comandă te ajută?","en":"df shows 97%, du finds only 44 of 96 GB. Which command helps?"},"o":["lsof +L1","df -i","fdisk -l","mount -a"],"a":0,"e":{"ro":"Fișiere șterse, încă ținute deschise de un proces.","en":"Deleted files still held open by a process."}},
+ {"q":{"ro":"lsof +L1 arată app.log (deleted), 52 GB, deschis de shop-app. Ce faci?","en":"lsof +L1 shows app.log (deleted), 52 GB, held by shop-app. What do you do?"},"o":[{"ro":"Ștergi alte fișiere","en":"Delete other files"},{"ro":"rm /var/log/shop/app.log","en":"rm /var/log/shop/app.log"},{"ro":"Formatezi /var","en":"Format /var"},{"ro":"Faci ca procesul să-și redeschidă logurile (reload) și repari logrotate","en":"Make the process reopen its logs (reload) and fix logrotate"}],"a":3,"e":{"ro":"Spațiul se eliberează când se închide ultimul descriptor.","en":"The space is freed when the last descriptor closes."}},
+ {"q":{"ro":"Care e ordinea straturilor LVM?","en":"What's the order of the LVM layers?"},"o":["VG → PV → LV → FS","LV → VG → PV → mount","PV → VG → LV → FS → mount","FS → LV → VG → PV"],"a":2,"e":{"ro":"pvcreate, vgcreate, lvcreate, mkfs, mount.","en":"pvcreate, vgcreate, lvcreate, mkfs, mount."}},
+ {"q":{"ro":"După vgextend, VG-ul are 100 GB liberi. Cât a crescut /var?","en":"After vgextend, the VG has 100 GB free. How much did /var grow?"},"o":["100 GB",{"ro":"Deloc: spațiul liber din VG nu ajunge singur în LV","en":"Not at all: free VG space doesn't reach the LV by itself"},"50 GB",{"ro":"Depinde de RAM","en":"It depends on RAM"}],"a":1,"e":{"ro":"Trebuie lvextend (cu -r pentru FS).","en":"You need lvextend (with -r for the FS)."}},
+ {"q":{"ro":"Ce face -r în lvextend -r -L +50G?","en":"What does -r do in lvextend -r -L +50G?"},"o":[{"ro":"Mărește și sistemul de fișiere după LV","en":"Also grows the filesystem after the LV"},{"ro":"Repornește serverul","en":"Reboots the server"},{"ro":"Face backup","en":"Makes a backup"},{"ro":"Rulează doar în modul citire","en":"Runs read-only"}],"a":0,"e":{"ro":"Pentru ext4 apelează resize2fs.","en":"For ext4 it calls resize2fs."}},
+ {"q":{"ro":"Ce rulezi înainte de pvcreate pe un disc nou?","en":"What do you run before pvcreate on a new disk?"},"o":[{"ro":"Nimic, e un disc nou","en":"Nothing, it's a new disk"},"mkfs.ext4","rm -rf /",{"ro":"lsblk -f și blkid: confirmi că e discul corect și că e gol","en":"lsblk -f and blkid: confirm it's the right disk and that it's empty"}],"a":3,"e":{"ro":"pvcreate pe discul greșit distruge date.","en":"pvcreate on the wrong disk destroys data."}}
+]
+};
+})();
+</script>
+<script src="../assets/engine.js?v=4"></script>
+<script src="../assets/labs-data.js?v=8"></script>
+<script src="../assets/lab.js?v=1"></script>
+<script type="module" src="../assets/auth.js?v=15"></script>
+</body>
+</html>

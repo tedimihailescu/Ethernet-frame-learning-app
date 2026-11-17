@@ -353,6 +353,54 @@ terraform: { title: "Terraform", tasks: [
  { type: "order", name: B("Drumul unei schimbări", "A change's path"), q: B("Ordonează drumul cache-ului Redis, de la cod la producție.", "Order the Redis cache's path, from code to production."),
    items: [B("Deschizi PR-ul cu modulul cache", "Open the PR with the cache module"), B("CI rulează fmt, validate, tflint, trivy", "CI runs fmt, validate, tflint, trivy"), B("Rolul tf-plan (OIDC) face plan; planul apare în PR", "The tf-plan role (OIDC) runs the plan; the plan appears in the PR"), B("Doi colegi citesc planul și aprobă; merge în main", "Two colleagues read the plan and approve; merge into main"), B("Apply automat pe staging, din planul salvat", "Automatic apply on staging, from the saved plan"), B("Aprobare manuală, apoi apply pe producție", "Manual approval, then apply on production")],
    hint: B("Producția vine ultima, după staging.", "Production comes last, after staging.") }
+]},
+
+"linux-retea": { title: "Linux: rețea", tasks: [
+ { type: "term", name: B("Cine ascultă pe 8080?", "Who listens on 8080?"), q: B("Afișează socket-ul TCP care ascultă pe portul 8080, cu adresa și procesul.", "Show the TCP socket listening on port 8080, with its address and process."),
+   prompt: "$", need: ["ss", ["-ltnp", "-tlnp", "-lntp", "-ntlp", "-tnlp", "-nltp"], "8080"], sol: "sudo ss -ltnp \"sport = :8080\"",
+   out: "State  Recv-Q Send-Q Local Address:Port Peer Address:Port Process\nLISTEN 0      511    127.0.0.1:8080     0.0.0.0:*         users:((\"orders-api\",pid=1432,fd=7))",
+   hint: B("ss -ltnp \"sport = :PORT\"", "ss -ltnp \"sport = :PORT\""), why: B("127.0.0.1 = doar local; pentru rețea trebuie 0.0.0.0 sau IP-ul interfeței.", "127.0.0.1 = local only; for the network you need 0.0.0.0 or the interface's IP.") },
+ { type: "input", name: B("Modul strict", "Strict mode"), q: B("Ce valoare are net.ipv4.conf.all.rp_filter în modul strict? (un număr)", "What value does net.ipv4.conf.all.rp_filter have in strict mode? (a number)"),
+   ans: ["1", "unu", "one"], hint: B("0 = oprit, 2 = loose.", "0 = off, 2 = loose."), why: B("Strict aruncă pachetele al căror drum înapoi nu e prin aceeași interfață.", "Strict drops packets whose way back isn't through the same interface.") },
+ { type: "order", name: B("Ordinea de depanare", "Troubleshooting order"), q: B("Ordonează verificările pentru „Connection timed out” pe 10.10.20.15:8080.", "Order the checks for \"Connection timed out\" on 10.10.20.15:8080."),
+   items: [B("curl -v de pe client: timeout sau refused?", "curl -v from the client: timeout or refused?"), B("ip -br addr: interfețele și adresele", "ip -br addr: interfaces and addresses"), B("ss -ltnp: cine ascultă și pe ce adresă", "ss -ltnp: who listens, and on which address"), B("tcpdump: ajunge SYN-ul? pleacă SYN-ACK?", "tcpdump: does the SYN arrive? does a SYN-ACK leave?"), B("nft list ruleset: contorul regulii", "nft list ruleset: the rule's counter"), B("ip route get + rp_filter: drum asimetric?", "ip route get + rp_filter: an asymmetric path?")],
+   hint: B("De la simptom spre detaliu; întâi comenzi care doar citesc.", "From the symptom towards the detail; read-only commands first.") }
+]},
+
+"linux-servicii": { title: "systemd", tasks: [
+ { type: "term", name: B("Logurile serviciului", "The service's logs"), q: B("Afișează ultimele 50 de linii din jurnalul unității nginx, doar pentru boot-ul curent, fără pager.", "Show the last 50 lines of the nginx unit's journal, current boot only, without a pager."),
+   prompt: "$", need: ["journalctl", ["-u", "--unit"], "nginx", "-b", ["-n", "--lines"]], sol: "journalctl -u nginx -b -n 50 --no-pager",
+   out: "Nov 17 09:12:04 web01 systemd[1]: Starting nginx.service - A high performance web server...\nNov 17 09:12:04 web01 nginx[2290]: nginx: [emerg] bind() to 0.0.0.0:80 failed (98: Address already in use)\nNov 17 09:12:04 web01 systemd[1]: nginx.service: Failed with result 'exit-code'.",
+   hint: B("journalctl -u <unitate> -b -n <N>", "journalctl -u <unit> -b -n <N>"), why: B("98: Address already in use → ss -ltnp ca să vezi cine ține portul.", "98: Address already in use → ss -ltnp to see who holds the port.") },
+ { type: "input", name: B("Codul systemd", "The systemd code"), q: B("Ce status arată systemctl când programul din ExecStart nu poate fi executat (de ex. calea nu există)? (format N/NUME)", "Which status does systemctl show when the ExecStart program can't be executed (e.g. the path doesn't exist)? (format N/NAME)"),
+   ans: ["203/exec", "203"], hint: B("Un cod de peste 200, al lui systemd.", "A code above 200, systemd's own."), why: B("Verifici calea, bitul x, shebang-ul și mount-ul noexec.", "Check the path, the x bit, the shebang and a noexec mount.") },
+ { type: "order", name: B("Repararea lui nginx", "Fixing nginx"), q: B("Ordonează pașii prin care nginx pornește din nou.", "Order the steps that get nginx running again."),
+   items: [B("systemctl status nginx: failed, 203/EXEC", "systemctl status nginx: failed, 203/EXEC"), B("systemctl edit nginx: ExecStart corectat", "systemctl edit nginx: ExecStart fixed"), B("journalctl -u nginx -b: Address already in use", "journalctl -u nginx -b: Address already in use"), B("ss -ltnp: apache2 ține portul 80", "ss -ltnp: apache2 holds port 80"), B("systemctl disable --now apache2", "systemctl disable --now apache2"), B("systemctl enable --now nginx și curl -I", "systemctl enable --now nginx and curl -I")],
+   hint: B("Prima eroare ascundea a doua.", "The first error hid the second.") }
+]},
+
+"linux-disc": { title: "Disc și LVM", tasks: [
+ { type: "term", name: B("Inode-urile", "The inodes"), q: B("„No space left on device”, dar df -hT arată spațiu liber. Verifică inode-urile pentru /var.", "\"No space left on device\", but df -hT shows free space. Check the inodes for /var."),
+   prompt: "$", need: ["df", "-i", "/var"], sol: "df -i /var",
+   out: "Filesystem                   Inodes   IUsed IFree IUse% Mounted on\n/dev/mapper/vg_data-lv_var  6553600 6553600     0  100% /var",
+   hint: B("df cu opțiunea pentru inode-uri", "df with the inode option"), why: B("IUse% 100%: nu se mai poate crea niciun fișier.", "IUse% 100%: no new file can be created.") },
+ { type: "input", name: B("Fișiere șterse, încă deschise", "Deleted files, still open"), q: B("df arată 97%, du doar 44 GB. Ce comandă listează fișierele șterse dar încă deschise? (comanda și opțiunea)", "df shows 97%, du only 44 GB. Which command lists files deleted but still open? (command and option)"),
+   ans: ["lsof +l1", "sudo lsof +l1"], hint: B("lsof, cu „mai puțin de o legătură”.", "lsof, with \"fewer than one link\"."), why: B("Spațiul se eliberează când procesul închide fișierul.", "The space is freed when the process closes the file.") },
+ { type: "order", name: B("Mărirea lui /var", "Growing /var"), q: B("Ordonează pașii prin care /var crește cu un disc nou, online.", "Order the steps for /var to grow with a new disk, online."),
+   items: [B("lsblk -f și blkid: sdc e discul nou și gol", "lsblk -f and blkid: sdc is the new, empty disk"), B("pvcreate /dev/sdc", "pvcreate /dev/sdc"), B("vgextend vg_data /dev/sdc", "vgextend vg_data /dev/sdc"), B("vgs: VFree 100G, /var încă 99G", "vgs: VFree 100G, /var still 99G"), B("lvextend -r -L +50G /dev/vg_data/lv_var", "lvextend -r -L +50G /dev/vg_data/lv_var"), B("lvs, vgs și df -hT confirmă", "lvs, vgs and df -hT confirm")],
+   hint: B("PV → VG → LV → filesystem.", "PV → VG → LV → filesystem.") }
+]},
+
+"linux-performanta": { title: "Server lent", tasks: [
+ { type: "term", name: B("Dovada OOM", "The OOM proof"), q: B("Caută în jurnalul kernelului, boot-ul curent, dovezi că OOM killer-ul a omorât un proces.", "Search the kernel journal, current boot, for evidence that the OOM killer killed a process."),
+   prompt: "$", need: ["journalctl", "-k", "-b", "grep", ["oom", "out of memory", "killed process"]], sol: "journalctl -k -b | grep -iE \"oom|out of memory|killed process\"",
+   out: "Nov 17 14:07:52 api01 kernel: java invoked oom-killer: gfp_mask=0x140cca(GFP_HIGHUSER_MOVABLE|__GFP_COMP), order=0, oom_score_adj=0\nNov 17 14:07:52 api01 kernel: Out of memory: Killed process 3388 (java) total-vm:15872412kB, anon-rss:12141220kB, file-rss:0kB, shmem-rss:0kB, UID:1002 oom_score_adj:0",
+   hint: B("journalctl -k -b | grep -iE \"…\"", "journalctl -k -b | grep -iE \"…\""), why: B("Exit 137 singur nu dovedește OOM; linia kernelului da.", "Exit 137 alone doesn't prove OOM; the kernel line does.") },
+ { type: "input", name: B("Coloana importantă", "The column that matters"), q: B("Ce coloană din free -h arată câtă memorie poate primi un program nou fără swap? (un cuvânt)", "Which free -h column shows how much memory a new program can get without swapping? (one word)"),
+   ans: ["available"], hint: B("Nu „free”.", "Not \"free\"."), why: B("free e mic pentru că RAM-ul liber e folosit drept cache.", "free is small because free RAM is used as cache.") },
+ { type: "order", name: B("De la simptom la cauză", "From symptom to cause"), q: B("Ordonează investigația pentru serverul lent.", "Order the investigation for the slow server."),
+   items: [B("uptime: load 18 pe 4 nuclee", "uptime: load 18 on 4 cores"), B("top: 66% wa, procese în D", "top: 66% wa, processes in D"), B("vmstat 1 5: si/so mari", "vmstat 1 5: high si/so"), B("free -h: available 160 MiB", "free -h: available 160 MiB"), B("ps --sort=-%mem: report-job 11,6 GB", "ps --sort=-%mem: report-job 11.6 GB"), B("journalctl -k: Out of memory: Killed process", "journalctl -k: Out of memory: Killed process")],
+   hint: B("De la general (load) la proces și dovadă.", "From general (load) to the process and the proof.") }
 ]}
 };
 })();
