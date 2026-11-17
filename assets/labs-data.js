@@ -329,6 +329,30 @@ cassandra: { title: "Cassandra", tasks: [
  { type: "order", name: B("Viața unei scrieri", "A write's life"), q: B("Ordonează drumul evenimentului IN_TRANSIT, de la aplicație până la disc.", "Order the IN_TRANSIT event's path, from the app to disk."),
    items: [B("Driverul calculează tokenul cheii parcel_id", "The driver works out the parcel_id key's token"), B("Coordonatorul trimite scrierea la cele 3 replici", "The coordinator sends the write to the 3 replicas"), B("Fiecare replică adaugă la commit log și pune în memtable", "Each replica appends to the commit log and puts it in the memtable"), B("2 replici confirmă: QUORUM, aplicația primește OK", "2 replicas acknowledge: QUORUM, the app gets OK"), B("Memtable-ul plin e scris pe disc ca SSTable", "The full memtable is written to disk as an SSTable"), B("Compactarea îmbină SSTable-urile", "Compaction merges the SSTables")],
    hint: B("Aplicația primește OK înainte ca datele să ajungă în SSTable.", "The app gets OK before the data reaches an SSTable.") }
+]},
+
+terraform: { title: "Terraform", tasks: [
+ { type: "term", name: B("Planul salvat", "The saved plan"), q: B("Calculează planul și salvează-l în fișierul tfplan, ca apply-ul să facă exact ce ai văzut.", "Work out the plan and save it to the tfplan file, so the apply does exactly what you saw."),
+   prompt: "$", need: ["terraform", "plan", ["-out=tfplan", "-out tfplan"]], sol: "terraform plan -out=tfplan",
+   out: "aws_vpc.main: Refreshing state... [id=vpc-0a1b2c3d4e5f60718]\n\n  # aws_instance.web will be updated in-place\n  ~ resource \"aws_instance\" \"web\" {\n      ~ instance_type = \"t3.small\" -> \"t3.medium\"\n    }\n\nPlan: 0 to add, 1 to change, 0 to destroy.\n\nSaved the plan to: tfplan",
+   hint: B("terraform plan -out=<fișier>", "terraform plan -out=<file>"), why: B("Apoi terraform apply tfplan aplică exact acest plan.", "Then terraform apply tfplan applies exactly this plan.") },
+ { type: "input", name: B("Simbolul de înlocuire", "The replacement symbol"), q: B("Ce simbol arată planul când o resursă e ștearsă și creată din nou (forces replacement)?", "Which symbol does the plan show when a resource is deleted and created again (forces replacement)?"),
+   ans: ["-/+", "-/+ destroy and then create replacement"], hint: B("Două semne, cu o bară între ele.", "Two signs, with a slash between them."), why: B("~ = modificare pe loc, -/+ = înlocuire, - = ștergere.", "~ = in-place update, -/+ = replacement, - = deletion.") },
+ { type: "order", name: B("Ciclul Terraform", "The Terraform cycle"), q: B("Ordonează pașii, de la cod la infrastructura creată.", "Order the steps, from code to the infrastructure created."),
+   items: [B("Scrii resursele în main.tf", "Write the resources in main.tf"), B("terraform init descarcă providerul aws", "terraform init downloads the aws provider"), B("terraform plan compară codul, starea și realitatea", "terraform plan compares the code, the state and reality"), B("Citești simbolurile din plan (+ ~ -/+ -)", "Read the symbols in the plan (+ ~ -/+ -)"), B("terraform apply face apelurile API, în ordinea grafului", "terraform apply makes the API calls, in the graph's order"), B("ID-urile reale sunt scrise în terraform.tfstate", "The real IDs are written to terraform.tfstate")],
+   hint: B("Providerul trebuie descărcat înainte de orice plan.", "The provider must be downloaded before any plan.") }
+]},
+
+"terraform-deploy": { title: "Terraform deploy", tasks: [
+ { type: "term", name: B("Mutarea stării în S3", "Moving the state to S3"), q: B("Ai adăugat backend-ul s3 în backend.tf. Inițializează folderul și mută starea locală în noul backend.", "You've added the s3 backend to backend.tf. Initialise the folder and move the local state to the new backend."),
+   prompt: "$", need: ["terraform", "init", "-migrate-state"], sol: "terraform init -migrate-state",
+   out: "Initializing the backend...\nDo you want to copy existing state to the new backend?\n  Enter a value: yes\n\nSuccessfully configured the backend \"s3\"! Terraform will automatically\nuse this backend unless the backend configuration changes.",
+   hint: B("terraform init -<opțiune>", "terraform init -<option>"), why: B("Starea e acum în S3, cu versionare și lock.", "The state is now in S3, with versioning and locking.") },
+ { type: "input", name: B("Codul de drift", "The drift exit code"), q: B("Cu ce cod de ieșire se termină terraform plan -detailed-exitcode când realitatea diferă de cod? (un număr)", "Which exit code does terraform plan -detailed-exitcode end with when reality differs from the code? (a number)"),
+   ans: ["2", "doi", "two"], hint: B("0 = nimic, 1 = eroare, …", "0 = nothing, 1 = error, …"), why: B("Drift check-ul de noapte trimite o alertă la codul 2.", "The nightly drift check sends an alert on exit code 2.") },
+ { type: "order", name: B("Drumul unei schimbări", "A change's path"), q: B("Ordonează drumul cache-ului Redis, de la cod la producție.", "Order the Redis cache's path, from code to production."),
+   items: [B("Deschizi PR-ul cu modulul cache", "Open the PR with the cache module"), B("CI rulează fmt, validate, tflint, trivy", "CI runs fmt, validate, tflint, trivy"), B("Rolul tf-plan (OIDC) face plan; planul apare în PR", "The tf-plan role (OIDC) runs the plan; the plan appears in the PR"), B("Doi colegi citesc planul și aprobă; merge în main", "Two colleagues read the plan and approve; merge into main"), B("Apply automat pe staging, din planul salvat", "Automatic apply on staging, from the saved plan"), B("Aprobare manuală, apoi apply pe producție", "Manual approval, then apply on production")],
+   hint: B("Producția vine ultima, după staging.", "Production comes last, after staging.") }
 ]}
 };
 })();

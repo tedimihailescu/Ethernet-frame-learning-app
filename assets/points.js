@@ -3,7 +3,8 @@
 // was won or lost at the roulette (users/{uid}.roulette, a running total).
 export const TESTS = ["ethernet", "vlan", "nat", "dns", "https", "ipv6", "bgp", "tomcat", "monolit-cpp",
   "microservicii", "kubernetes", "k8s-intrare", "ingress", "gke-retea", "service-mesh", "istio", "observabilitate",
-  "certificate", "load-balancing", "ldap", "kafka", "mq", "xfb", "xfb-gateway", "gitops", "artifactory", "cassandra"];
+  "certificate", "load-balancing", "ldap", "kafka", "mq", "xfb", "xfb-gateway", "gitops", "artifactory", "cassandra",
+  "terraform", "terraform-deploy"];
 export const PER_TEST = 5;
 export const START = 15;   // free starting points, so everyone can try the roulette
 export const MIN_SHARE = 0.8;

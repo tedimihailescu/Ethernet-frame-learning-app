@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Deploy de infrastructură cu Terraform</title>
+<meta name="description" content="Lecție interactivă: cum ajunge o schimbare de infrastructură în producție cu Terraform: stare remote în S3 cu lock, module versionate, medii separate, pull request cu plan, OIDC fără chei, politici, apply din planul salvat, aprobare pentru producție, eșecuri și drift. / Interactive lesson: deploying infrastructure with Terraform through a pipeline.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/diagram.css?v=1">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<script>
+(function(){
+const E=v=>v&&typeof v==="object"?(v.en||""):String(v||"");
+const PR="#212 · cache Redis pentru orders";const PRen="#212 · Redis cache for orders";
+const PRB={ro:PR,en:PRen};
+const D1={job:{ro:"apply rulat de pe laptopul Mariei și, în același minut, de pe al lui Dan",en:"apply run from Maria's laptop and, in the same minute, from Dan's"},creds:{ro:"chei AWS de admin în ~/.aws/credentials, pe fiecare laptop",en:"admin AWS keys in ~/.aws/credentials, on every laptop"},lock:{ro:"terraform.tfstate local: fiecare are altă versiune",en:"a local terraform.tfstate: each has a different version"},result:{ro:"Dan a recreat un subnet pe care Maria tocmai îl schimbase; starea lui Dan era veche de o săptămână",en:"Dan recreated a subnet Maria had just changed; Dan's state was a week old"}};
+const D2={file:"envs/prod/backend.tf",diff:"backend \"s3\": bucket = \"acme-tfstate\" · key = \"prod/terraform.tfstate\" · use_lockfile = true",cmd:"terraform init -migrate-state",lock:{ro:"S3 cu versionare și criptare; lock prin fișierul .tflock",en:"S3 with versioning and encryption; locking through the .tflock file"},result:{ro:"starea e acum una singură, comună, cu istoric",en:"there's now one shared state, with history"}};
+const D3={job:{ro:"apply prod (Dan) în timp ce rulează apply prod (pipeline)",en:"apply prod (Dan) while apply prod (pipeline) is running"},cmd:"terraform apply",lock:"Error acquiring the state lock · ID 9c1e…  Who: runner@ci-7  Operation: OperationTypeApply",result:{ro:"al doilea apply se oprește înainte să schimbe ceva",en:"the second apply stops before changing anything"}};
+const D4={file:"envs/prod/main.tf",diff:"module \"network\" { source = \"git::https://git.example.com/platform/tf-modules.git//network?ref=v1.4.0\" }",cmd:"terraform init",result:{ro:"același modul, aceeași versiune, în staging și în prod; doar intrările diferă",en:"the same module, the same version, in staging and prod; only the inputs differ"}};
+const D5={file:"envs/staging/ · envs/prod/",diff:{ro:"fiecare folder: backend.tf (altă cheie de stare) + main.tf (apelează modulele) + terraform.tfvars",en:"each folder: backend.tf (a different state key) + main.tf (calls the modules) + terraform.tfvars"},lock:"staging/terraform.tfstate · prod/terraform.tfstate",result:{ro:"o greșeală în staging nu poate atinge starea producției",en:"a mistake in staging can't touch production's state"}};
+const D6={pr:PRB,file:"modules/cache/main.tf · envs/*/main.tf",diff:"+ module \"cache\" { node_type = var.cache_node_type }",job:"terraform-plan (staging, prod)",cmd:"fmt -check · validate · tflint · trivy config",result:{ro:"verificările trec; urmează planul",en:"the checks pass; the plan comes next"}};
+const D7={pr:PRB,job:"terraform-plan",creds:{ro:"token OIDC (sub: repo:platform/infra-live:pull_request) → rol tf-plan (doar citire), valabil 1 h",en:"OIDC token (sub: repo:platform/infra-live:pull_request) → tf-plan role (read only), valid 1 h"},result:{ro:"nicio cheie AWS salvată în CI; un PR nu poate schimba nimic",en:"no AWS keys stored in CI; a PR can't change anything"}};
+const D8={pr:PRB,job:"terraform-plan",cmd:"terraform plan -lock=false -out=tfplan · conftest test",plan:"staging: 3 to add, 1 to change, 0 to destroy · prod: 3 to add, 1 to change, 0 to destroy",result:{ro:"planul e postat ca comentariu în PR; politica „fără criptare = respins” trece",en:"the plan is posted as a PR comment; the \"no encryption = rejected\" policy passes"}};
+const D9={pr:PRB,plan:"~ aws_security_group.app: + ingress 6379/tcp from sg-app",job:{ro:"review: 2 aprobări (echipa Platformă + echipa Comenzi)",en:"review: 2 approvals (Platform team + Orders team)"},result:{ro:"aprobat și îmbinat în main",en:"approved and merged into main"}};
+const D10={pr:{ro:PR+" (main)",en:PRen+" (main)"},job:"terraform-apply staging",creds:{ro:"OIDC (sub: …:environment:staging) → rol tf-apply-staging",en:"OIDC (sub: …:environment:staging) → tf-apply-staging role"},cmd:"terraform plan -out=tfplan && terraform apply tfplan",lock:{ro:"lock luat, eliberat la final",en:"lock taken, released at the end"},plan:"3 to add, 1 to change, 0 to destroy",result:"Apply complete! Resources: 3 added, 1 changed, 0 destroyed."};
+const D11={pr:{ro:PR+" (main)",en:PRen+" (main)"},job:"terraform-apply prod",creds:{ro:"OIDC (sub: …:environment:production) → rol tf-apply-prod",en:"OIDC (sub: …:environment:production) → tf-apply-prod role"},cmd:"terraform apply tfplan-prod",plan:"3 to add, 1 to change, 0 to destroy",result:{ro:"aprobat de un om după ce a recitit planul; Apply complete!",en:"approved by a person after re-reading the plan; Apply complete!"}};
+const D12={job:"terraform-apply prod",cmd:"terraform apply tfplan-prod",plan:{ro:"2 din 3 resurse create",en:"2 of 3 resources created"},lock:{ro:"starea salvată după fiecare resursă creată",en:"the state saved after each resource created"},result:"Error: creating ElastiCache Replication Group: NodeQuotaForCustomerExceeded"};
+const D13={job:{ro:"drift-check (în fiecare noapte, 03:00)",en:"drift-check (every night, 03:00)"},cmd:"terraform plan -detailed-exitcode",plan:"~ aws_security_group.app: - ingress 22/tcp from 0.0.0.0/0",result:{ro:"exit code 2 = există diferențe → alertă în canalul echipei",en:"exit code 2 = there are differences → an alert in the team's channel"}};
+
+window.LESSON={
+docTitle:{ro:"Deploy de infrastructură cu Terraform",en:"Deploying infrastructure with Terraform"},
+eyebrow:{ro:"Lecție interactivă · Livrare software",en:"Interactive lesson · Software delivery"},
+title:{ro:"Deploy de infrastructură cu Terraform: de la pull request la producție",en:"Deploying infrastructure with Terraform: from pull request to production"},
+sub:{ro:"Echipa Platformă gestionează cu Terraform rețeaua, clusterele și bazele de date pentru staging și producție. Echipa Comenzi cere un cache Redis. Urmărim schimbarea de la laptop la producție: starea comună cu lock, module versionate, un folder per mediu, pull request cu verificări și plan, acces fără chei prin OIDC, review, apply din planul salvat, aprobarea pentru producție, un apply care eșuează la jumătate și verificarea de drift din fiecare noapte.",en:"The Platform team uses Terraform to manage the network, clusters and databases for staging and production. The Orders team asks for a Redis cache. We follow the change from a laptop to production: a shared, locked state, versioned modules, one folder per environment, a pull request with checks and a plan, keyless access through OIDC, review, applying the saved plan, the production approval, an apply that fails halfway and the nightly drift check."},
+meta:[{ro:"≈ 30 minute",en:"≈ 30 minutes"},{ro:"14 pași",en:"14 steps"},{ro:"8 întrebări",en:"8 questions"},{ro:"Intermediar",en:"Intermediate"}],
+goals:[{ro:"De ce nu se face apply de pe laptop și ce rezolvă starea remote cu lock",en:"Why you don't apply from a laptop and what a remote, locked state solves"},{ro:"Module versionate și un folder (o stare) pentru fiecare mediu",en:"Versioned modules and one folder (one state) per environment"},{ro:"Pipeline-ul: verificări, plan în PR, OIDC, politici, review, apply din planul salvat",en:"The pipeline: checks, a plan in the PR, OIDC, policies, review, applying the saved plan"},{ro:"Aprobarea pentru producție, eșecuri la jumătate și drift detectat automat",en:"The production approval, halfway failures and automatic drift detection"}],
+foot:{ro:"Nume de echipe, repo-uri, ID-uri și domenii fictive. Lecția „Terraform: infrastructura scrisă ca și cod” explică init, plan, apply și starea.",en:"Fictional team, repo, ID and domain names. The lesson \"Terraform: infrastructure written as code\" explains init, plan, apply and the state."},
+ui:{frameT:{ro:"Schimbarea (live)",en:"The change (live)"},refT:{ro:"Repo-ul și pipeline-ul",en:"The repo and the pipeline"},refLead:{ro:"Structura repo-ului, backend-ul, un modul și pipeline-ul complet.",en:"The repo layout, the backend, a module and the full pipeline."}},
+tryT:{ro:"Încearcă (într-un cont de test)",en:"Try it (in a test account)"},
+legend:[["lg-app","GIT",{ro:"cod, PR, review",en:"code, PR, review"}],["lg-ip","PLAN",{ro:"doar citește",en:"reads only"}],["lg-arp","APPLY",{ro:"schimbă cloud-ul",en:"changes the cloud"}],["lg-tcp","ERR",{ro:"blocat / eșuat",en:"blocked / failed"}]],
+
+nodes:{
+  dev:{type:"user",name:"dev",lines:[{ro:"Platformă",en:"Platform"}]},
+  rev:{type:"user",name:{ro:"reviewer",en:"reviewer"},lines:[{ro:"aprobă",en:"approves"}]},
+  git:{type:"box",name:"infra-live",lines:[{ro:"repo Git",en:"Git repo"}]},
+  mod:{type:"box",name:"tf-modules",lines:["v1.4.0"]},
+  ci:{type:"server",name:"CI runner",lines:["plan · apply"]},
+  iam:{type:"box",name:"AWS IAM",lines:["OIDC · STS"]},
+  st:{type:"db",name:"S3 tfstate",lines:[{ro:"stare + lock",en:"state + lock"}]},
+  stg:{type:"svc",name:"staging",lines:["10.20.0.0/16"]},
+  prod:{type:"svc",name:"production",lines:["10.30.0.0/16"]}
+},
+links:[["dev","git"],["rev","git"],["git","ci"],["mod","ci"],["ci","iam"],["ci","st"],["ci","stg"],["ci","prod"]],
+linkLabels:{"dev-git":"git push · PR","rev-git":"review · approve","git-ci":"webhook","mod-ci":"git ?ref=v1.4.0","ci-iam":"OIDC → AssumeRole","ci-st":"S3 · .tflock","ci-stg":"AWS API","ci-prod":"AWS API"},
+layouts:{
+  wide:{vb:[0,0,1000,500],n:{dev:[70,130],rev:[70,380],git:[250,255],mod:[460,80],ci:[470,255],iam:[740,90],st:[740,420],stg:[890,215],prod:[890,330]},
+    zones:[{x:640,y:30,w:350,h:450,top:true,cls:"virt",l:{ro:"AWS",en:"AWS"}}],lpos:{"dev-git":.62}},
+  narrow:{vb:[0,0,360,860],n:{dev:[70,50],rev:[290,50],git:[180,190],mod:[315,200],ci:[160,380],iam:[300,520],st:[60,520],stg:[90,720],prod:[280,720]}}
+},
+groups:[
+  {id:"g",color:"l7",fields:["pr","file","diff"],name:{ro:"În Git",en:"In Git"},short:"Git",grow:3},
+  {id:"c",color:"l3",fields:["job","cmd","creds"],name:{ro:"În pipeline",en:"In the pipeline"},short:"CI",grow:3},
+  {id:"t",color:"arp",fields:["plan","lock"],name:{ro:"Planul și starea",en:"The plan and the state"},short:{ro:"Plan",en:"Plan"},grow:3},
+  {id:"r",color:"l4",fields:["result"],name:{ro:"Rezultat",en:"Result"},short:{ro:"Rezultat",en:"Result"},grow:2}
+],
+fieldLabels:{pr:"Pull request",file:{ro:"Fișier",en:"File"},diff:{ro:"Schimbare",en:"Change"},job:"Job",cmd:{ro:"Comandă",en:"Command"},creds:{ro:"Acces AWS",en:"AWS access"},plan:"Plan",lock:{ro:"Stare / lock",en:"State / lock"},result:{ro:"Rezultat",en:"Result"}},
+pdu:f=>{const r=E(f.result),l=E(f.lock),c=f.cmd||"";
+  if(/^Error|Error acquiring/.test(r+" "+l)||/^Error/.test(l))return {badge:{ro:"Oprit",en:"Stopped"},tok:["ERR","k-tcp"]};
+  if(/apply/.test(E(f.job))&&!/Maria/.test(E(f.job)))return {badge:{ro:"Apply din pipeline",en:"Apply from the pipeline"},tok:["APPLY","k-arp"]};
+  if(/plan/.test(E(f.job))||/plan/.test(c))return {badge:{ro:"Plan: doar citește",en:"Plan: reads only"},tok:["PLAN","k-ip"]};
+  if(f.pr||f.file)return {badge:{ro:"Schimbare în Git",en:"Change in Git"},tok:["GIT","k-app"]};
+  return {badge:{ro:"Apply de pe laptop",en:"Apply from a laptop"},tok:["⚠ LOCAL","k-tcp"]}},
+
+init:{},
+tables:{
+  why:{title:{ro:"Laptop vs. pipeline",en:"Laptop vs pipeline"},cols:["",{ro:"apply de pe laptop",en:"apply from a laptop"},{ro:"apply din pipeline",en:"apply from a pipeline"}],plain:[0,1,2],
+    rows:()=>[[{ro:"Starea",en:"The state"},{ro:"pe fiecare laptop, alta",en:"on every laptop, a different one"},{ro:"una, în S3, cu lock",en:"one, in S3, with a lock"}],[{ro:"Acces AWS",en:"AWS access"},{ro:"chei de admin pe laptop",en:"admin keys on the laptop"},{ro:"rol temporar, doar pentru pipeline",en:"a temporary role, for the pipeline only"}],[{ro:"Cine a văzut planul",en:"Who saw the plan"},{ro:"doar cel care a rulat",en:"only whoever ran it"},{ro:"toată echipa, în PR",en:"the whole team, in the PR"}],[{ro:"Versiuni",en:"Versions"},{ro:"Terraform-ul de pe fiecare laptop",en:"whatever Terraform each laptop has"},{ro:"aceleași, fixate în pipeline",en:"the same, pinned in the pipeline"}]]},
+  mods:{title:{ro:"Modulele din tf-modules",en:"The modules in tf-modules"},cols:[{ro:"Modul",en:"Module"},{ro:"Ce creează",en:"What it creates"},{ro:"Intrări",en:"Inputs"}],plain:[1],
+    rows:()=>[["network",{ro:"VPC, subnet-uri în 3 zone, NAT",en:"VPC, subnets in 3 zones, NAT"},"cidr, azs"],["eks",{ro:"cluster Kubernetes, grupuri de noduri",en:"Kubernetes cluster, node groups"},"version, node_type"],["postgres",{ro:"RDS, backup, alarme",en:"RDS, backups, alarms"},"instance_class, backup_days"],["cache",{ro:"Redis (ElastiCache), criptare",en:"Redis (ElastiCache), encryption"},"node_type, replicas"]]},
+  envs:{title:{ro:"Un folder și o stare pentru fiecare mediu",en:"One folder and one state per environment"},cols:[{ro:"Folder",en:"Folder"},{ro:"Cheia stării",en:"State key"},{ro:"Rețea",en:"Network"},{ro:"Apply",en:"Apply"}],plain:[3],
+    rows:()=>[["envs/staging","staging/terraform.tfstate","10.20.0.0/16",{ro:"automat după merge",en:"automatic after merge"}],["envs/prod","prod/terraform.tfstate","10.30.0.0/16",{ro:"după aprobare manuală",en:"after a manual approval"}]]},
+  checks:{title:{ro:"Verificările din PR",en:"The checks in the PR"},cols:[{ro:"Unealtă",en:"Tool"},{ro:"Prinde",en:"Catches"}],plain:[1],
+    rows:()=>[["terraform fmt -check",{ro:"cod neformatat",en:"unformatted code"}],["terraform validate",{ro:"erori de sintaxă, referințe greșite",en:"syntax errors, wrong references"}],["tflint",{ro:"tipuri de instanță inexistente, practici proaste",en:"non-existent instance types, bad practices"}],["trivy config",{ro:"bucket public, criptare lipsă, port 22 deschis",en:"public bucket, missing encryption, port 22 open"}],["terraform plan",{ro:"ce se va schimba de fapt",en:"what will actually change"}]]},
+  roles:{title:{ro:"Cine primește ce rol AWS",en:"Who gets which AWS role"},cols:[{ro:"Job (sub în token)",en:"Job (sub in the token)"},{ro:"Rol",en:"Role"},{ro:"Poate",en:"Can"}],plain:[2],
+    rows:()=>[["pull_request","tf-plan",{ro:"doar să citească",en:"read only"}],["environment:staging","tf-apply-staging",{ro:"să schimbe staging",en:"change staging"}],["environment:production","tf-apply-prod",{ro:"să schimbe producția",en:"change production"}]]},
+  fail:{idx:true,title:{ro:"Când ceva merge prost",en:"When something goes wrong"},cols:[{ro:"Situație",en:"Situation"},{ro:"Ce faci",en:"What you do"}],plain:[0,1],
+    rows:()=>[[{ro:"apply eșuat la jumătate",en:"apply failed halfway"},{ro:"repari cauza și rulezi din nou: starea știe ce s-a creat",en:"fix the cause and run again: the state knows what was created"}],[{ro:"schimbarea strică ceva",en:"the change breaks something"},{ro:"git revert + PR + apply: rollback-ul e tot o schimbare",en:"git revert + PR + apply: a rollback is just another change"}],[{ro:"lock rămas după un job oprit",en:"a lock left after a killed job"},{ro:"verifici că nu rulează nimic, apoi terraform force-unlock ID",en:"check nothing is running, then terraform force-unlock ID"}],[{ro:"Saved plan is stale",en:"Saved plan is stale"},{ro:"starea s-a schimbat între plan și apply: plan nou",en:"the state changed between plan and apply: a new plan"}]]}
+},
+log:{title:{ro:"Istoricul schimbării",en:"The change's history"},lead:{ro:"De la apply-ul de pe laptop la un pipeline cu review, aprobare și alerte.",en:"From applying on a laptop to a pipeline with review, approval and alerts."},first:{ro:"Pas",en:"Step"},minWidth:600,
+  cols:[{h:"Job",v:f=>f.job||f.file||"",cls:"mac"},{h:"Plan",v:f=>f.plan||"",cls:"ip"},{h:{ro:"Rezultat",en:"Result"},v:f=>f.result||"",cls:""}]},
+
+steps:[
+{at:["dev","stg","prod"],frame:D1,kind:"d",tables:["why"],marks:{prod:{k:"drop",t:{ro:"subnet recreat",en:"subnet recreated"}}},log:{ro:"incidentul cu două laptopuri",en:"the two-laptop incident"},who:{ro:"Problema",en:"The problem"},
+ title:{ro:"De ce: două laptopuri, două stări, un subnet stricat",en:"Why: two laptops, two states, a broken subnet"},
+ body:{ro:`<p>La început, echipa Platformă rula Terraform de pe laptop. Fiecare avea chei AWS de admin și propriul <code>terraform.tfstate</code>.</p>
+<p>Într-o marți, Maria schimbă un subnet al producției. În același minut, Dan face apply pentru altceva, dar cu o stare veche de o săptămână. Terraform-ul lui Dan nu știe de schimbarea Mariei și o „repară” la loc, recreând subnet-ul. Serviciile din el pierd conexiunea 4 minute.</p>
+<p class="key">Problema nu e Terraform, ci <em>unde</em> rulează: stări diferite, apply-uri în paralel, chei de admin pe laptopuri și planuri pe care nu le-a văzut nimeni altcineva.</p>`,
+ en:`<p>At first, the Platform team ran Terraform from their laptops. Everyone had admin AWS keys and their own <code>terraform.tfstate</code>.</p>
+<p>One Tuesday, Maria changes a production subnet. In the same minute, Dan runs apply for something else, but with a week-old state. Dan's Terraform doesn't know about Maria's change and "fixes" it back, recreating the subnet. The services in it lose their connection for 4 minutes.</p>
+<p class="key">The problem isn't Terraform, it's <em>where</em> it runs: different states, parallel applies, admin keys on laptops and plans nobody else saw.</p>`}},
+
+{at:"st",frame:D2,kind:"d",log:{ro:"stare în S3",en:"state in S3"},who:{ro:"Starea remote",en:"Remote state"},
+ title:{ro:"O singură stare, comună: backend-ul S3",en:"One shared state: the S3 backend"},
+ body:{ro:`<p>Primul pas: starea pleacă de pe laptopuri. Un bloc <strong>backend "s3"</strong> spune unde stă:</p>
+<ul><li><code>bucket = "acme-tfstate"</code>: un bucket dedicat, cu <strong>versionare</strong> (fiecare versiune a stării poate fi recuperată) și <strong>criptare</strong>;</li>
+<li><code>key = "prod/terraform.tfstate"</code>: calea stării pentru acest mediu;</li>
+<li><code>use_lockfile = true</code>: lock-ul se face printr-un fișier <code>.tflock</code> lângă stare, în același bucket.</li></ul>
+<p>Cu <code>terraform init -migrate-state</code>, Terraform urcă starea locală în S3. Accesul la bucket îl au doar pipeline-ul și câțiva administratori: starea conține secrete.</p>`,
+ en:`<p>Step one: the state leaves the laptops. A <strong>backend "s3"</strong> block says where it lives:</p>
+<ul><li><code>bucket = "acme-tfstate"</code>: a dedicated bucket, with <strong>versioning</strong> (every version of the state can be recovered) and <strong>encryption</strong>;</li>
+<li><code>key = "prod/terraform.tfstate"</code>: this environment's state path;</li>
+<li><code>use_lockfile = true</code>: locking is done through a <code>.tflock</code> file next to the state, in the same bucket.</li></ul>
+<p>With <code>terraform init -migrate-state</code>, Terraform uploads the local state to S3. Only the pipeline and a few administrators can access the bucket: the state holds secrets.</p>`},
+ more:{ro:`<p>Până la Terraform 1.10, lock-ul pe S3 se făcea cu un tabel DynamoDB (<code>dynamodb_table</code>). Varianta aceea e acum depreciată, dar o vei vedea des în proiecte mai vechi. Alte backend-uri: Azure Blob, Google Cloud Storage, HCP Terraform.</p>`,
+  en:`<p>Until Terraform 1.10, S3 locking used a DynamoDB table (<code>dynamodb_table</code>). That option is now deprecated, but you'll see it often in older projects. Other backends: Azure Blob, Google Cloud Storage, HCP Terraform.</p>`},
+ try:[{cmd:"terraform init -migrate-state",d:{ro:"Mută starea în backend-ul nou.",en:"Moves the state to the new backend."}},{cmd:"terraform state pull | head",d:{ro:"Citește starea din S3.",en:"Reads the state from S3."}}]},
+
+{at:"st",frame:D3,kind:"d",move:[[["ci","st"]]],marks:{st:{k:"drop",t:{ro:"ocupat",en:"locked"}}},log:{ro:"lock-ul oprește al doilea apply",en:"the lock stops the second apply"},who:"Lock",
+ title:{ro:"Lock-ul: un singur apply odată",en:"The lock: one apply at a time"},
+ body:{ro:`<p>Pipeline-ul rulează un apply pe producție. Dan, din obișnuință, pornește și el unul. Înainte să citească starea, Terraform încearcă să creeze fișierul de lock. Nu poate: există deja.</p>
+<p><strong>Error acquiring the state lock</strong>. Mesajul spune cine ține lock-ul (<code>runner@ci-7</code>), ce operație face (<code>OperationTypeApply</code>) și de când.</p>
+<p>Al doilea apply se oprește înainte să schimbe ceva. Exact incidentul de marți nu mai poate avea loc.</p>`,
+ en:`<p>The pipeline is running an apply on production. Dan, out of habit, starts one too. Before reading the state, Terraform tries to create the lock file. It can't: it already exists.</p>
+<p><strong>Error acquiring the state lock</strong>. The message says who holds the lock (<code>runner@ci-7</code>), what operation it's doing (<code>OperationTypeApply</code>) and since when.</p>
+<p>The second apply stops before changing anything. Tuesday's incident can't happen any more.</p>`},
+ more:{ro:`<p>Dacă un job e oprit brutal, lock-ul poate rămâne. Se șterge cu <code>terraform force-unlock &lt;ID&gt;</code>, dar doar după ce ești sigur că nu mai rulează nimic: altfel, două apply-uri scriu aceeași stare.</p>`,
+  en:`<p>If a job is killed, the lock can be left behind. It's removed with <code>terraform force-unlock &lt;ID&gt;</code>, but only once you're sure nothing is running: otherwise two applies write the same state.</p>`}},
+
+{at:"mod",frame:D4,kind:"d",move:[[["mod","ci"]]],tables:["mods"],hl:{mods:"network"},log:{ro:"module versionate",en:"versioned modules"},who:{ro:"Module",en:"Modules"},
+ title:{ro:"Module: aceeași bucată de infrastructură, folosită peste tot",en:"Modules: the same piece of infrastructure, used everywhere"},
+ body:{ro:`<p>Rețeaua din staging și cea din producție sunt aproape identice. În loc să copieze codul, echipa îl pune într-un <strong>modul</strong>: un folder Terraform cu intrări (<code>variable</code>) și ieșiri (<code>output</code>).</p>
+<p>Modulele stau în repo-ul <code>tf-modules</code> și au <strong>versiuni</strong> (tag-uri Git). Mediile le cheamă cu o versiune fixă:</p>
+<p><code>source = "git::https://git.example.com/platform/tf-modules.git//network?ref=v1.4.0"</code></p>
+<p>O schimbare în modul ajunge într-un mediu doar când cineva mută versiunea, printr-un PR. Staging poate încerca v1.5.0 în timp ce producția rămâne pe v1.4.0.</p>`,
+ en:`<p>The staging and production networks are almost identical. Instead of copying code, the team puts it in a <strong>module</strong>: a Terraform folder with inputs (<code>variable</code>) and outputs (<code>output</code>).</p>
+<p>The modules live in the <code>tf-modules</code> repo and have <strong>versions</strong> (Git tags). Environments call them with a pinned version:</p>
+<p><code>source = "git::https://git.example.com/platform/tf-modules.git//network?ref=v1.4.0"</code></p>
+<p>A change to a module reaches an environment only when someone bumps the version, through a PR. Staging can try v1.5.0 while production stays on v1.4.0.</p>`},
+ more:{ro:`<p>Există și module publice în registry, de exemplu <code>terraform-aws-modules/vpc/aws</code>. Sunt bune ca punct de plecare, dar fixează-le versiunea (<code>version = "~> 6.0"</code>) și citește ce creează: un modul public poate face mult mai multe decât ai nevoie.</p>`,
+  en:`<p>There are public modules in the registry too, for example <code>terraform-aws-modules/vpc/aws</code>. They're a good starting point, but pin their version (<code>version = "~> 6.0"</code>) and read what they create: a public module can do far more than you need.</p>`}},
+
+{at:["stg","prod"],frame:D5,kind:"d",tables:["envs"],hl:{envs:"envs/prod"},log:{ro:"un folder per mediu",en:"one folder per environment"},who:{ro:"Medii",en:"Environments"},
+ title:{ro:"Un folder și o stare pentru fiecare mediu",en:"One folder and one state per environment"},
+ body:{ro:`<p>Repo-ul <code>infra-live</code> are câte un folder pentru fiecare mediu: <code>envs/staging</code> și <code>envs/prod</code>. Fiecare are:</p>
+<ul><li><code>backend.tf</code> cu <strong>altă cheie de stare</strong> (<code>staging/…</code>, <code>prod/…</code>);</li>
+<li><code>main.tf</code>, care cheamă aceleași module;</li>
+<li><code>terraform.tfvars</code> cu ce diferă: rețeaua, mărimea serverelor, numărul de replici.</li></ul>
+<p class="key">Stări separate înseamnă că o greșeală în staging nu poate atinge producția, iar un plan pe staging nu are nevoie de acces la producție.</p>`,
+ en:`<p>The <code>infra-live</code> repo has one folder per environment: <code>envs/staging</code> and <code>envs/prod</code>. Each one has:</p>
+<ul><li><code>backend.tf</code> with <strong>a different state key</strong> (<code>staging/…</code>, <code>prod/…</code>);</li>
+<li><code>main.tf</code>, which calls the same modules;</li>
+<li><code>terraform.tfvars</code> with what differs: the network, the server sizes, the number of replicas.</li></ul>
+<p class="key">Separate states mean a mistake in staging can't touch production, and a staging plan doesn't need access to production.</p>`},
+ more:{ro:`<p>Terraform are și <strong>workspaces</strong> (<code>terraform workspace new staging</code>): același folder, mai multe stări. Sunt comode pentru medii temporare, dar ușor de încurcat: rulezi apply crezând că ești în staging și ești în prod. Pentru medii permanente, folderele separate sunt mai clare. Unelte ca <strong>Terragrunt</strong> reduc repetiția dintre foldere.</p>`,
+  en:`<p>Terraform also has <strong>workspaces</strong> (<code>terraform workspace new staging</code>): one folder, several states. They're handy for temporary environments but easy to mix up: you run apply thinking you're in staging and you're in prod. For permanent environments, separate folders are clearer. Tools like <strong>Terragrunt</strong> cut the repetition between folders.</p>`}},
+
+{at:"ci",frame:D6,kind:"d",move:[[["dev","git"]],[["git","ci"]],[["mod","ci"]]],tables:["checks"],hl:{checks:"trivy config"},log:{ro:"PR deschis, verificări",en:"PR opened, checks"},who:"Pull request",
+ title:{ro:"Cererea: un cache Redis, prin pull request",en:"The request: a Redis cache, through a pull request"},
+ body:{ro:`<p>Echipa Comenzi are nevoie de un cache Redis. Echipa Platformă adaugă un modul <code>cache</code> (ElastiCache, criptat, 2 replici) și îl cheamă din ambele medii. Nimeni nu rulează nimic de pe laptop: totul pleacă dintr-un <strong>pull request</strong>, <code>#212</code>.</p>
+<p>La fiecare push, pipeline-ul pornește singur și rulează, în ordine, verificări rapide care nu au nevoie de AWS:</p>
+<ul><li><code>terraform fmt -check</code> și <code>terraform validate</code>;</li>
+<li><code>tflint</code>: de exemplu un tip de instanță care nu există;</li>
+<li><code>trivy config</code>: probleme de securitate în cod, cum ar fi un cache fără criptare.</li></ul>`,
+ en:`<p>The Orders team needs a Redis cache. The Platform team adds a <code>cache</code> module (ElastiCache, encrypted, 2 replicas) and calls it from both environments. Nobody runs anything from a laptop: it all starts from a <strong>pull request</strong>, <code>#212</code>.</p>
+<p>On every push, the pipeline starts on its own and runs, in order, quick checks that don't need AWS:</p>
+<ul><li><code>terraform fmt -check</code> and <code>terraform validate</code>;</li>
+<li><code>tflint</code>: for example an instance type that doesn't exist;</li>
+<li><code>trivy config</code>: security problems in the code, such as a cache without encryption.</li></ul>`},
+ try:[{cmd:"terraform fmt -check -recursive",d:{ro:"Eșuează dacă vreun fișier nu e formatat.",en:"Fails if any file isn't formatted."}},{cmd:"tflint --recursive",d:{ro:"Caută greșeli și practici proaste.",en:"Looks for mistakes and bad practices."}},{cmd:"trivy config envs/prod",d:{ro:"Caută probleme de securitate.",en:"Looks for security problems."}}]},
+
+{at:"iam",frame:D7,kind:"d",move:[[["ci","iam"]]],tables:["roles"],hl:{roles:"pull_request"},log:{ro:"acces AWS fără chei",en:"keyless AWS access"},who:"OIDC",
+ title:{ro:"Acces la AWS fără chei: OIDC",en:"AWS access without keys: OIDC"},
+ body:{ro:`<p>Ca să facă plan, pipeline-ul trebuie să citească din AWS. Dar nu mai există chei AWS salvate nicăieri. În loc de ele:</p>
+<ol><li>platforma de CI dă job-ului un <strong>token OIDC</strong> semnat, care spune cine e: repo-ul <code>platform/infra-live</code>, evenimentul <code>pull_request</code>;</li>
+<li>job-ul îl prezintă la AWS STS (<code>AssumeRoleWithWebIdentity</code>);</li>
+<li>AWS verifică semnătura și condiția din rol, apoi dă credențiale temporare, valabile o oră, pentru rolul <strong>tf-plan</strong>, care poate doar să citească.</li></ol>
+<p class="key">Un PR, chiar și unul rău intenționat, nu poate schimba nimic în AWS: rolul lui nu are drept de scriere.</p>`,
+ en:`<p>To run a plan, the pipeline needs to read from AWS. But there are no stored AWS keys anywhere any more. Instead:</p>
+<ol><li>the CI platform gives the job a signed <strong>OIDC token</strong> saying who it is: the <code>platform/infra-live</code> repo, the <code>pull_request</code> event;</li>
+<li>the job presents it to AWS STS (<code>AssumeRoleWithWebIdentity</code>);</li>
+<li>AWS checks the signature and the role's condition, then hands out temporary credentials, valid for an hour, for the <strong>tf-plan</strong> role, which can only read.</li></ol>
+<p class="key">A PR, even a malicious one, can't change anything in AWS: its role has no write access.</p>`},
+ more:{ro:`<p>Plan-ul are totuși nevoie să citească starea, care conține secrete. De aceea unele echipe nu rulează plan automat pe PR-uri din fork-uri sau de la necunoscuți.</p>`,
+  en:`<p>A plan still needs to read the state, which holds secrets. That's why some teams don't run plans automatically on PRs from forks or from strangers.</p>`}},
+
+{at:"ci",frame:D8,kind:"d",move:[[["ci","st"]],[["ci","stg"],["ci","prod"]],[["ci","git"]]],log:{ro:"planul postat în PR",en:"the plan posted in the PR"},who:{ro:"Planul în PR",en:"The plan in the PR"},
+ title:{ro:"Planul ajunge în PR, verificat de politici",en:"The plan lands in the PR, checked by policies"},
+ body:{ro:`<p>Pipeline-ul rulează <code>terraform plan</code> pentru fiecare mediu (pe PR, fără să ia lock-ul, pentru că nu scrie nimic) și postează rezultatul ca <strong>comentariu în PR</strong>:</p>
+<p><strong>staging: 3 to add, 1 to change, 0 to destroy · prod: la fel.</strong></p>
+<p>Planul trece apoi prin <strong>politici scrise ca și cod</strong> (OPA / conftest), aplicate pe JSON-ul planului: „orice cache sau bază de date trebuie să fie criptată”, „nimic nu se șterge în prod fără eticheta allow-destroy”. Aici toate trec.</p>
+<p>Recenzenții nu mai citesc doar codul, ci și <em>efectul</em> lui: exact ce resurse se schimbă, în ce mediu.</p>`,
+ en:`<p>The pipeline runs <code>terraform plan</code> for each environment (on a PR, without taking the lock, since it writes nothing) and posts the result as a <strong>PR comment</strong>:</p>
+<p><strong>staging: 3 to add, 1 to change, 0 to destroy · prod: the same.</strong></p>
+<p>The plan then goes through <strong>policies written as code</strong> (OPA / conftest), applied to the plan's JSON: "every cache or database must be encrypted", "nothing is deleted in prod without the allow-destroy label". Here they all pass.</p>
+<p>Reviewers no longer read just the code but also its <em>effect</em>: exactly which resources change, in which environment.</p>`},
+ more:{ro:`<p><code>terraform show -json tfplan</code> transformă planul în JSON, pe care îl pot citi uneltele de politici. HCP Terraform are propriul limbaj de politici, Sentinel; ideea e aceeași.</p>`,
+  en:`<p><code>terraform show -json tfplan</code> turns the plan into JSON that policy tools can read. HCP Terraform has its own policy language, Sentinel; the idea is the same.</p>`}},
+
+{at:"git",frame:D9,kind:"d",move:[[["rev","git"]]],log:{ro:"review și merge",en:"review and merge"},who:"Review",
+ title:{ro:"Review: ce caută un om în plan",en:"Review: what a person looks for in the plan"},
+ body:{ro:`<p>Doi colegi citesc PR-ul. Un review bun de infrastructură se uită mai ales la plan:</p>
+<ul><li>există vreun <code>-</code> sau <code>-/+</code>? Pe ce? O bază de date, un bucket, un disc?</li>
+<li>schimbările sunt doar cele așteptate? Aici: cache-ul (3 resurse noi) și o regulă nouă în security group-ul aplicației, portul <code>6379</code>, doar de la aplicație;</li>
+<li>planul pentru prod e același ca pentru staging? Dacă nu, de ce?</li></ul>
+<p>Totul e cum trebuie. PR-ul primește 2 aprobări (Platformă și Comenzi) și e îmbinat în <code>main</code>.</p>`,
+ en:`<p>Two colleagues read the PR. A good infrastructure review looks mostly at the plan:</p>
+<ul><li>is there any <code>-</code> or <code>-/+</code>? On what? A database, a bucket, a disk?</li>
+<li>are the changes only the expected ones? Here: the cache (3 new resources) and a new rule in the app's security group, port <code>6379</code>, only from the app;</li>
+<li>is the prod plan the same as staging's? If not, why?</li></ul>
+<p>It's all as it should be. The PR gets 2 approvals (Platform and Orders) and is merged into <code>main</code>.</p>`}},
+
+{at:"stg",frame:D10,kind:"d",move:[[["git","ci"]],[["ci","iam"]],[["ci","st"]],[["ci","stg"]]],marks:{stg:{k:"ok",t:"Redis ✓"}},log:{ro:"apply pe staging",en:"apply on staging"},who:"Apply staging",
+ title:{ro:"Merge în main: apply automat pe staging",en:"Merged into main: an automatic apply on staging"},
+ body:{ro:`<p>Merge-ul pornește job-ul <strong>terraform-apply staging</strong>:</p>
+<ol><li>token OIDC cu <code>environment:staging</code> → rolul <strong>tf-apply-staging</strong>, care poate scrie doar în contul de staging;</li>
+<li><code>terraform plan -out=tfplan</code>: ia lock-ul și salvează planul;</li>
+<li><code>terraform apply tfplan</code>: aplică exact planul salvat, nimic în plus;</li>
+<li>lock-ul e eliberat.</li></ol>
+<p><strong>Apply complete! Resources: 3 added, 1 changed, 0 destroyed.</strong> Echipa Comenzi își testează aplicația cu Redis în staging.</p>`,
+ en:`<p>The merge starts the <strong>terraform-apply staging</strong> job:</p>
+<ol><li>an OIDC token with <code>environment:staging</code> → the <strong>tf-apply-staging</strong> role, which can only write to the staging account;</li>
+<li><code>terraform plan -out=tfplan</code>: takes the lock and saves the plan;</li>
+<li><code>terraform apply tfplan</code>: applies exactly the saved plan, nothing more;</li>
+<li>the lock is released.</li></ol>
+<p><strong>Apply complete! Resources: 3 added, 1 changed, 0 destroyed.</strong> The Orders team tests its app with Redis in staging.</p>`},
+ more:{ro:`<p>Dacă între plan și apply altcineva a schimbat starea, apply-ul refuză: <strong>Saved plan is stale</strong>. E o protecție: nu aplici un plan calculat pe o realitate care nu mai există.</p>`,
+  en:`<p>If someone changed the state between the plan and the apply, the apply refuses: <strong>Saved plan is stale</strong>. It's a safeguard: you don't apply a plan worked out against a reality that no longer exists.</p>`}},
+
+{at:"prod",frame:D11,kind:"d",move:[[["rev","git"]],[["git","ci"]],[["ci","iam"]],[["ci","prod"]]],marks:{prod:{k:"ok",t:"Redis ✓"}},log:{ro:"aprobare și apply pe prod",en:"approval and apply on prod"},who:{ro:"Producția",en:"Production"},
+ title:{ro:"Producția: un om aprobă după ce recitește planul",en:"Production: a person approves after re-reading the plan"},
+ body:{ro:`<p>Job-ul pentru producție calculează planul și se oprește. Mediul <code>production</code> din CI are o regulă: <strong>aprobare obligatorie</strong> de la cineva din echipa Platformă, alta decât autorul.</p>
+<p>Recenzentul deschide planul pentru prod, verifică din nou că e <em>3 to add, 1 to change, 0 to destroy</em> și apasă „Approve”. Abia atunci job-ul primește rolul <strong>tf-apply-prod</strong> (doar job-urile din mediul <code>production</code> îl pot lua) și aplică planul salvat.</p>
+<p class="key">Între PR și producție, aceeași schimbare a trecut prin verificări, politici, două review-uri, staging și o aprobare. Și totul e în istoricul Git și al pipeline-ului.</p>`,
+ en:`<p>The production job works out the plan and stops. The <code>production</code> environment in CI has a rule: a <strong>mandatory approval</strong> from someone on the Platform team other than the author.</p>
+<p>The reviewer opens the prod plan, checks again that it's <em>3 to add, 1 to change, 0 to destroy</em> and clicks "Approve". Only then does the job get the <strong>tf-apply-prod</strong> role (only jobs in the <code>production</code> environment can take it) and apply the saved plan.</p>
+<p class="key">Between the PR and production, the same change went through checks, policies, two reviews, staging and an approval. And all of it is in the Git and pipeline history.</p>`}},
+
+{at:"prod",frame:D12,kind:"d",move:[[["ci","prod"]],[["ci","st"]]],marks:{prod:{k:"drop",t:{ro:"2 din 3",en:"2 of 3"}}},tables:["fail"],hl:{fail:0},log:{ro:"apply eșuat la jumătate",en:"apply failed halfway"},who:{ro:"Eșec",en:"Failure"},
+ title:{ro:"Un apply eșuează la jumătate. Și acum?",en:"An apply fails halfway. Now what?"},
+ body:{ro:`<p>O lună mai târziu, o altă schimbare adaugă un al doilea cache în prod. Apply-ul creează două resurse, apoi AWS refuză a treia: <strong>NodeQuotaForCustomerExceeded</strong>, contul a atins limita de noduri Redis.</p>
+<p>Terraform <strong>nu face rollback</strong>. Dar nici nu pierde nimic: a salvat în stare fiecare resursă imediat ce a fost creată. Echipa cere AWS o limită mai mare, rulează din nou pipeline-ul, iar planul arată doar ce lipsește: <em>1 to add</em>.</p>
+<p>Dacă o schimbare reușită strică ceva, rollback-ul e tot o schimbare: <code>git revert</code>, PR, plan, apply. Istoricul rămâne complet.</p>`,
+ en:`<p>A month later, another change adds a second cache in prod. The apply creates two resources, then AWS refuses the third: <strong>NodeQuotaForCustomerExceeded</strong>, the account hit its Redis node limit.</p>
+<p>Terraform <strong>doesn't roll back</strong>. But it doesn't lose anything either: it saved each resource to the state as soon as it was created. The team asks AWS for a higher limit, runs the pipeline again, and the plan shows only what's missing: <em>1 to add</em>.</p>
+<p>If a successful change breaks something, the rollback is just another change: <code>git revert</code>, PR, plan, apply. The history stays complete.</p>`}},
+
+{at:"prod",frame:D13,kind:"d",move:[[["ci","iam"]],[["ci","prod"]]],marks:{prod:{k:"drop",t:"drift"}},log:{ro:"drift găsit noaptea",en:"drift found overnight"},who:"Drift check",
+ title:{ro:"În fiecare noapte: cine a schimbat ceva de mână?",en:"Every night: did anyone change something by hand?"},
+ body:{ro:`<p>Chiar și cu pipeline, cineva tot mai poate schimba ceva din consolă în timpul unui incident. Așa că pipeline-ul are și un job programat, la 03:00, care rulează pentru fiecare mediu:</p>
+<p><code>terraform plan -detailed-exitcode</code></p>
+<p>Codul de ieșire spune tot: <strong>0</strong> = nicio diferență, <strong>1</strong> = eroare, <strong>2</strong> = realitatea diferă de cod. Azi-noapte a ieșit 2: cineva a deschis portul 22 spre internet. Echipa primește o alertă și decide: regula se șterge (apply) sau, dacă era necesară, intră în cod printr-un PR.</p>`,
+ en:`<p>Even with a pipeline, someone can still change something in the console during an incident. So the pipeline also has a scheduled job, at 03:00, which runs for every environment:</p>
+<p><code>terraform plan -detailed-exitcode</code></p>
+<p>The exit code says it all: <strong>0</strong> = no difference, <strong>1</strong> = error, <strong>2</strong> = reality differs from the code. Last night it came out 2: someone opened port 22 to the internet. The team gets an alert and decides: the rule is removed (apply) or, if it was needed, it goes into the code through a PR.</p>`}},
+
+{at:["git","ci","st","stg","prod"],frame:null,kind:"none",summary:true,
+ title:{ro:"Recapitulare și unelte",en:"Recap and tools"},
+ body:{ro:`<ul><li>Nu face apply de pe laptop: stări diferite, apply-uri în paralel, chei de admin.</li>
+<li><strong>Starea remote</strong> (S3 cu versionare, criptare, <code>use_lockfile</code>) și <strong>lock</strong>: o stare, un apply odată.</li>
+<li><strong>Module versionate</strong> și <strong>un folder / o stare per mediu</strong>.</li>
+<li>Pe PR: fmt, validate, tflint, trivy, <strong>plan postat în PR</strong>, politici pe JSON-ul planului.</li>
+<li><strong>OIDC</strong>: roluri temporare, separate pentru plan (citire) și apply (per mediu).</li>
+<li>După merge: apply din <strong>planul salvat</strong> pe staging; în prod, după o <strong>aprobare</strong>.</li>
+<li>Eșec la jumătate: repari și rulezi din nou. Rollback: <code>git revert</code>. Noaptea: <code>-detailed-exitcode</code> pentru drift.</li></ul>
+<p>Același flux îl oferă gata făcut <strong>Atlantis</strong> (plan și apply din comentarii în PR), <strong>HCP Terraform</strong>, Spacelift sau env0.</p>
+<p><button type="button" class="btn primary" data-goto="lab">Mergi la laborator ↓</button></p>`,
+ en:`<ul><li>Don't apply from a laptop: different states, parallel applies, admin keys.</li>
+<li><strong>Remote state</strong> (S3 with versioning, encryption, <code>use_lockfile</code>) and a <strong>lock</strong>: one state, one apply at a time.</li>
+<li><strong>Versioned modules</strong> and <strong>one folder / one state per environment</strong>.</li>
+<li>On a PR: fmt, validate, tflint, trivy, <strong>the plan posted in the PR</strong>, policies on the plan's JSON.</li>
+<li><strong>OIDC</strong>: temporary roles, separate for plan (read) and apply (per environment).</li>
+<li>After merge: apply the <strong>saved plan</strong> to staging; in prod, after an <strong>approval</strong>.</li>
+<li>A halfway failure: fix and run again. Rollback: <code>git revert</code>. At night: <code>-detailed-exitcode</code> for drift.</li></ul>
+<p>The same flow comes ready-made in <strong>Atlantis</strong> (plan and apply from PR comments), <strong>HCP Terraform</strong>, Spacelift or env0.</p>
+<p><button type="button" class="btn primary" data-goto="lab">Go to the lab ↓</button></p>`}}
+],
+
+reference:(T,lang)=>{
+  const ro=lang==="ro";
+  return `<div class="ref-grid"><section class="card refcard"><h2>${ro?"Repo-ul infra-live":"The infra-live repo"}</h2>
+<pre class="yaml">infra-live/
+├── envs/
+│   ├── staging/
+│   │   ├── backend.tf        <span class="c"># key = "staging/terraform.tfstate"</span>
+│   │   ├── main.tf           <span class="c"># ${ro?"cheamă modulele":"calls the modules"}</span>
+│   │   └── terraform.tfvars
+│   └── prod/
+│       ├── backend.tf        <span class="c"># key = "prod/terraform.tfstate"</span>
+│       ├── main.tf
+│       └── terraform.tfvars
+├── policy/                   <span class="c"># ${ro?"reguli conftest (Rego)":"conftest rules (Rego)"}</span>
+└── .github/workflows/terraform.yml</pre>
+<h3>envs/prod/backend.tf</h3>
+<pre class="yaml">terraform {
+  backend "s3" {
+    bucket       = "acme-tfstate"
+    key          = "prod/terraform.tfstate"
+    region       = "eu-central-1"
+    encrypt      = true
+    use_lockfile = true
+  }
+}</pre>
+<h3>envs/prod/main.tf</h3>
+<pre class="yaml">module "network" {
+  source = "git::https://git.example.com/platform/tf-modules.git//network?ref=v1.4.0"
+  cidr   = "10.30.0.0/16"
+}
+module "cache" {
+  source     = "git::https://git.example.com/platform/tf-modules.git//cache?ref=v1.4.0"
+  subnet_ids = module.network.private_subnet_ids
+  node_type  = var.cache_node_type
+}</pre></section>
+<section class="card refcard"><h2>${ro?"Pipeline-ul (GitHub Actions, prescurtat)":"The pipeline (GitHub Actions, shortened)"}</h2>
+<pre class="yaml">on:
+  pull_request:
+  push: { branches: [main] }
+  schedule: [{ cron: "0 3 * * *" }]   <span class="c"># drift check</span>
+permissions: { id-token: write, contents: read, pull-requests: write }
+jobs:
+  plan:
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with: { role-to-assume: arn:aws:iam::111122223333:role/tf-plan, aws-region: eu-central-1 }
+      - run: terraform fmt -check -recursive
+      - run: terraform -chdir=envs/prod init
+      - run: terraform -chdir=envs/prod validate
+      - run: terraform -chdir=envs/prod plan -lock=false -out=tfplan
+      - run: terraform -chdir=envs/prod show -json tfplan > plan.json
+      - run: conftest test plan.json -p policy/
+  apply-prod:
+    if: github.ref == 'refs/heads/main'
+    needs: apply-staging
+    environment: production             <span class="c"># ${ro?"aprobare obligatorie":"required approval"}</span>
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with: { role-to-assume: arn:aws:iam::444455556666:role/tf-apply-prod, aws-region: eu-central-1 }
+      - run: terraform -chdir=envs/prod init
+      - run: terraform -chdir=envs/prod plan -out=tfplan
+      - run: terraform -chdir=envs/prod apply tfplan</pre>
+<h3>${ro?"Condiția din rolul tf-apply-prod":"The condition in the tf-apply-prod role"}</h3>
+<pre class="yaml">"token.actions.githubusercontent.com:sub":
+  "repo:platform/infra-live:environment:production"</pre></section></div>`;
+},
+
+gloss:[
+ [{ro:"Stare remote",en:"Remote state"},null,{ro:"Starea Terraform ținută într-un backend comun (S3, Azure Blob, GCS), nu pe laptop.",en:"Terraform state kept in a shared backend (S3, Azure Blob, GCS), not on a laptop."}],
+ ["Backend",null,{ro:"Locul unde Terraform ține starea și cum o blochează.",en:"Where Terraform keeps the state and how it locks it."}],
+ [{ro:"Lock",en:"Lock"},null,{ro:"Blocarea stării cât rulează un plan sau apply, ca să nu scrie doi deodată.",en:"Locking the state while a plan or apply runs, so two don't write at once."}],
+ [{ro:"Modul",en:"Module"},null,{ro:"Un folder Terraform reutilizabil, cu intrări și ieșiri, chemat cu o versiune fixă.",en:"A reusable Terraform folder with inputs and outputs, called with a pinned version."}],
+ ["Workspace",null,{ro:"Mai multe stări pentru același folder; comod, dar ușor de încurcat.",en:"Several states for the same folder; handy, but easy to mix up."}],
+ ["OIDC",null,{ro:"Token semnat de platforma CI, schimbat la AWS pe credențiale temporare, fără chei salvate.",en:"A token signed by the CI platform, exchanged with AWS for temporary credentials, with no stored keys."}],
+ [{ro:"Plan salvat",en:"Saved plan"},null,{ro:"Fișierul scris de plan -out; apply-ul lui face exact ce s-a revizuit.",en:"The file written by plan -out; applying it does exactly what was reviewed."}],
+ [{ro:"Politici ca și cod",en:"Policy as code"},null,{ro:"Reguli automate verificate pe plan (OPA/conftest, Sentinel).",en:"Automatic rules checked against the plan (OPA/conftest, Sentinel)."}],
+ ["-detailed-exitcode",null,{ro:"Opțiune a lui plan: 0 = fără schimbări, 1 = eroare, 2 = există schimbări.",en:"A plan option: 0 = no changes, 1 = error, 2 = there are changes."}],
+ ["Atlantis",null,{ro:"Server open source care rulează plan și apply din comentariile unui PR.",en:"An open-source server that runs plan and apply from a PR's comments."}],
+ ["force-unlock",null,{ro:"Comanda care șterge un lock rămas; doar dacă ești sigur că nu rulează nimic.",en:"The command that removes a leftover lock; only when you're sure nothing is running."}]
+],
+glossEx:{
+ "OIDC":{ro:"job-ul din mediul production primește rolul tf-apply-prod pentru o oră.",en:"the job in the production environment gets the tf-apply-prod role for an hour."},
+ "-detailed-exitcode":{ro:"drift check-ul de noapte a ieșit cu 2: portul 22 deschis de mână.",en:"the nightly drift check exited with 2: port 22 opened by hand."}
+},
+
+quiz:[
+ {q:{ro:"De ce e periculos să rulezi apply de pe laptopuri diferite cu stări locale?",en:"Why is running apply from different laptops with local states dangerous?"},o:[{ro:"Laptopurile sunt prea lente",en:"Laptops are too slow"},{ro:"Fiecare are altă stare, iar două apply-uri pot anula schimbările celuilalt",en:"Each has a different state, and two applies can undo each other's changes"},{ro:"Terraform nu merge pe laptop",en:"Terraform doesn't run on laptops"},{ro:"Nu e periculos",en:"It isn't dangerous"}],a:1,e:{ro:"Exact incidentul cu subnet-ul recreat.",en:"Exactly the recreated-subnet incident."}},
+ {q:{ro:"Ce face use_lockfile = true în backend-ul S3?",en:"What does use_lockfile = true do in the S3 backend?"},o:[{ro:"Criptează starea",en:"Encrypts the state"},{ro:"Blochează starea printr-un fișier .tflock, ca doar un apply să ruleze odată",en:"Locks the state through a .tflock file, so only one apply runs at a time"},{ro:"Fixează versiunea providerilor",en:"Pins the provider versions"},{ro:"Face backup",en:"Makes a backup"}],a:1,e:{ro:"Înainte, lock-ul pe S3 se făcea cu DynamoDB.",en:"Before, S3 locking used DynamoDB."}},
+ {q:{ro:"De ce are fiecare mediu propria stare?",en:"Why does each environment have its own state?"},o:[{ro:"Ca o greșeală în staging să nu poată atinge producția",en:"So a mistake in staging can't touch production"},{ro:"Pentru că S3 nu ține fișiere mari",en:"Because S3 can't hold big files"},{ro:"Pentru viteză",en:"For speed"},{ro:"Nu e nevoie",en:"There's no need"}],a:0,e:{ro:"Și un plan pe staging nu are nevoie de acces la prod.",en:"And a staging plan doesn't need access to prod."}},
+ {q:{ro:"Cum se referă mediile la un modul ca o schimbare în modul să nu ajungă singură în producție?",en:"How do environments reference a module so a change to it doesn't reach production on its own?"},o:[{ro:"Copiind codul",en:"By copying the code"},{ro:"Cu ramura main",en:"With the main branch"},{ro:"Cu depends_on",en:"With depends_on"},{ro:"Cu o versiune fixă (?ref=v1.4.0)",en:"With a pinned version (?ref=v1.4.0)"}],a:3,e:{ro:"Versiunea se schimbă intenționat, printr-un PR.",en:"The version is changed on purpose, through a PR."}},
+ {q:{ro:"Ce avantaj are OIDC față de cheile AWS salvate în CI?",en:"What's the advantage of OIDC over AWS keys stored in CI?"},o:[{ro:"E mai rapid",en:"It's faster"},{ro:"Credențiale temporare, fără secrete permanente, cu rol ales după repo și mediu",en:"Temporary credentials, no permanent secrets, with a role chosen by repo and environment"},{ro:"Nu mai trebuie IAM",en:"IAM is no longer needed"},{ro:"Criptează starea",en:"It encrypts the state"}],a:1,e:{ro:"Un PR primește doar rolul de citire tf-plan.",en:"A PR only gets the read-only tf-plan role."}},
+ {q:{ro:"De ce se aplică planul salvat (apply tfplan) și nu un apply simplu?",en:"Why apply the saved plan (apply tfplan) rather than a plain apply?"},o:[{ro:"E mai scurt de scris",en:"It's shorter to type"},{ro:"Se aplică exact ce s-a văzut și aprobat; dacă starea s-a schimbat între timp, apply-ul refuză",en:"Exactly what was seen and approved gets applied; if the state changed meanwhile, the apply refuses"},{ro:"Nu mai ia lock-ul",en:"It doesn't take the lock"},{ro:"Sare peste provideri",en:"It skips the providers"}],a:1,e:{ro:"Eroarea e „Saved plan is stale”.",en:"The error is \"Saved plan is stale\"."}},
+ {q:{ro:"Un apply în prod eșuează după ce a creat 2 din 3 resurse. Ce faci?",en:"An apply in prod fails after creating 2 of 3 resources. What do you do?"},o:[{ro:"Ștergi de mână cele 2 resurse",en:"Delete the 2 resources by hand"},{ro:"Ștergi starea și o iei de la capăt",en:"Delete the state and start over"},{ro:"Repari cauza și rulezi din nou: starea știe ce s-a creat, planul arată doar ce lipsește",en:"Fix the cause and run again: the state knows what was created, the plan shows only what's missing"},{ro:"terraform force-unlock",en:"terraform force-unlock"}],a:2,e:{ro:"Terraform salvează starea după fiecare resursă.",en:"Terraform saves the state after each resource."}},
+ {q:{ro:"Drift check-ul de noapte rulează plan -detailed-exitcode și primește codul 2. Ce înseamnă?",en:"The nightly drift check runs plan -detailed-exitcode and gets exit code 2. What does it mean?"},o:[{ro:"Nicio diferență",en:"No difference"},{ro:"Eroare de sintaxă",en:"A syntax error"},{ro:"Realitatea diferă de cod: cineva a schimbat ceva în afara Terraform (sau codul nu e aplicat)",en:"Reality differs from the code: someone changed something outside Terraform (or the code isn't applied)"},{ro:"Lock-ul e ocupat",en:"The lock is taken"}],a:2,e:{ro:"0 = nimic, 1 = eroare, 2 = schimbări.",en:"0 = nothing, 1 = error, 2 = changes."}}
+]
+};
+})();
+</script>
+<script src="../assets/engine.js?v=4"></script>
+<script src="../assets/labs-data.js?v=7"></script>
+<script src="../assets/lab.js?v=1"></script>
+<script type="module" src="../assets/auth.js?v=14"></script>
+</body>
+</html>

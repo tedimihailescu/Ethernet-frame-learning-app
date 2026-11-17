@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Terraform: infrastructura scrisă ca și cod</title>
+<meta name="description" content="Lecție interactivă: cum construiește Terraform o infrastructură din cod: HCL, provideri, init, plan, graful de dependențe, apply, starea, schimbări, variabile, drift, moved și prevent_destroy. / Interactive lesson: how Terraform builds infrastructure from code.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/diagram.css?v=1">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<script>
+(function(){
+const E=v=>v&&typeof v==="object"?(v.en||""):String(v||"");
+const ADDRS="aws_vpc.main · aws_subnet.web · aws_subnet.db · aws_security_group.web · aws_instance.web · aws_db_instance.orders";
+const T1={file:"main.tf",addr:ADDRS,result:{ro:"6 blocuri resource și un provider; în cloud nu există încă nimic",en:"6 resource blocks and one provider; nothing exists in the cloud yet"}};
+const T2={cmd:"terraform init",call:"GET registry.terraform.io/v1/providers/hashicorp/aws/versions",id:{ro:"hashicorp/aws 6.x (constrângerea ~> 6.0)",en:"hashicorp/aws 6.x (constraint ~> 6.0)"},file:".terraform/ · .terraform.lock.hcl",result:{ro:"providerul e descărcat; versiunea și hash-ul lui sunt blocate în fișierul de lock",en:"the provider is downloaded; its version and hash are pinned in the lock file"}};
+const T3={cmd:"terraform plan -out=tfplan",state:{ro:"gol: Terraform nu cunoaște nicio resursă",en:"empty: Terraform knows no resources"},call:{ro:"doar citiri (Describe…): nimic nu se schimbă în cloud",en:"reads only (Describe…): nothing changes in the cloud"},action:"+ create × 6",result:"Plan: 6 to add, 0 to change, 0 to destroy."};
+const T4={cmd:"terraform graph",addr:"aws_instance.web → aws_subnet.web → aws_vpc.main",attrs:"subnet_id = aws_subnet.web.id",result:{ro:"întâi VPC-ul; apoi subnet-urile și security group-ul în paralel; la final EC2 și RDS",en:"the VPC first; then the subnets and the security group in parallel; EC2 and RDS last"}};
+const T5={cmd:"terraform apply tfplan",call:"CreateVpc → CreateSubnet ×2, CreateSecurityGroup → RunInstances, CreateDBInstance",id:"vpc-0a1b2c3d4e5f60718 · i-0f2e4d6c8b0a19273",state:{ro:"serial 1 · 6 resurse",en:"serial 1 · 6 resources"},result:"Apply complete! Resources: 6 added, 0 changed, 0 destroyed."};
+const T6={cmd:"terraform state show aws_instance.web",addr:"aws_instance.web",id:"i-0f2e4d6c8b0a19273",attrs:"private_ip = 10.0.1.25 · instance_type = t3.small",state:{ro:"serial 1 · 6 resurse",en:"serial 1 · 6 resources"},result:{ro:"legătura dintre cod și resursa reală; atenție: și parola bazei de date e aici, în clar",en:"the link between code and the real resource; careful: the database password is here too, in plain text"}};
+const T7={cmd:"terraform plan",file:"main.tf: instance_type = \"t3.medium\"",addr:"aws_instance.web",action:{ro:"~ update in-place (oprește, modifică, pornește)",en:"~ update in-place (stop, modify, start)"},attrs:"instance_type: \"t3.small\" → \"t3.medium\"",result:"Plan: 0 to add, 1 to change, 0 to destroy."};
+const T8={cmd:"terraform apply -var-file=staging.tfvars",file:"variables.tf · staging.tfvars · outputs.tf",attrs:"var.instance_type = \"t3.small\" · data.aws_ami.al2023",action:{ro:"<= read (sursă de date)",en:"<= read (data source)"},result:"Outputs: web_private_ip = \"10.0.1.25\" · db_endpoint = \"orders-db.abc123.eu-central-1.rds.amazonaws.com\""};
+const T9={cmd:"terraform plan",addr:"aws_security_group.web",action:"~ update in-place",attrs:{ro:"- ingress 22/tcp din 0.0.0.0/0 (adăugat manual în consolă)",en:"- ingress 22/tcp from 0.0.0.0/0 (added by hand in the console)"},result:{ro:"Terraform vede diferența și propune să șteargă regula manuală",en:"Terraform sees the difference and proposes removing the manual rule"}};
+const T10={cmd:"terraform plan",file:"main.tf: aws_db_instance.orders → aws_db_instance.main",action:"- destroy aws_db_instance.orders · + create aws_db_instance.main",result:{ro:"Plan: 1 to add, 0 to change, 1 to destroy. ⚠ ar șterge baza de date cu toate comenzile!",en:"Plan: 1 to add, 0 to change, 1 to destroy. ⚠ it would delete the database with every order!"}};
+const T11={cmd:"terraform plan",file:"moved: aws_db_instance.orders → aws_db_instance.main · lifecycle: prevent_destroy = true",action:{ro:"aws_db_instance.orders a fost mutat la aws_db_instance.main",en:"aws_db_instance.orders has moved to aws_db_instance.main"},result:"Plan: 0 to add, 0 to change, 0 to destroy."};
+
+window.LESSON={
+docTitle:{ro:"Terraform: infrastructura scrisă ca și cod",en:"Terraform: infrastructure written as code"},
+eyebrow:{ro:"Lecție interactivă · Livrare software",en:"Interactive lesson · Software delivery"},
+title:{ro:"Terraform: infrastructura scrisă ca și cod",en:"Terraform: infrastructure written as code"},
+sub:{ro:"Echipa magazinului are nevoie de o rețea, un server web și o bază de date în cloud. Până acum, cineva le crea cu mâna, din consolă, și nimeni nu mai știa exact cum sunt configurate. Le descriem acum în cod și urmărim ce face Terraform la fiecare comandă: init, plan, apply, starea, o schimbare, variabile, o modificare manuală descoperită și o redenumire care era să șteargă baza de date.",en:"The shop team needs a network, a web server and a database in the cloud. Until now, someone created them by hand in the console, and nobody knew exactly how they were configured. We now describe them in code and follow what Terraform does at each command: init, plan, apply, the state, a change, variables, a manual change caught, and a rename that nearly deleted the database."},
+meta:[{ro:"≈ 30 minute",en:"≈ 30 minutes"},{ro:"13 pași",en:"13 steps"},{ro:"8 întrebări",en:"8 questions"},{ro:"Începător+",en:"Beginner+"}],
+goals:[{ro:"Ce înseamnă infrastructură ca și cod și de ce e mai bună decât click-urile în consolă",en:"What infrastructure as code means and why it beats clicking in the console"},{ro:"Ciclul init → plan → apply și ce face fiecare comandă",en:"The init → plan → apply cycle and what each command does"},{ro:"Starea (tfstate), graful de dependențe și simbolurile din plan",en:"The state (tfstate), the dependency graph and the symbols in a plan"},{ro:"Variabile, drift, moved și prevent_destroy: cum eviți greșelile scumpe",en:"Variables, drift, moved and prevent_destroy: how to avoid expensive mistakes"}],
+foot:{ro:"Nume, ID-uri și adrese fictive. Lecția „Deploy de infrastructură cu Terraform” arată cum lucrează o echipă cu Terraform printr-un pipeline.",en:"Fictional names, IDs and addresses. The lesson \"Deploying infrastructure with Terraform\" shows how a team uses Terraform through a pipeline."},
+ui:{frameT:{ro:"Ce face Terraform (live)",en:"What Terraform does (live)"},refT:{ro:"Codul și comenzile",en:"The code and the commands"},refLead:{ro:"Fișierele folosite în lecție și comenzile de zi cu zi.",en:"The files used in the lesson and the everyday commands."}},
+tryT:{ro:"Încearcă (într-un cont de test)",en:"Try it (in a test account)"},
+legend:[["lg-app","HCL",{ro:"cod și comenzi",en:"code and commands"}],["lg-ip","PLAN",{ro:"doar citește",en:"reads only"}],["lg-arp","APPLY",{ro:"schimbă cloud-ul",en:"changes the cloud"}],["lg-tcp","DESTROY",{ro:"șterge / pericol",en:"deletes / danger"}]],
+
+nodes:{
+  dev:{type:"user",name:{ro:"inginer",en:"engineer"},lines:["laptop"]},
+  tf:{type:"box",name:"terraform",lines:["CLI"]},
+  reg:{type:"globe",name:"registry",lines:["registry.terraform.io"]},
+  st:{type:"db",name:"terraform.tfstate",lines:[{ro:"starea",en:"the state"}]},
+  prov:{type:"box",name:"provider aws",lines:["plugin"]},
+  api:{type:"globe",name:"AWS API",lines:["eu-central-1"]},
+  vpc:{type:"router",name:"VPC",lines:["10.0.0.0/16"]},
+  web:{type:"server",name:"web",lines:["EC2"]},
+  db:{type:"db",name:"orders-db",lines:["RDS PostgreSQL"]}
+},
+links:[["dev","tf"],["tf","reg"],["tf","st"],["tf","prov"],["prov","api"],["api","vpc"],["api","web"],["api","db"],["vpc","web","virt"],["vpc","db","virt"]],
+linkLabels:{"dev-tf":"plan · apply","tf-reg":{"ro":"HTTPS · descărcare","en":"HTTPS · download"},"tf-st":{"ro":"citește / scrie","en":"read / write"},"tf-prov":"gRPC","prov-api":"HTTPS · API","api-vpc":"CreateVpc","api-web":"RunInstances","api-db":"CreateDBInstance","vpc-web":"10.0.1.0/24","vpc-db":"10.0.2.0/24"},
+layouts:{
+  wide:{vb:[0,0,1000,520],n:{dev:[70,270],tf:[240,270],reg:[240,80],st:[240,450],prov:[430,270],api:[640,270],vpc:[880,120],web:[720,440],db:[930,440]},
+    zones:[{x:570,y:30,w:420,h:470,top:true,cls:"virt",l:{ro:"Cont AWS · eu-central-1",en:"AWS account · eu-central-1"}}]},
+  narrow:{vb:[0,0,360,880],n:{dev:[60,50],reg:[270,60],tf:[180,180],st:[60,330],prov:[300,330],api:[110,480],vpc:[280,610],web:[110,790],db:[290,790]},
+    side:{api:"left"},lpos:{"api-db":.72,"api-web":.42}}
+},
+groups:[
+  {id:"c",color:"l7",fields:["cmd","file"],name:{ro:"Comanda și codul",en:"The command and the code"},short:{ro:"Comanda",en:"Command"},grow:3},
+  {id:"r",color:"l3",fields:["addr","action","attrs"],name:{ro:"Resursa în plan",en:"The resource in the plan"},short:{ro:"Resursa",en:"Resource"},grow:3},
+  {id:"a",color:"l2",fields:["call","id"],name:{ro:"Spre cloud",en:"To the cloud"},short:"Cloud",grow:3},
+  {id:"s",color:"arp",fields:["state","result"],name:{ro:"Starea și rezultatul",en:"State and result"},short:{ro:"Rezultat",en:"Result"},grow:3}
+],
+fieldLabels:{cmd:{ro:"Comanda",en:"Command"},file:{ro:"Fișier",en:"File"},addr:{ro:"Adresa resursei",en:"Resource address"},action:{ro:"Acțiune",en:"Action"},attrs:{ro:"Atribute",en:"Attributes"},call:{ro:"Apel API",en:"API call"},id:{ro:"ID / versiune",en:"ID / version"},state:{ro:"Starea",en:"State"},result:{ro:"Rezultat",en:"Result"}},
+pdu:f=>{const c=f.cmd||"",r=E(f.result);
+  if(/destroy\./.test(E(f.action))||/⚠/.test(r))return {badge:{ro:"Plan periculos",en:"Dangerous plan"},tok:["DESTROY","k-tcp"]};
+  if(/^terraform apply/.test(c))return {badge:{ro:"Apply: schimbări reale în cloud",en:"Apply: real changes in the cloud"},tok:["APPLY","k-arp"]};
+  if(/plan|graph|state/.test(c))return {badge:{ro:"Doar citește, nu schimbă nimic",en:"Reads only, changes nothing"},tok:["PLAN","k-ip"]};
+  if(/init/.test(c))return {badge:{ro:"Pregătirea folderului",en:"Preparing the folder"},tok:["INIT","k-app"]};
+  return {badge:{ro:"Cod HCL",en:"HCL code"},tok:["HCL","k-app"]}},
+
+init:{},
+tables:{
+  why:{title:{ro:"Consolă vs. cod",en:"Console vs code"},cols:["",{ro:"Click-uri în consolă",en:"Clicks in the console"},{ro:"Terraform (cod în Git)",en:"Terraform (code in Git)"}],plain:[0,1,2],
+    rows:()=>[[{ro:"Ce există și cum e configurat",en:"What exists and how it's configured"},{ro:"te uiți prin consolă și speri",en:"look around the console and hope"},{ro:"scrie în cod",en:"it's written in the code"}],[{ro:"Un mediu nou (staging)",en:"A new environment (staging)"},{ro:"zile de click-uri, cu diferențe",en:"days of clicking, with differences"},{ro:"aceeași cod, alte variabile",en:"the same code, other variables"}],[{ro:"Cine a schimbat ce",en:"Who changed what"},{ro:"poate în jurnalul de audit",en:"maybe in the audit log"},{ro:"istoricul Git și review",en:"Git history and review"}],[{ro:"Ce se va întâmpla",en:"What will happen"},{ro:"afli după click",en:"you find out after clicking"},{ro:"vezi planul înainte",en:"you see the plan first"}]]},
+  files:{title:{ro:"Fișierele unui proiect Terraform",en:"A Terraform project's files"},cols:[{ro:"Fișier",en:"File"},{ro:"Ce conține",en:"What it holds"},{ro:"În Git?",en:"In Git?"}],plain:[1,2],
+    rows:()=>[["main.tf",{ro:"providerul și resursele",en:"the provider and the resources"},{ro:"da",en:"yes"}],["variables.tf / outputs.tf",{ro:"intrările și ieșirile",en:"the inputs and outputs"},{ro:"da",en:"yes"}],[".terraform.lock.hcl",{ro:"versiunile exacte ale providerilor",en:"the providers' exact versions"},{ro:"da",en:"yes"}],[".terraform/",{ro:"providerii descărcați",en:"the downloaded providers"},{ro:"nu",en:"no"}],["terraform.tfstate",{ro:"starea: ID-uri reale, secrete",en:"the state: real IDs, secrets"},{ro:"niciodată",en:"never"}]]},
+  graph:{title:{ro:"Ordinea, din referințe",en:"The order, from references"},cols:[{ro:"Resursa",en:"Resource"},{ro:"Depinde de",en:"Depends on"},{ro:"Pentru că folosește",en:"Because it uses"}],
+    rows:()=>[["aws_vpc.main","—","—"],["aws_subnet.web","aws_vpc.main","vpc_id = aws_vpc.main.id"],["aws_security_group.web","aws_vpc.main","vpc_id = aws_vpc.main.id"],["aws_instance.web","aws_subnet.web, aws_security_group.web","subnet_id, vpc_security_group_ids"],["aws_db_instance.orders","aws_subnet.db (db_subnet_group)","db_subnet_group_name"]]},
+  stt:{title:{ro:"Ce ține minte starea",en:"What the state remembers"},cols:[{ro:"Adresa în cod",en:"Address in code"},{ro:"ID-ul real",en:"The real ID"}],
+    rows:()=>[["aws_vpc.main","vpc-0a1b2c3d4e5f60718"],["aws_subnet.web","subnet-07c1e5a9d3b2f4e60"],["aws_security_group.web","sg-0d4c2b1a09e8f7a65"],["aws_instance.web","i-0f2e4d6c8b0a19273"],["aws_db_instance.orders","db-ORDERS7XK2Q"]]},
+  sym:{title:{ro:"Simbolurile din plan",en:"The symbols in a plan"},cols:[{ro:"Simbol",en:"Symbol"},{ro:"Înseamnă",en:"Means"},{ro:"Exemplu",en:"Example"}],plain:[1,2],
+    rows:()=>[["+",{ro:"creează",en:"create"},{ro:"o resursă nouă în cod",en:"a new resource in the code"}],["~",{ro:"modifică pe loc",en:"update in place"},{ro:"alt instance_type",en:"a different instance_type"}],["-/+",{ro:"șterge și recreează",en:"destroy, then recreate"},{ro:"alt AMI (forces replacement)",en:"a different AMI (forces replacement)"}],["-",{ro:"șterge",en:"destroy"},{ro:"resursa a dispărut din cod",en:"the resource was removed from the code"}],["<=",{ro:"citește o sursă de date",en:"read a data source"},{ro:"data.aws_ami.al2023",en:"data.aws_ami.al2023"}]]},
+  safe:{title:{ro:"Plase de siguranță",en:"Safety nets"},cols:[{ro:"Ce",en:"What"},{ro:"Te apără de",en:"Protects you from"}],plain:[1],
+    rows:()=>[["moved { }",{ro:"recrearea unei resurse doar pentru că i-ai schimbat numele în cod",en:"recreating a resource just because you renamed it in code"}],["prevent_destroy",{ro:"orice plan care ar șterge resursa (eroare la plan)",en:"any plan that would delete the resource (an error at plan time)"}],["deletion_protection",{ro:"ștergerea din consolă sau din API (setare AWS)",en:"deletion from the console or the API (an AWS setting)"}],["import { }",{ro:"resurse create de mână, aduse sub Terraform fără recreare",en:"hand-made resources, brought under Terraform without recreating them"}]]}
+},
+log:{title:{ro:"Jurnalul comenzilor",en:"Command log"},lead:{ro:"Aceeași infrastructură, de la primul fișier până la o greșeală evitată.",en:"The same infrastructure, from the first file to a mistake avoided."},first:{ro:"Pas",en:"Step"},minWidth:600,
+  cols:[{h:{ro:"Comanda",en:"Command"},v:f=>f.cmd||f.file||"",cls:"mac"},{h:{ro:"Acțiune",en:"Action"},v:f=>f.action||"",cls:"ip"},{h:{ro:"Rezultat",en:"Result"},v:f=>f.result||"",cls:""}]},
+
+steps:[
+{at:["dev","api"],frame:null,kind:"none",tables:["why"],who:{ro:"Problema",en:"The problem"},
+ title:{ro:"De ce: infrastructura făcută din click-uri",en:"Why: infrastructure made of clicks"},
+ body:{ro:`<p>Magazinul rulează în AWS. Rețeaua, serverul web și baza de date au fost create acum doi ani, din consolă, de un coleg care între timp a plecat. Acum echipa vrea un mediu de <strong>staging</strong> identic cu producția. Nimeni nu știe exact ce setări au fost bifate.</p>
+<p><strong>Infrastructura ca și cod</strong> (IaC) înseamnă că descrii în fișiere text <em>ce</em> vrei să existe: o rețea cu adresele astea, un server de tipul ăsta, o bază de date cu backup 7 zile. Fișierele stau în Git, trec prin review și pot fi aplicate oricând, de câte ori vrei.</p>
+<p class="key">Terraform citește codul, se uită ce există deja și face doar diferența: creează, modifică sau șterge cât e nevoie ca realitatea să arate ca în cod.</p>`,
+ en:`<p>The shop runs in AWS. The network, the web server and the database were created two years ago, in the console, by a colleague who has since left. Now the team wants a <strong>staging</strong> environment identical to production. Nobody knows exactly which settings were ticked.</p>
+<p><strong>Infrastructure as code</strong> (IaC) means you describe in text files <em>what</em> you want to exist: a network with these addresses, a server of this type, a database with 7 days of backups. The files live in Git, go through review and can be applied any time, as often as you like.</p>
+<p class="key">Terraform reads the code, looks at what already exists and only does the difference: it creates, changes or deletes just enough for reality to match the code.</p>`},
+ more:{ro:`<p>Terraform e <em>declarativ</em>: nu scrii pașii („creează VPC, apoi subnet”), ci rezultatul dorit. Un script bash cu comenzi <code>aws</code> e <em>imperativ</em>: rulat de două ori, încearcă să creeze totul de două ori. Terraform rulat de două ori a doua oară nu face nimic. Din 2023 există și <strong>OpenTofu</strong>, o variantă open source a lui Terraform cu aceeași sintaxă.</p>`,
+  en:`<p>Terraform is <em>declarative</em>: you don't write the steps ("create the VPC, then a subnet"), but the result you want. A bash script with <code>aws</code> commands is <em>imperative</em>: run twice, it tries to create everything twice. Run Terraform twice and the second time it does nothing. Since 2023 there's also <strong>OpenTofu</strong>, an open-source variant of Terraform with the same syntax.</p>`}},
+
+{at:"dev",frame:T1,kind:"t",tables:["files"],log:{ro:"codul scris",en:"the code written"},who:"HCL",
+ title:{ro:"Scriem codul: provider și resurse în HCL",en:"Writing the code: a provider and resources in HCL"},
+ body:{ro:`<p>Codul Terraform se scrie în <strong>HCL</strong>, în fișiere <code>.tf</code>. În <code>main.tf</code> sunt două feluri de blocuri:</p>
+<ul><li><code>provider "aws"</code>: cu ce cloud vorbim și în ce regiune (eu-central-1);</li>
+<li><code>resource "tip" "nume"</code>: un lucru care trebuie să existe. De exemplu <code>resource "aws_instance" "web"</code> are tipul <code>aws_instance</code> (o mașină virtuală EC2) și numele local <code>web</code>.</li></ul>
+<p>Împreună, tipul și numele dau <strong>adresa</strong> resursei: <code>aws_instance.web</code>. Așa o vei vedea în plan, în stare și în erori.</p>
+<p>Echipa scrie 6 resurse: VPC-ul, două subnet-uri (web și baza de date), un security group, serverul web și baza de date. În cloud nu s-a creat încă nimic: deocamdată e doar text.</p>`,
+ en:`<p>Terraform code is written in <strong>HCL</strong>, in <code>.tf</code> files. <code>main.tf</code> holds two kinds of blocks:</p>
+<ul><li><code>provider "aws"</code>: which cloud we talk to and in which region (eu-central-1);</li>
+<li><code>resource "type" "name"</code>: something that must exist. For example <code>resource "aws_instance" "web"</code> has the type <code>aws_instance</code> (an EC2 virtual machine) and the local name <code>web</code>.</li></ul>
+<p>Together, the type and the name make the resource's <strong>address</strong>: <code>aws_instance.web</code>. That's how you'll see it in the plan, in the state and in errors.</p>
+<p>The team writes 6 resources: the VPC, two subnets (web and database), a security group, the web server and the database. Nothing has been created in the cloud yet: so far it's just text.</p>`},
+ more:{ro:`<p>Terraform citește <em>toate</em> fișierele <code>.tf</code> din folder ca pe unul singur. Împărțirea în <code>main.tf</code>, <code>variables.tf</code>, <code>outputs.tf</code> e doar o convenție pentru oameni.</p>`,
+  en:`<p>Terraform reads <em>every</em> <code>.tf</code> file in the folder as if it were one. Splitting into <code>main.tf</code>, <code>variables.tf</code>, <code>outputs.tf</code> is just a convention for humans.</p>`}},
+
+{at:"tf",frame:T2,kind:"t",move:[[["dev","tf"]],[["tf","reg"]],[["tf","prov"]]],log:{ro:"providerul descărcat",en:"the provider downloaded"},who:"terraform init",
+ title:{ro:"terraform init: descarcă providerul",en:"terraform init: downloading the provider"},
+ body:{ro:`<p>Terraform însuși nu știe nimic despre AWS. Toată cunoașterea despre un cloud stă într-un <strong>provider</strong>: un program separat (plugin) care traduce resursele din HCL în apeluri către API-ul acelui cloud.</p>
+<p><code>terraform init</code> se rulează o dată, la început, și după orice schimbare de provider sau de backend:</p>
+<ul><li>citește blocul <code>required_providers</code>: <code>hashicorp/aws</code>, versiunea <code>~> 6.0</code> (orice 6.x);</li>
+<li>descarcă providerul din <strong>registry</strong>, în folderul <code>.terraform/</code>;</li>
+<li>scrie în <code>.terraform.lock.hcl</code> versiunea exactă și hash-ul. Fișierul ăsta intră în Git: toți colegii și pipeline-ul vor folosi exact aceeași versiune.</li></ul>`,
+ en:`<p>Terraform itself knows nothing about AWS. All the knowledge about a cloud lives in a <strong>provider</strong>: a separate program (plugin) that turns the resources in HCL into calls to that cloud's API.</p>
+<p><code>terraform init</code> runs once at the start, and after any change of provider or backend:</p>
+<ul><li>it reads the <code>required_providers</code> block: <code>hashicorp/aws</code>, version <code>~> 6.0</code> (any 6.x);</li>
+<li>downloads the provider from the <strong>registry</strong>, into the <code>.terraform/</code> folder;</li>
+<li>writes the exact version and hash to <code>.terraform.lock.hcl</code>. That file goes into Git: every colleague and the pipeline will use exactly the same version.</li></ul>`},
+ more:{ro:`<p>Terraform și providerul rulează ca două procese separate și vorbesc prin gRPC, pe calculatorul tău. Există provideri pentru aproape orice: AWS, Azure, Google Cloud, Kubernetes, Cloudflare, GitHub, chiar și Grafana.</p>`,
+  en:`<p>Terraform and the provider run as two separate processes and talk over gRPC, on your machine. There are providers for almost anything: AWS, Azure, Google Cloud, Kubernetes, Cloudflare, GitHub, even Grafana.</p>`},
+ try:[{cmd:"terraform init",d:{ro:"Pregătește folderul: provideri, module, backend.",en:"Prepares the folder: providers, modules, backend."}},{cmd:"terraform providers",d:{ro:"Arată ce provideri cere codul.",en:"Shows which providers the code needs."}}]},
+
+{at:"tf",frame:T3,kind:"t",move:[[["dev","tf"]],[["tf","st"]],[["tf","prov"],["prov","api"]]],log:{ro:"primul plan",en:"the first plan"},who:"terraform plan",
+ title:{ro:"terraform plan: ce se va întâmpla, înainte să se întâmple",en:"terraform plan: what will happen, before it happens"},
+ body:{ro:`<p><code>terraform plan</code> compară trei lucruri:</p>
+<ol><li><strong>codul</strong>: ce vrei să existe;</li>
+<li><strong>starea</strong>: ce a creat Terraform data trecută (acum e goală);</li>
+<li><strong>realitatea</strong>: providerul întreabă API-ul AWS cum arată resursele cunoscute acum.</li></ol>
+<p>Rezultatul e o listă de acțiuni. Toate cele 6 resurse au <code>+</code> în față: trebuie create. La final: <strong>Plan: 6 to add, 0 to change, 0 to destroy.</strong></p>
+<p class="key">plan doar citește. Nu schimbă nimic în cloud. Îl poți rula de oricâte ori.</p>`,
+ en:`<p><code>terraform plan</code> compares three things:</p>
+<ol><li>the <strong>code</strong>: what you want to exist;</li>
+<li>the <strong>state</strong>: what Terraform created last time (it's empty now);</li>
+<li><strong>reality</strong>: the provider asks the AWS API what the known resources look like now.</li></ol>
+<p>The result is a list of actions. All 6 resources have a <code>+</code> in front: they must be created. At the end: <strong>Plan: 6 to add, 0 to change, 0 to destroy.</strong></p>
+<p class="key">plan only reads. It changes nothing in the cloud. You can run it as often as you like.</p>`},
+ more:{ro:`<p>Cu <code>-out=tfplan</code>, planul e salvat într-un fișier. Un <code>terraform apply tfplan</code> va face exact ce scrie în el, nimic în plus. Fără fișier, <code>apply</code> calculează un plan nou și te întreabă „yes” înainte.</p>`,
+  en:`<p>With <code>-out=tfplan</code>, the plan is saved to a file. A <code>terraform apply tfplan</code> will do exactly what's in it, nothing more. Without a file, <code>apply</code> works out a new plan and asks you for "yes" first.</p>`},
+ try:[{cmd:"terraform plan -out=tfplan",d:{ro:"Calculează și salvează planul.",en:"Works out and saves the plan."}},{cmd:"terraform show tfplan",d:{ro:"Recitește un plan salvat.",en:"Reads a saved plan back."}}]},
+
+{at:"tf",frame:T4,kind:"t",tables:["graph"],hl:{graph:"aws_instance.web"},log:{ro:"graful de dependențe",en:"the dependency graph"},who:{ro:"Graful",en:"The graph"},
+ title:{ro:"În ce ordine? Graful de dependențe",en:"In what order? The dependency graph"},
+ body:{ro:`<p>Nu poți crea un server într-un subnet care nu există. Dar nicăieri în cod nu scrie „întâi VPC-ul”. De unde știe Terraform ordinea?</p>
+<p>Din <strong>referințe</strong>. Serverul are <code>subnet_id = aws_subnet.web.id</code>: ID-ul subnet-ului se află abia după ce subnet-ul e creat. Deci serverul depinde de subnet, iar subnet-ul (cu <code>vpc_id = aws_vpc.main.id</code>) depinde de VPC.</p>
+<p>Terraform construiește un <strong>graf</strong> din toate referințele și creează în paralel tot ce nu depinde unul de altul (implicit 10 deodată). Subnet-urile și security group-ul pornesc împreună, imediat după VPC.</p>`,
+ en:`<p>You can't create a server in a subnet that doesn't exist. But nowhere in the code does it say "the VPC first". How does Terraform know the order?</p>
+<p>From <strong>references</strong>. The server has <code>subnet_id = aws_subnet.web.id</code>: the subnet's ID is only known once the subnet is created. So the server depends on the subnet, and the subnet (with <code>vpc_id = aws_vpc.main.id</code>) depends on the VPC.</p>
+<p>Terraform builds a <strong>graph</strong> from every reference and creates everything that doesn't depend on something else in parallel (10 at a time by default). The subnets and the security group start together, right after the VPC.</p>`},
+ more:{ro:`<p>Există și <code>depends_on</code>, pentru dependențe pe care Terraform nu le poate vedea din referințe (de exemplu o permisiune IAM de care aplicația are nevoie la pornire). Folosește-l rar: o referință reală e aproape mereu mai clară.</p>`,
+  en:`<p>There's also <code>depends_on</code>, for dependencies Terraform can't see from references (for example an IAM permission the app needs when it starts). Use it rarely: a real reference is almost always clearer.</p>`}},
+
+{at:"api",frame:T5,kind:"t",move:[[["tf","prov"],["prov","api"]],[["api","vpc"]],[["api","web"],["api","db"]],[["tf","st"]]],marks:{web:{k:"ok",t:"running"},db:{k:"ok",t:"available"}},log:{ro:"infrastructura creată",en:"the infrastructure created"},who:"terraform apply",
+ title:{ro:"terraform apply: infrastructura apare",en:"terraform apply: the infrastructure appears"},
+ body:{ro:`<p><code>terraform apply tfplan</code> execută planul salvat. Providerul face apelurile reale, în ordinea din graf:</p>
+<ul><li><code>CreateVpc</code> → AWS răspunde cu ID-ul <code>vpc-0a1b2c3d4e5f60718</code>;</li>
+<li><code>CreateSubnet</code> ×2 și <code>CreateSecurityGroup</code>, în paralel;</li>
+<li><code>RunInstances</code> pentru serverul web (≈ 30 s) și <code>CreateDBInstance</code> pentru baza de date (≈ 10 minute: RDS e lent la creare).</li></ul>
+<p>După fiecare resursă creată, Terraform scrie ID-ul ei în <strong>terraform.tfstate</strong>. La final: <strong>Apply complete! Resources: 6 added, 0 changed, 0 destroyed.</strong></p>`,
+ en:`<p><code>terraform apply tfplan</code> runs the saved plan. The provider makes the real calls, in the graph's order:</p>
+<ul><li><code>CreateVpc</code> → AWS answers with the ID <code>vpc-0a1b2c3d4e5f60718</code>;</li>
+<li><code>CreateSubnet</code> ×2 and <code>CreateSecurityGroup</code>, in parallel;</li>
+<li><code>RunInstances</code> for the web server (≈ 30 s) and <code>CreateDBInstance</code> for the database (≈ 10 minutes: RDS is slow to create).</li></ul>
+<p>After each resource is created, Terraform writes its ID to <strong>terraform.tfstate</strong>. At the end: <strong>Apply complete! Resources: 6 added, 0 changed, 0 destroyed.</strong></p>`},
+ more:{ro:`<p>Rulează <code>terraform plan</code> imediat după: <strong>No changes. Your infrastructure matches the configuration.</strong> Asta e proprietatea cea mai importantă: același cod aplicat a doua oară nu mai face nimic.</p>`,
+  en:`<p>Run <code>terraform plan</code> straight after: <strong>No changes. Your infrastructure matches the configuration.</strong> That's the most important property: the same code applied a second time does nothing.</p>`},
+ try:[{cmd:"terraform apply tfplan",d:{ro:"Aplică exact planul salvat.",en:"Applies exactly the saved plan."}}]},
+
+{at:"st",frame:T6,kind:"t",move:[[["tf","st"]]],tables:["stt"],hl:{stt:"aws_instance.web"},log:{ro:"starea citită",en:"the state read"},who:{ro:"Starea",en:"The state"},
+ title:{ro:"Starea: memoria lui Terraform",en:"The state: Terraform's memory"},
+ body:{ro:`<p><code>terraform.tfstate</code> e un fișier JSON care leagă fiecare adresă din cod de resursa reală: <code>aws_instance.web</code> = <code>i-0f2e4d6c8b0a19273</code>. Fără el, Terraform n-ar ști că serverul din AWS e „al lui” și ar încerca să creeze altul.</p>
+<p>Starea are și toate atributele resurselor, inclusiv cele secrete. Dacă parola bazei de date e în cod sau într-o variabilă, ea ajunge <strong>în clar</strong> în stare (<code>sensitive = true</code> o ascunde doar din afișare, nu din fișier).</p>
+<p class="key">Starea nu se pune niciodată în Git și nu se editează de mână. În echipă stă într-un backend comun, criptat și cu lock: vezi lecția despre deploy.</p>`,
+ en:`<p><code>terraform.tfstate</code> is a JSON file that links every address in the code to the real resource: <code>aws_instance.web</code> = <code>i-0f2e4d6c8b0a19273</code>. Without it, Terraform wouldn't know the server in AWS is "its own" and would try to create another one.</p>
+<p>The state also holds every resource attribute, secret ones included. If the database password is in the code or in a variable, it ends up <strong>in plain text</strong> in the state (<code>sensitive = true</code> only hides it from the output, not from the file).</p>
+<p class="key">The state never goes into Git and is never edited by hand. In a team it lives in a shared backend, encrypted and locked: see the deploy lesson.</p>`},
+ more:{ro:`<p>Pentru parola RDS, mai bine <code>manage_master_user_password = true</code>: AWS generează parola și o ține în Secrets Manager, iar în stare ajunge doar o referință către secret.</p>`,
+  en:`<p>For the RDS password, better use <code>manage_master_user_password = true</code>: AWS generates the password and keeps it in Secrets Manager, and only a reference to the secret ends up in the state.</p>`},
+ try:[{cmd:"terraform state list",d:{ro:"Toate adresele din stare.",en:"Every address in the state."}},{cmd:"terraform state show aws_instance.web",d:{ro:"Atributele unei resurse.",en:"One resource's attributes."}}]},
+
+{at:"web",frame:T7,kind:"t",move:[[["tf","prov"],["prov","api"]],[["api","web"]]],tables:["sym"],hl:{sym:"~"},log:{ro:"server mai mare",en:"a bigger server"},who:{ro:"Schimbarea",en:"The change"},
+ title:{ro:"O schimbare: serverul are nevoie de mai multă memorie",en:"A change: the server needs more memory"},
+ body:{ro:`<p>Traficul crește și serverul web are nevoie de mai multă memorie. Echipa schimbă o singură linie: <code>instance_type = "t3.medium"</code> în loc de <code>"t3.small"</code>, și rulează plan.</p>
+<p>Planul arată <code>~ update in-place</code>: AWS poate schimba tipul unei instanțe existente (o oprește, o modifică și o pornește). Serverul păstrează ID-ul, IP-ul și discul. <strong>Plan: 0 to add, 1 to change, 0 to destroy.</strong></p>
+<p>Dar unele atribute nu se pot schimba pe loc. Dacă schimbi imaginea (AMI), planul arată <code>-/+</code> și <em># forces replacement</em>: serverul vechi e șters și se creează unul nou, cu alt IP.</p>
+<p class="key">Citește mereu simbolurile din plan înainte de apply. Diferența dintre ~ și -/+ poate fi diferența dintre un restart și pierderea datelor.</p>`,
+ en:`<p>Traffic grows and the web server needs more memory. The team changes a single line: <code>instance_type = "t3.medium"</code> instead of <code>"t3.small"</code>, and runs plan.</p>
+<p>The plan shows <code>~ update in-place</code>: AWS can change an existing instance's type (it stops it, changes it and starts it). The server keeps its ID, IP and disk. <strong>Plan: 0 to add, 1 to change, 0 to destroy.</strong></p>
+<p>But some attributes can't be changed in place. If you change the image (AMI), the plan shows <code>-/+</code> and <em># forces replacement</em>: the old server is deleted and a new one is created, with a different IP.</p>
+<p class="key">Always read the symbols in the plan before applying. The difference between ~ and -/+ can be the difference between a restart and lost data.</p>`},
+ more:{ro:`<p>Cu <code>lifecycle { create_before_destroy = true }</code>, la înlocuire Terraform creează întâi resursa nouă și abia apoi o șterge pe cea veche (<code>+/-</code>). Util pentru servere din spatele unui load balancer.</p>`,
+  en:`<p>With <code>lifecycle { create_before_destroy = true }</code>, on replacement Terraform first creates the new resource and only then deletes the old one (<code>+/-</code>). Handy for servers behind a load balancer.</p>`}},
+
+{at:"tf",frame:T8,kind:"t",move:[[["dev","tf"]],[["tf","prov"],["prov","api"]]],log:{ro:"variabile și ieșiri",en:"variables and outputs"},who:{ro:"Variabile",en:"Variables"},
+ title:{ro:"Același cod, alt mediu: variabile, surse de date, ieșiri",en:"The same code, another environment: variables, data sources, outputs"},
+ body:{ro:`<p>Pentru staging, echipa nu copiază codul. Pune în variabile ce diferă între medii:</p>
+<ul><li><strong>variable</strong>: <code>variable "instance_type" {}</code> în <code>variables.tf</code>, cu valori în <code>staging.tfvars</code> (t3.small) și <code>prod.tfvars</code> (t3.large). În cod: <code>var.instance_type</code>.</li>
+<li><strong>data</strong>: o sursă de date <em>citește</em> ceva ce există deja. <code>data "aws_ami" "al2023"</code> găsește cea mai nouă imagine Amazon Linux 2023, ca să nu scrii ID-ul de mână. În plan apare cu <code>&lt;=</code>.</li>
+<li><strong>output</strong>: valori afișate după apply și folosite de alte sisteme, de exemplu adresa bazei de date.</li></ul>
+<p>Fiecare mediu are <strong>starea lui</strong>. Altfel, apply cu prod.tfvars ar „muta” serverul de staging în producție.</p>`,
+ en:`<p>For staging, the team doesn't copy the code. It puts what differs between environments into variables:</p>
+<ul><li><strong>variable</strong>: <code>variable "instance_type" {}</code> in <code>variables.tf</code>, with values in <code>staging.tfvars</code> (t3.small) and <code>prod.tfvars</code> (t3.large). In the code: <code>var.instance_type</code>.</li>
+<li><strong>data</strong>: a data source <em>reads</em> something that already exists. <code>data "aws_ami" "al2023"</code> finds the newest Amazon Linux 2023 image, so you don't type the ID by hand. It shows up in the plan with <code>&lt;=</code>.</li>
+<li><strong>output</strong>: values shown after apply and used by other systems, for example the database address.</li></ul>
+<p>Each environment has <strong>its own state</strong>. Otherwise, an apply with prod.tfvars would "move" the staging server into production.</p>`},
+ more:{ro:`<p>Atenție la AMI-ul „cel mai nou”: când apare o imagine nouă, planul va arăta brusc <code>-/+</code> pe server. Multe echipe fixează AMI-ul într-o variabilă și îl schimbă intenționat, printr-un PR.</p>`,
+  en:`<p>Careful with the "newest" AMI: when a new image comes out, the plan will suddenly show <code>-/+</code> on the server. Many teams pin the AMI in a variable and change it on purpose, through a PR.</p>`},
+ try:[{cmd:"terraform plan -var-file=staging.tfvars",d:{ro:"Planul pentru staging.",en:"The plan for staging."}},{cmd:"terraform output db_endpoint",d:{ro:"Citește o ieșire.",en:"Reads an output."}}]},
+
+{at:"web",frame:T9,kind:"t",move:[[["tf","prov"],["prov","api"]],[["api","web"]]],marks:{web:{k:"drop",t:{ro:"port 22 deschis de mână",en:"port 22 opened by hand"}}},log:{ro:"drift descoperit",en:"drift found"},who:"Drift",
+ title:{ro:"Drift: cineva a schimbat ceva din consolă",en:"Drift: someone changed something in the console"},
+ body:{ro:`<p>Vineri seara, un coleg depanează o problemă și deschide din consolă portul <strong>22 (SSH) spre tot internetul</strong> pe security group-ul serverului web. Apoi uită de el.</p>
+<p>Luni, cineva rulează <code>terraform plan</code> pentru altă schimbare. Providerul citește security group-ul real și găsește o regulă care nu e în cod. Planul arată <code>~ update in-place</code> cu regula marcată <code>-</code>: Terraform vrea s-o șteargă, pentru că realitatea trebuie să arate ca în cod.</p>
+<p>Diferența dintre cod și realitate se numește <strong>drift</strong>. Aici e un lucru bun că a fost găsit: regula era o gaură de securitate. Dacă schimbarea manuală era de fapt necesară, locul ei e în cod, printr-un PR.</p>`,
+ en:`<p>On Friday evening, a colleague is debugging a problem and opens <strong>port 22 (SSH) to the whole internet</strong> on the web server's security group, from the console. Then forgets about it.</p>
+<p>On Monday, someone runs <code>terraform plan</code> for another change. The provider reads the real security group and finds a rule that isn't in the code. The plan shows <code>~ update in-place</code> with the rule marked <code>-</code>: Terraform wants to remove it, because reality must match the code.</p>
+<p>The difference between the code and reality is called <strong>drift</strong>. Here it's a good thing it was caught: the rule was a security hole. If the manual change was actually needed, it belongs in the code, through a PR.</p>`},
+ more:{ro:`<p><code>terraform plan -refresh-only</code> arată doar ce s-a schimbat în afara lui Terraform, fără să propună modificări. Resursele create complet de mână se aduc sub Terraform cu un bloc <code>import</code> (adresa <code>to</code> și ID-ul real <code>id</code>), fără să le recreezi.</p>`,
+  en:`<p><code>terraform plan -refresh-only</code> shows only what changed outside Terraform, without proposing changes. Resources created entirely by hand are brought under Terraform with an <code>import</code> block (the <code>to</code> address and the real <code>id</code>), without recreating them.</p>`}},
+
+{at:"db",frame:T10,kind:"t",move:[[["tf","st"]],[["tf","prov"],["prov","api"]]],marks:{db:{k:"drop",t:{ro:"ar fi ștearsă!",en:"would be deleted!"}}},log:{ro:"redenumire periculoasă",en:"a dangerous rename"},who:{ro:"Pericol",en:"Danger"},
+ title:{ro:"O redenumire nevinovată care ar șterge baza de date",en:"An innocent rename that would delete the database"},
+ body:{ro:`<p>Un coleg face ordine în cod și redenumește <code>resource "aws_db_instance" "orders"</code> în <code>"main"</code>. Doar numele local, nimic altceva.</p>
+<p>Dar pentru Terraform, adresa e identitatea. În stare există <code>aws_db_instance.orders</code>, care nu mai e în cod, deci trebuie <strong>ștearsă</strong>. În cod există <code>aws_db_instance.main</code>, care nu e în stare, deci trebuie <strong>creată</strong>. Planul: <strong>1 to add, 0 to change, 1 to destroy.</strong></p>
+<p>Un apply ar șterge baza de date cu toate comenzile clienților și ar crea una goală.</p>
+<p class="key">De-asta planul se citește, nu doar se aprobă. Orice „destroy” pe o bază de date, un bucket sau un disc trebuie să te oprească.</p>`,
+ en:`<p>A colleague tidies up the code and renames <code>resource "aws_db_instance" "orders"</code> to <code>"main"</code>. Only the local name, nothing else.</p>
+<p>But to Terraform, the address is the identity. The state has <code>aws_db_instance.orders</code>, which is no longer in the code, so it must be <strong>deleted</strong>. The code has <code>aws_db_instance.main</code>, which isn't in the state, so it must be <strong>created</strong>. The plan: <strong>1 to add, 0 to change, 1 to destroy.</strong></p>
+<p>An apply would delete the database with every customer order and create an empty one.</p>
+<p class="key">That's why a plan is read, not just approved. Any "destroy" on a database, a bucket or a disk should stop you.</p>`}},
+
+{at:"db",frame:T11,kind:"t",move:[[["tf","st"]]],marks:{db:{k:"ok",t:{ro:"în siguranță",en:"safe"}}},tables:["safe"],hl:{safe:"moved { }"},log:{ro:"moved + prevent_destroy",en:"moved + prevent_destroy"},who:{ro:"Plase de siguranță",en:"Safety nets"},
+ title:{ro:"Reparația: moved și prevent_destroy",en:"The fix: moved and prevent_destroy"},
+ body:{ro:`<p>Redenumirea se face corect cu un bloc <strong>moved</strong>:</p>
+<p><code>moved {<br>&nbsp;&nbsp;from = aws_db_instance.orders<br>&nbsp;&nbsp;to&nbsp;&nbsp;&nbsp;= aws_db_instance.main<br>}</code></p>
+<p>Terraform mută intrarea în stare la adresa nouă. Planul spune <em>has moved to</em> și <strong>0 to destroy</strong>. Baza de date nu e atinsă.</p>
+<p>Ca să nu depindă totul de atenția cuiva, echipa adaugă și plase de siguranță pe resursele importante:</p>
+<ul><li><code>lifecycle { prevent_destroy = true }</code>: orice plan care ar șterge baza de date se oprește cu eroare;</li>
+<li><code>deletion_protection = true</code>: AWS însuși refuză ștergerea, chiar și din consolă.</li></ul>`,
+ en:`<p>The rename is done properly with a <strong>moved</strong> block:</p>
+<p><code>moved {<br>&nbsp;&nbsp;from = aws_db_instance.orders<br>&nbsp;&nbsp;to&nbsp;&nbsp;&nbsp;= aws_db_instance.main<br>}</code></p>
+<p>Terraform moves the state entry to the new address. The plan says <em>has moved to</em> and <strong>0 to destroy</strong>. The database isn't touched.</p>
+<p>So that it doesn't all depend on someone paying attention, the team also adds safety nets on the important resources:</p>
+<ul><li><code>lifecycle { prevent_destroy = true }</code>: any plan that would delete the database stops with an error;</li>
+<li><code>deletion_protection = true</code>: AWS itself refuses the deletion, even from the console.</li></ul>`},
+ more:{ro:`<p>Pentru cazuri vechi există și <code>terraform state mv aws_db_instance.orders aws_db_instance.main</code>, dar blocul <code>moved</code> e mai bun: stă în cod, trece prin review și se aplică la fel în toate mediile.</p>`,
+  en:`<p>For older setups there's also <code>terraform state mv aws_db_instance.orders aws_db_instance.main</code>, but the <code>moved</code> block is better: it lives in the code, goes through review and applies the same way in every environment.</p>`}},
+
+{at:["tf","st","api","vpc","web","db"],frame:null,kind:"none",summary:true,
+ title:{ro:"Recapitulare",en:"Recap"},
+ body:{ro:`<ul><li><strong>IaC</strong>: infrastructura e descrisă în cod, în Git, cu review; Terraform face doar diferența dintre cod și realitate.</li>
+<li><strong>init</strong> descarcă providerii și îi blochează în <code>.terraform.lock.hcl</code>.</li>
+<li><strong>plan</strong> compară codul, starea și realitatea; doar citește. <strong>apply</strong> face schimbările, în ordinea din graful de referințe.</li>
+<li><strong>Starea</strong> leagă adresele din cod de ID-urile reale; are secrete; nu intră în Git.</li>
+<li>Citește simbolurile: <code>+</code> creează, <code>~</code> modifică, <code>-/+</code> înlocuiește, <code>-</code> șterge.</li>
+<li><strong>Variabile</strong> pentru medii, <strong>data</strong> pentru ce există, <strong>output</strong> pentru ce exportezi.</li>
+<li><strong>Drift</strong> = schimbări făcute de mână; <strong>moved</strong>, <strong>prevent_destroy</strong> și <strong>deletion_protection</strong> te apără de greșeli scumpe.</li></ul>
+<p>Lecția următoare: cum lucrează o echipă întreagă cu Terraform, prin pull request-uri și un pipeline.</p>
+<p><button type="button" class="btn primary" data-goto="lab">Mergi la laborator ↓</button></p>`,
+ en:`<ul><li><strong>IaC</strong>: the infrastructure is described in code, in Git, with review; Terraform only does the difference between the code and reality.</li>
+<li><strong>init</strong> downloads the providers and pins them in <code>.terraform.lock.hcl</code>.</li>
+<li><strong>plan</strong> compares the code, the state and reality; it only reads. <strong>apply</strong> makes the changes, in the order of the reference graph.</li>
+<li>The <strong>state</strong> links the addresses in the code to the real IDs; it holds secrets; it doesn't go into Git.</li>
+<li>Read the symbols: <code>+</code> creates, <code>~</code> updates, <code>-/+</code> replaces, <code>-</code> deletes.</li>
+<li><strong>Variables</strong> for environments, <strong>data</strong> for what exists, <strong>output</strong> for what you export.</li>
+<li><strong>Drift</strong> = changes made by hand; <strong>moved</strong>, <strong>prevent_destroy</strong> and <strong>deletion_protection</strong> protect you from expensive mistakes.</li></ul>
+<p>Next lesson: how a whole team works with Terraform, through pull requests and a pipeline.</p>
+<p><button type="button" class="btn primary" data-goto="lab">Go to the lab ↓</button></p>`}}
+],
+
+reference:(T,lang)=>{
+  const ro=lang==="ro";
+  return `<div class="ref-grid"><section class="card refcard"><h2>main.tf</h2>
+<pre class="yaml">terraform {
+  required_providers {
+    aws = { source = "hashicorp/aws", version = "~> 6.0" }
+  }
+}
+provider "aws" { region = "eu-central-1" }
+
+resource "aws_vpc" "main" { cidr_block = "10.0.0.0/16" }
+
+resource "aws_subnet" "web" {
+  vpc_id     = aws_vpc.main.id          <span class="c"># ${ro?"referință → dependență":"reference → dependency"}</span>
+  cidr_block = "10.0.1.0/24"
+}
+
+data "aws_ami" "al2023" {
+  most_recent = true
+  owners      = ["amazon"]
+  filter {
+    name   = "name"
+    values = ["al2023-ami-*-x86_64"]
+  }
+}
+
+resource "aws_instance" "web" {
+  ami                    = data.aws_ami.al2023.id
+  instance_type          = var.instance_type
+  subnet_id              = aws_subnet.web.id
+  vpc_security_group_ids = [aws_security_group.web.id]
+}
+
+resource "aws_db_instance" "main" {
+  identifier                  = "orders-db"
+  engine                      = "postgres"
+  instance_class              = "db.t4g.medium"
+  allocated_storage           = 50
+  manage_master_user_password = true   <span class="c"># ${ro?"parola în Secrets Manager":"password in Secrets Manager"}</span>
+  deletion_protection         = true
+  lifecycle { prevent_destroy = true }
+}
+
+moved {
+  from = aws_db_instance.orders
+  to   = aws_db_instance.main
+}</pre></section>
+<section class="card refcard"><h2>${ro?"Variabile și ieșiri":"Variables and outputs"}</h2>
+<pre class="yaml"><span class="c"># variables.tf</span>
+variable "instance_type" {
+  type    = string
+  default = "t3.small"
+}
+<span class="c"># prod.tfvars</span>
+instance_type = "t3.large"
+<span class="c"># outputs.tf</span>
+output "db_endpoint" { value = aws_db_instance.main.address }</pre>
+<h3>${ro?"Comenzi":"Commands"}</h3>
+<pre class="yaml">terraform init                   <span class="c"># ${ro?"provideri, module, backend":"providers, modules, backend"}</span>
+terraform fmt                    <span class="c"># ${ro?"formatează codul":"formats the code"}</span>
+terraform validate               <span class="c"># ${ro?"verifică sintaxa":"checks the syntax"}</span>
+terraform plan -out=tfplan       <span class="c"># ${ro?"doar citește":"reads only"}</span>
+terraform apply tfplan           <span class="c"># ${ro?"exact planul salvat":"exactly the saved plan"}</span>
+terraform plan -refresh-only     <span class="c"># ${ro?"doar drift-ul":"drift only"}</span>
+terraform state list
+terraform state show aws_instance.web
+terraform output
+terraform destroy                <span class="c"># ${ro?"șterge tot: atenție!":"deletes everything: careful!"}</span></pre></section></div>`;
+},
+
+gloss:[
+ [{ro:"Infrastructură ca și cod (IaC)",en:"Infrastructure as code (IaC)"},null,{ro:"Infrastructura descrisă în fișiere text, versionate în Git și aplicate automat.",en:"Infrastructure described in text files, versioned in Git and applied automatically."}],
+ ["Terraform",null,{ro:"Unealta HashiCorp care creează și modifică infrastructura din cod HCL.",en:"HashiCorp's tool that creates and changes infrastructure from HCL code."}],
+ ["OpenTofu",null,{ro:"Varianta open source a lui Terraform, compatibilă cu același cod.",en:"The open-source variant of Terraform, compatible with the same code."}],
+ ["HCL",null,{ro:"Limbajul în care se scrie codul Terraform (fișiere .tf).",en:"The language Terraform code is written in (.tf files)."}],
+ ["Provider",null,{ro:"Plugin care traduce resursele din cod în apeluri către API-ul unui serviciu (AWS, Azure, Kubernetes…).",en:"A plugin that turns resources in the code into calls to a service's API (AWS, Azure, Kubernetes…)."}],
+ [{ro:"Resursă",en:"Resource"},null,{ro:"Un lucru pe care Terraform îl creează și îl gestionează: o rețea, un server, o bază de date.",en:"Something Terraform creates and manages: a network, a server, a database."}],
+ [{ro:"Sursă de date (data)",en:"Data source (data)"},null,{ro:"Citește ceva ce există deja, fără să-l gestioneze.",en:"Reads something that already exists, without managing it."}],
+ [{ro:"Starea (state)",en:"State"},null,{ro:"Fișierul care leagă adresele din cod de resursele reale.",en:"The file that links the addresses in the code to the real resources."}],
+ ["Plan",null,{ro:"Lista de acțiuni calculată de Terraform: ce creează, modifică sau șterge.",en:"The list of actions Terraform works out: what it creates, changes or deletes."}],
+ ["Drift",null,{ro:"Diferența dintre cod și realitate, de obicei din schimbări făcute de mână.",en:"The difference between the code and reality, usually from changes made by hand."}],
+ ["moved",null,{ro:"Bloc care spune că o resursă și-a schimbat adresa în cod, ca să nu fie recreată.",en:"A block saying a resource changed its address in the code, so it isn't recreated."}],
+ ["prevent_destroy",null,{ro:"Setare lifecycle: oprește cu eroare orice plan care ar șterge resursa.",en:"A lifecycle setting: stops with an error any plan that would delete the resource."}]
+],
+glossEx:{
+ "Drift":{ro:"portul 22 deschis din consolă, care nu era în cod.",en:"port 22 opened in the console, which wasn't in the code."},
+ "moved":{ro:"aws_db_instance.orders → aws_db_instance.main fără să atingi baza de date.",en:"aws_db_instance.orders → aws_db_instance.main without touching the database."}
+},
+
+quiz:[
+ {q:{ro:"Ce face terraform plan?",en:"What does terraform plan do?"},o:[{ro:"Creează resursele",en:"Creates the resources"},{ro:"Compară codul, starea și realitatea și arată ce s-ar schimba, fără să schimbe nimic",en:"Compares the code, the state and reality and shows what would change, without changing anything"},{ro:"Descarcă providerii",en:"Downloads the providers"},{ro:"Șterge resursele vechi",en:"Deletes old resources"}],a:1,e:{ro:"plan doar citește; apply face schimbările.",en:"plan only reads; apply makes the changes."}},
+ {q:{ro:"De unde știe Terraform să creeze VPC-ul înaintea subnet-ului?",en:"How does Terraform know to create the VPC before the subnet?"},o:[{ro:"Din ordinea blocurilor în fișier",en:"From the order of the blocks in the file"},{ro:"Din ordinea alfabetică",en:"From alphabetical order"},{ro:"Din referința vpc_id = aws_vpc.main.id, care intră în graful de dependențe",en:"From the reference vpc_id = aws_vpc.main.id, which goes into the dependency graph"},{ro:"Nu știe, trebuie rulat de două ori",en:"It doesn't, you have to run it twice"}],a:2,e:{ro:"Referințele construiesc graful; ce e independent rulează în paralel.",en:"References build the graph; independent things run in parallel."}},
+ {q:{ro:"Ce fișier NU se pune niciodată în Git?",en:"Which file never goes into Git?"},o:["main.tf",".terraform.lock.hcl","variables.tf","terraform.tfstate"],a:3,e:{ro:"Starea conține ID-uri și secrete în clar; stă într-un backend criptat.",en:"The state holds IDs and secrets in plain text; it lives in an encrypted backend."}},
+ {q:{ro:"Planul arată -/+ pe aws_instance.web. Ce înseamnă?",en:"The plan shows -/+ on aws_instance.web. What does it mean?"},o:[{ro:"Serverul e modificat pe loc",en:"The server is changed in place"},{ro:"Serverul e șters și recreat (alt ID, alt IP)",en:"The server is deleted and recreated (new ID, new IP)"},{ro:"Serverul e doar citit",en:"The server is only read"},{ro:"Nu se întâmplă nimic",en:"Nothing happens"}],a:1,e:{ro:"De obicei apare cu „# forces replacement”, de exemplu la un AMI nou.",en:"It usually comes with \"# forces replacement\", for example with a new AMI."}},
+ {q:{ro:"Cineva a deschis portul 22 din consolă. Ce arată următorul terraform plan?",en:"Someone opened port 22 in the console. What does the next terraform plan show?"},o:[{ro:"Nimic, Terraform nu vede schimbările manuale",en:"Nothing, Terraform can't see manual changes"},{ro:"O eroare",en:"An error"},{ro:"Că vrea să șteargă regula, ca realitatea să arate ca în cod (drift)",en:"That it wants to remove the rule, so reality matches the code (drift)"},{ro:"Că adaugă regula în cod",en:"That it adds the rule to the code"}],a:2,e:{ro:"Terraform nu scrie niciodată în cod; codul e sursa adevărului.",en:"Terraform never writes to the code; the code is the source of truth."}},
+ {q:{ro:"Redenumești aws_db_instance.orders în aws_db_instance.main. Ce trebuie să adaugi ca baza de date să nu fie recreată?",en:"You rename aws_db_instance.orders to aws_db_instance.main. What must you add so the database isn't recreated?"},o:[{ro:"Un bloc moved { from, to }",en:"A moved { from, to } block"},{ro:"depends_on",en:"depends_on"},{ro:"Un output",en:"An output"},{ro:"Nimic, Terraform recunoaște singur",en:"Nothing, Terraform recognises it by itself"}],a:0,e:{ro:"Fără moved, planul arată 1 to destroy și 1 to add.",en:"Without moved, the plan shows 1 to destroy and 1 to add."}},
+ {q:{ro:"La ce folosește .terraform.lock.hcl?",en:"What is .terraform.lock.hcl for?"},o:[{ro:"Blochează starea cât rulează apply",en:"Locks the state while apply runs"},{ro:"Fixează versiunea exactă și hash-ul providerilor pentru toată echipa",en:"Pins the providers' exact version and hash for the whole team"},{ro:"Ține parolele",en:"Holds passwords"},{ro:"Blochează ștergerea resurselor",en:"Blocks resources from being deleted"}],a:1,e:{ro:"Lock-ul stării e altceva: îl face backend-ul (lecția despre deploy).",en:"The state lock is something else: the backend does it (the deploy lesson)."}},
+ {q:{ro:"Ce face sensitive = true pe o variabilă cu o parolă?",en:"What does sensitive = true do on a variable holding a password?"},o:[{ro:"O criptează în stare",en:"Encrypts it in the state"},{ro:"O ascunde din afișarea planului și a ieșirilor, dar în stare rămâne în clar",en:"Hides it from the plan and output display, but it stays in plain text in the state"},{ro:"O trimite în Secrets Manager",en:"Sends it to Secrets Manager"},{ro:"O șterge după apply",en:"Deletes it after apply"}],a:1,e:{ro:"De-asta starea trebuie protejată și de-asta e mai bun manage_master_user_password.",en:"That's why the state must be protected, and why manage_master_user_password is better."}}
+]
+};
+})();
+</script>
+<script src="../assets/engine.js?v=4"></script>
+<script src="../assets/labs-data.js?v=7"></script>
+<script src="../assets/lab.js?v=1"></script>
+<script type="module" src="../assets/auth.js?v=14"></script>
+</body>
+</html>
