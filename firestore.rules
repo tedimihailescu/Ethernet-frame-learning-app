@@ -3,26 +3,60 @@ service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
     function isAdmin() { return signedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)); }
+    // The e-mail stored next to a result or profile must be the account's own (or empty).
+    function ownEmail(e) { return e is string && (e == '' || e == request.auth.token.get('email', '')); }
 
     // One document per finished quiz. Anyone signed in can add their own; nobody can edit or delete.
     match /results/{id} {
       allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'email', 'lesson', 'title', 'score', 'total', 'answers', 'ts'])
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.score is int
         && request.resource.data.total is int
         && request.resource.data.total > 0 && request.resource.data.total <= 100
         && request.resource.data.score >= 0 && request.resource.data.score <= request.resource.data.total
-        && request.resource.data.lesson is string && request.resource.data.lesson.size() <= 40
+        && request.resource.data.lesson is string && request.resource.data.lesson.matches('[a-z0-9-]{1,40}')
         && request.resource.data.title is string && request.resource.data.title.size() <= 120
+        && request.resource.data.get('name', '') is string && request.resource.data.get('name', '').size() <= 80
+        && ownEmail(request.resource.data.get('email', ''))
+        && request.resource.data.get('answers', []) is list && request.resource.data.get('answers', []).size() <= 100
         && request.resource.data.ts == request.time;
       allow read: if signedIn() && (resource.data.uid == request.auth.uid || isAdmin());
       allow update, delete: if false;
     }
 
-    // Participant profile (name, email, last seen).
+    // Participant profile (name, email, presence, roulette total).
+    // Only known fields, with limited sizes. "path" must be a plain site path, because the
+    // admin page turns it into a link. Roulette changes are capped per spin and rate-limited.
+    function rouletteOk(d) {
+      let before = resource == null ? 0 : resource.data.get('roulette', 0);
+      return d.roulette is int
+        && d.roulette - before >= -100
+        && d.roulette - before <= 3500
+        && d.get('lastSpin', null) == request.time
+        && (resource == null || !('lastSpin' in resource.data)
+            || request.time > resource.data.lastSpin + duration.value(4, 's'));
+    }
+    function userFieldsOk(keys) {
+      let d = request.resource.data;
+      return keys.hasOnly(['name', 'email', 'lastSeen', 'online', 'page', 'path', 'created', 'roulette', 'lastSpin'])
+        && (!('name' in keys) || (d.name is string && d.name.size() <= 80))
+        && (!('email' in keys) || ownEmail(d.email))
+        && (!('lastSeen' in keys) || d.lastSeen == request.time)
+        && (!('online' in keys) || d.online is bool)
+        && (!('page' in keys) || (d.page is string && d.page.size() <= 120))
+        && (!('path' in keys) || (d.path is string && d.path.size() <= 120
+            && d.path.matches('(/[A-Za-z0-9_.-]*)*/?') && !d.path.matches('//.*')))
+        && (!('created' in keys) || (d.created is string && d.created.size() <= 40))
+        && (!('roulette' in keys) || rouletteOk(d))
+        && (!('lastSpin' in keys) || ('roulette' in keys));
+    }
     match /users/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
-      allow write: if signedIn() && request.auth.uid == uid;
+      allow create: if signedIn() && request.auth.uid == uid && userFieldsOk(request.resource.data.keys());
+      allow update: if signedIn() && request.auth.uid == uid
+        && userFieldsOk(request.resource.data.diff(resource.data).affectedKeys());
+      allow delete: if false;
     }
 
     // Admin list. Three ways in:
@@ -39,6 +73,8 @@ service cloud.firestore {
       allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
       allow create: if signedIn()
         && request.resource.data.keys().hasOnly(['role', 'how', 'code', 'by', 'at', 'name', 'email'])
+        && request.resource.data.get('name', '') is string && request.resource.data.get('name', '').size() <= 80
+        && request.resource.data.get('email', '') is string && request.resource.data.get('email', '').size() <= 120
         && (isAdmin() || (request.auth.uid == uid && codeOk()));
       allow update, delete: if isAdmin();
     }
@@ -46,6 +82,11 @@ service cloud.firestore {
     // The admin access code: only admins can see or change it.
     match /config/admin {
       allow read, write: if isAdmin();
+    }
+
+    // Everything else is closed.
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

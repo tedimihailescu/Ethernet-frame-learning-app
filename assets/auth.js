@@ -72,7 +72,7 @@ async function boot() {
     const page = (document.title || location.pathname).slice(0, 80);
     const path = location.pathname.replace(/index\.html$/, "").slice(0, 80);
     const write = online => setDoc(doc(db, "users", user.uid), {
-      name: user.displayName || (user.email || "").split("@")[0],
+      name: (user.displayName || (user.email || "").split("@")[0]).slice(0, 80),
       email: user.email || "",
       lastSeen: serverTimestamp(),
       online,
@@ -107,7 +107,7 @@ async function boot() {
     try {
       await addDoc(collection(db, "results"), {
         uid: user.uid,
-        name: user.displayName || (user.email || "").split("@")[0],
+        name: (user.displayName || (user.email || "").split("@")[0]).slice(0, 80),
         email: user.email || "",
         lesson: String(d.lesson).slice(0, 40),
         title: String(d.title).slice(0, 120),

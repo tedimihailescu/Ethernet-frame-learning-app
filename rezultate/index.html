@@ -81,7 +81,7 @@ td.n{font-variant-numeric:tabular-nums;white-space:nowrap}
   </section>
 </main>
 
-<script type="module" src="../assets/auth.js?v=12"></script>
+<script type="module" src="../assets/auth.js?v=13"></script>
 <script type="module">
 import { app, auth, db } from "../assets/firebase.js?v=5";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
@@ -161,7 +161,7 @@ function renderAll(){
   $("#all").innerHTML=rows.length?h+`</tbody></table>`:`<p class="empty">—</p>`;
 }
 $("#filter").addEventListener("input",()=>{if(all)renderAll()});
-$("#csv").onclick=()=>{const head=["date","name","email","lesson","title","score","total","percent"];const lines=[head.join(",")].concat(all.map(r=>[r.d?r.d.toISOString():"",r.name,r.email,r.lesson,r.title,r.score,r.total,pct(r.score,r.total)].map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(",")));
+$("#csv").onclick=()=>{const head=["date","name","email","lesson","title","score","total","percent"];const lines=[head.join(",")].concat(all.map(r=>[r.d?r.d.toISOString():"",r.name,r.email,r.lesson,r.title,r.score,r.total,pct(r.score,r.total)].map(v=>{let s=String(v??"");if(typeof v==="string"&&/^[=+\-@\t\r]/.test(s))s="'"+s;return `"${s.replace(/"/g,'""')}"`}).join(",")));
   const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["﻿"+lines.join("\n")],{type:"text/csv"}));a.download="rezultate-teste.csv";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000)};
 
 const norm=d=>{const x=d.data();return {...x,d:x.ts&&x.ts.toDate?x.ts.toDate():null}};

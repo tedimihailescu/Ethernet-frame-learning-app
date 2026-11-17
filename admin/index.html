@@ -107,7 +107,7 @@ td.n{font-variant-numeric:tabular-nums;white-space:nowrap}
   </div>
 </main>
 
-<script type="module" src="../assets/auth.js?v=12"></script>
+<script type="module" src="../assets/auth.js?v=13"></script>
 <script type="module">
 import { auth, db } from "../assets/firebase.js?v=5";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
@@ -138,6 +138,8 @@ const UI={
 const T=k=>{const v=k.includes(".")?k.split(".").reduce((o,p)=>o[p],UI):UI[k];return v[lang==="en"?1:0]};
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
+// Only plain site paths ("/lesson/") become links: never javascript: or another site.
+const safePath=p=>typeof p==="string"&&/^(\/[A-Za-z0-9_.-]*)*\/?$/.test(p)&&!p.startsWith("//");
 const rtf=()=>new Intl.RelativeTimeFormat(lang==="en"?"en":"ro",{numeric:"auto"});
 function ago(d){if(!d)return T("never");const s=(Date.now()-d.getTime())/1000;if(s<45)return rtf().format(0,"second");
   const u=[[60,"second"],[3600,"minute"],[86400,"hour"],[604800,"day"],[2629800,"week"],[31557600,"month"],[Infinity,"year"]];
@@ -166,7 +168,7 @@ function renderPanel(){
   const onU=users.filter(u=>statusOf(u)==="on").sort(byLast),awU=users.filter(u=>statusOf(u)==="away").sort(byLast);
   const card=(u,s)=>{const ini=(u.name||u.email||"?").trim().split(/\s+/).map(p=>p[0]).slice(0,2).join("").toUpperCase();const x=byUid[u.id];
     return `<div class="oc"><span class="av">${esc(ini)}<i class="${s}"></i></span><span class="who"><b>${esc(u.name||"—")}${admins[u.id]?`<span class="badge">admin</span>`:""}${me&&u.id===me.uid?` <span class="muted">(${T("you")})</span>`:""}</b><span>${esc(u.email)}</span>
-<span>${T("now")} ${u.path?`<a href="${esc(u.path)}">${esc(u.page||u.path)}</a>`:"—"}</span><span>${s==="on"?T("signal")+" "+esc(ago(u.d)):T("last")+": "+esc(ago(u.d))}${x?` · ${x.n} ${x.n===1?(lang==="en"?"quiz":"test"):T("tests").toLowerCase()}`:""}</span></span></div>`};
+<span>${T("now")} ${safePath(u.path)?`<a href="${esc(u.path)}">${esc(u.page||u.path)}</a>`:(u.path?esc(u.page||u.path):"—")}</span><span>${s==="on"?T("signal")+" "+esc(ago(u.d)):T("last")+": "+esc(ago(u.d))}${x?` · ${x.n} ${x.n===1?(lang==="en"?"quiz":"test"):T("tests").toLowerCase()}`:""}</span></span></div>`};
   $("#onT").textContent=`🟢 ${T("onNow")} (${onU.length})`;
   $("#onList").innerHTML=onU.length?onU.map(u=>card(u,"on")).join(""):`<p class="muted">${T("nobody")}</p>`;
   $("#awT").textContent=`🟡 ${T("away")} (${awU.length})`;$("#awT").hidden=!awU.length;
@@ -182,7 +184,7 @@ function renderPanel(){
     h+=`<tr><td><span class="st"><i class="dot ${s==="on"?"on":s==="away"?"away":""}"></i>${T(s)}</span></td>
 <td>${esc(u.name||"—")}${adm?`<span class="badge">admin</span>`:""}${self?` <span class="muted">(${T("you")})</span>`:""}</td><td>${esc(u.email)}</td>
 <td class="n" title="${esc(fmt(u.d))}">${s==="on"?`<b>${T("on")}</b>`:esc(ago(u.d))}<br><span class="muted" style="font-size:.78rem">${esc(fmt(u.d))}</span></td>
-<td>${u.path?`<a href="${esc(u.path)}">${esc(u.page||u.path)}</a>`:"—"}</td><td class="n">${x?x.n:0}</td><td class="n">${x?Math.round(x.sum/x.n)+"%":"—"}</td>
+<td>${safePath(u.path)?`<a href="${esc(u.path)}">${esc(u.page||u.path)}</a>`:(u.path?esc(u.page||u.path):"—")}</td><td class="n">${x?x.n:0}</td><td class="n">${x?Math.round(x.sum/x.n)+"%":"—"}</td>
 <td class="n">${u.created?esc(new Date(u.created).toLocaleDateString(lang==="en"?"en-GB":"ro-RO")):"—"}</td>
 <td>${self?"":adm?`<button type="button" class="btn-sm" data-rm="${esc(u.id)}">${T("remove")}</button>`:`<button type="button" class="btn-sm" data-mk="${esc(u.id)}">${T("make")}</button>`}</td></tr>`});
   $("#users").innerHTML=list.length?h+`</tbody></table>`:`<p class="muted">${T("empty")}</p>`;
