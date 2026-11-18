@@ -18,7 +18,8 @@
 .sum div{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 14px;min-width:140px}
 .sum b{display:block;font:700 1.4rem var(--head);font-variant-numeric:tabular-nums}
 .sum span{font-size:.82rem;color:var(--muted)}
-h2.grp{font:700 1.05rem var(--head);margin:22px 0 10px}
+h2.grp{font:700 1.05rem var(--head);margin:22px 0 4px}
+p.gd{color:var(--muted);font-size:.9rem;margin:0 0 10px;max-width:70ch}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
 .t{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:8px;min-width:0}
 .t:hover{border-color:var(--text)}
@@ -58,6 +59,14 @@ const UI={brand:["Rețea pas cu pas","Network step by step"],home:["← Lecții"
   start:["Începe testul →","Start the quiz →"],again:["Refă testul →","Retake the quiz →"],best:["Cel mai bun","Best"],tries:["încercări","attempts"],none:["Încă neîncercat","Not taken yet"],
   done:["teste încercate","quizzes taken"],avg:["media celor mai bune scoruri","average of best scores"],total:["teste disponibile","quizzes available"],
   g1:["Rețele: bazele","Networking basics"],g2:["Internet și web","Internet and web"],g3:["Kubernetes și operare","Kubernetes and operations"],g4:["Aplicații în producție","Production apps"],g5:["Integrare și mesagerie","Integration and messaging"],g6:["Livrare software","Software delivery"],g7:["Linux","Linux"],g8:["Securitate: laborator Kali","Security: a Kali lab"],
+  g1d:["Cadre Ethernet, VLAN-uri și NAT: cum circulă datele în rețeaua locală.","Ethernet frames, VLANs and NAT: how data moves on the local network."],
+  g2d:["DNS, HTTPS, certificate, IPv6, BGP și load balancing: drumul unei cereri prin internet.","DNS, HTTPS, certificates, IPv6, BGP and load balancing: a request's journey across the internet."],
+  g3d:["Service-uri, Ingress, rețeaua pod-urilor, service mesh și observabilitate în Kubernetes.","Services, Ingress, pod networking, service mesh and observability in Kubernetes."],
+  g4d:["Tomcat, microservicii, un monolit C++ și Cassandra: ce se întâmplă cu o cerere reală.","Tomcat, microservices, a C++ monolith and Cassandra: what happens to a real request."],
+  g5d:["Login cu LDAP, evenimente Kafka, cozi MQ și transferuri de fișiere XFB.","LDAP sign-in, Kafka events, MQ queues and XFB file transfers."],
+  g6d:["Artifactory, GitOps și Terraform: cum ajung codul și infrastructura în producție.","Artifactory, GitOps and Terraform: how code and infrastructure reach production."],
+  g7d:["Depanare pe servere Linux: rețea, systemd, discuri și memorie.","Troubleshooting Linux servers: networking, systemd, disks and memory."],
+  g8d:["Un laborator Kali izolat, descoperirea rețelei și scanarea porturilor, doar pe mașinile tale.","An isolated Kali lab, network discovery and port scanning, on your own machines only."],
   gameK:["Pauză de joacă: 4 jocuri","Play break: 4 games"],gameT:["🎮 Livrează pachetul: mini-joc de 2 minute →","🎮 Deliver the packet: a 2-minute mini-game →"],gameD:["Rutare, porturi, MAC-uri, DNS, OSI și IPv6, contra cronometru. Mai sunt 🎲 Zarul pachetului, 🃏 Blackjack și 🎡 roata „Ce învăț azi?”, din pagina jocului.","Routing, ports, MACs, DNS, OSI and IPv6, against the clock. The game page also has 🎲 The packet die, 🃏 Blackjack and 🎡 the \"What do I learn today?\" wheel."]};
 const T=k=>UI[k][lang==="en"?1:0];
 const G=[
@@ -79,7 +88,7 @@ function render(){
   document.querySelectorAll("[data-lang]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.lang===lang?"true":"false"));
   const taken=ALL.filter(l=>stats[l[0]]);const avg=taken.length?Math.round(taken.reduce((s,l)=>s+stats[l[0]].best,0)/taken.length):0;
   document.getElementById("sum").innerHTML=`<div><b>${taken.length} / ${ALL.length}</b><span>${T("done")}</span></div><div><b>${taken.length?avg+"%":"—"}</b><span>${T("avg")}</span></div>`;
-  document.getElementById("list").innerHTML=G.map(([g,ls])=>`<h2 class="grp">${T(g)}</h2><div class="grid">`+ls.map(l=>{const s=stats[l[0]];
+  document.getElementById("list").innerHTML=G.map(([g,ls])=>`<h2 class="grp">${T(g)}</h2><p class="gd">${T(g+"d")}</p><div class="grid">`+ls.map(l=>{const s=stats[l[0]];
     return `<article class="t"><span class="lvl">${esc(en?l[4]:l[3])}</span><h3>${esc(en?l[2]:l[1])}${s&&s.best===100?'<span class="done">100%</span>':""}</h3>
     <div class="st">${s?`${T("best")}: <b>${s.best}%</b> · ${s.n} ${T("tries")}`:T("none")}</div><div class="bar"><i style="width:${s?s.best:0}%"></i></div>
     <a class="go" href="../${l[0]}/index.html#quiz">${s?T("again"):T("start")}</a></article>`}).join("")+`</div>`).join("");

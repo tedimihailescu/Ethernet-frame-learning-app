@@ -22,8 +22,11 @@ nav[data-menu]{overflow:visible;gap:2px}
 .dd-menu::before{content:"";position:absolute;left:0;right:0;top:-16px;height:16px}
 .dd-mega{position:fixed;top:56px;left:50%;transform:translateX(-50%);width:min(860px,94vw);display:none;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 18px}
 .dd:hover .dd-mega,.dd:focus-within .dd-mega,.dd.open .dd-mega{display:grid}
+.dd-mega{max-height:calc(100vh - 70px);overflow:auto}
+@media (min-width:1000px){.dd-mega{width:min(1100px,94vw);grid-template-columns:repeat(4,minmax(0,1fr))}}
 .dd-col h4{font:700 .82rem var(--head);margin:0 0 4px;text-transform:uppercase;letter-spacing:.04em}
 .dd-col h4 a{color:var(--text);text-decoration:none}
+.dd-col .dd-d{margin:0 0 4px;padding:0 8px;font-size:.74rem;line-height:1.3;color:var(--muted)}
 .dd-menu a.it,.dd-menu .all a,.dd-col h4 a{white-space:normal}
 .dd-menu a.it{display:block;color:var(--text);text-decoration:none;font-size:.88rem;padding:5px 8px;border-radius:6px;line-height:1.3}
 .dd-menu a.it:hover,.dd-menu a.it:focus-visible{background:var(--accent);color:var(--accent-text)}
@@ -35,7 +38,7 @@ nav[data-menu]{overflow:visible;gap:2px}
   document.head.appendChild(css);
 
   function build() {
-    const cats = C.CATS.map(c => `<div class="dd-col"><h4><a href="${ROOT}lectii/index.html#${c.id}">${c.icon} ${T(c.t)}</a></h4>${c.list.map(id => { const l = C.byId(id); if (!l) return ""; const p = C.progress ? C.progress(id) : null; return `<a class="it" href="${ROOT}${l.href}">${p && p.complete ? "✓ " : ""}${T(l.t)}</a>`; }).join("")}</div>`).join("");
+    const cats = C.CATS.map(c => `<div class="dd-col"><h4><a href="${ROOT}lectii/index.html#${c.id}">${c.icon} ${T(c.t)}</a></h4>${c.d ? `<p class="dd-d">${T(c.d)}</p>` : ""}${c.list.map(id => { const l = C.byId(id); if (!l) return ""; const p = C.progress ? C.progress(id) : null; return `<a class="it" href="${ROOT}${l.href}">${p && p.complete ? "✓ " : ""}${T(l.t)}</a>`; }).join("")}</div>`).join("");
     nav.innerHTML =
       `<div class="dd"><button type="button" aria-expanded="false">📚 ${L("Lecții", "Lessons")}</button><div class="dd-menu dd-mega">${cats}<div class="all"><a href="${ROOT}lectii/index.html">${L("Toate lecțiile, cu descrieri →", "All lessons, with descriptions →")}</a></div></div></div>` +
       `<div class="dd"><button type="button" aria-expanded="false">🎮 ${L("Jocuri", "Games")}</button><div class="dd-menu dd-games">${C.GAMES.map(g => `<a class="it" href="${ROOT}${g.href}">${g.icon} ${T(g.t)}</a>`).join("")}</div></div>`;
