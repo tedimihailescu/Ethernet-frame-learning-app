@@ -4,6 +4,9 @@
              (case-insensitive), `out` is the printed output.
      input – a short answer; `ans` lists accepted answers (normalised: lower case, no extra spaces).
      order – put steps in order by tapping them; `items` are given in the correct order.
+     spot  – "spot the bug": `lines` is a config file, command list or log; the learner taps the faulty line,
+             whose index is `bad`.
+   The exercises are shown one at a time, with a numbered strip to jump between them.
    The lab data lives in assets/labs-data.js (window.LABS). */
 (function () {
   "use strict";
@@ -20,8 +23,10 @@
   const norm = s => String(s || "").toLowerCase().replace(/[‘’]/g, "'").replace(/\s+/g, " ").trim().replace(/\.$/, "");
   const UI = {
     eyebrow: { ro: "Laborator", en: "Lab" }, title: { ro: "🧪 Exersează ce ai învățat", en: "🧪 Practise what you learned" },
-    lead: { ro: "Trei exerciții scurte: o comandă într-un terminal simulat, un calcul și ordinea corectă a pașilor. Poți cere un indiciu sau soluția.", en: "Three short exercises: a command in a simulated terminal, a calculation, and the right order of steps. You can ask for a hint or the solution." },
-    task: { ro: "Exercițiul", en: "Exercise" }, term: { ro: "Terminal", en: "Terminal" }, input: { ro: "Calcul / decizie", en: "Calculate / decide" }, order: { ro: "Ordinea pașilor", en: "Order the steps" },
+    lead: { ro: "{t} exerciții scurte: comenzi într-un terminal simulat, calcule, ordinea pașilor și „Găsește greșeala” într-o configurație sau un log. Poți cere un indiciu sau soluția.", en: "{t} short exercises: commands in a simulated terminal, calculations, the order of steps, and \"Spot the bug\" in a config or a log. You can ask for a hint or the solution." },
+    task: { ro: "Exercițiul", en: "Exercise" }, term: { ro: "Terminal", en: "Terminal" }, input: { ro: "Calcul / decizie", en: "Calculate / decide" }, order: { ro: "Ordinea pașilor", en: "Order the steps" }, spot: { ro: "Găsește greșeala", en: "Spot the bug" },
+    tapLine: { ro: "Atinge linia greșită:", en: "Tap the faulty line:" }, wrongLine: { ro: "Linia {n} e în regulă. Mai caută.", en: "Line {n} is fine. Keep looking." },
+    next: { ro: "Exercițiul următor →", en: "Next exercise →" }, nav: { ro: "Exercițiile laboratorului", en: "The lab's exercises" },
     check: { ro: "Verifică", en: "Check" }, hint: { ro: "Indiciu", en: "Hint" }, sol: { ro: "Arată soluția", en: "Show solution" }, reset: { ro: "Ia-o de la capăt", en: "Start over" },
     ok: { ro: "✓ Corect!", en: "✓ Correct!" }, no: { ro: "Nu încă. Mai încearcă.", en: "Not yet. Try again." },
     notFound: { ro: "comandă nerecunoscută în acest laborator. Verifică numele și opțiunile, sau cere un indiciu.", en: "command not recognised in this lab. Check the name and options, or ask for a hint." },
@@ -83,6 +88,20 @@
 .lab-bar{height:8px;border-radius:4px;background:var(--surface2);overflow:hidden;margin:6px 0 0}
 .lab-bar i{display:block;height:100%;background:var(--text);transition:width .3s}
 .lab-done{font-weight:600;color:var(--ok);margin:8px 0 0}
+.lab-nav{display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 0}
+.lab-nav button{min-width:36px;height:36px;border-radius:8px;border:2px solid var(--border);background:var(--surface);color:var(--text);font:700 .88rem var(--mono);cursor:pointer;padding:0 6px}
+.lab-nav button:hover{border-color:var(--text)}
+.lab-nav button.solved{border-color:var(--ok);color:var(--ok)}
+.lab-nav button.shown{border-color:var(--chgfg);color:var(--chgfg)}
+.lab-nav button[aria-current="true"]{background:var(--text);color:var(--surface);border-color:var(--text)}
+.lab-code{display:flex;flex-direction:column;background:#0d0c07;border-radius:10px;padding:8px 0;overflow-x:auto}
+.lab-code button{display:flex;gap:12px;align-items:baseline;width:100%;min-width:max-content;text-align:left;background:transparent;border:0;border-left:3px solid transparent;color:#f3ecc9;font:13px/1.5 var(--mono);padding:3px 14px 3px 11px;cursor:pointer;white-space:pre}
+.lab-code button:hover:not(:disabled){background:#2a2614}
+.lab-code button:focus-visible{outline:2px solid #ffd83d;outline-offset:-2px}
+.lab-code button:disabled{cursor:default}
+.lab-code .ln{color:#8a8257;min-width:2ch;text-align:right;user-select:none}
+.lab-code button.no{border-left-color:#ff9b8a;color:#ff9b8a;text-decoration:line-through}
+.lab-code button.yes{border-left-color:#8fd18f;background:#1d2a12;color:#d6f5c4}
 @media (prefers-reduced-motion:reduce){.lab-bar i{transition:none}}`;
   document.head.appendChild(css);
 
@@ -94,7 +113,7 @@
   const box = document.createElement("section");
   box.className = "card";
   box.id = "lab";
-  box.innerHTML = `<p class="lab-prog" id="lab-prog"></p><div class="lab-bar"><i id="lab-bar"></i></div><p class="lab-done" id="lab-done" hidden></p><div class="lab" id="lab-list" style="margin-top:14px"></div>`;
+  box.innerHTML = `<p class="lab-prog" id="lab-prog"></p><div class="lab-bar"><i id="lab-bar"></i></div><p class="lab-done" id="lab-done" hidden></p><nav class="lab-nav" id="lab-nav"></nav><div class="lab" id="lab-list" style="margin-top:12px"></div>`;
   head.parentNode.insertBefore(secHead, head);
   head.parentNode.insertBefore(box, head);
   const navQuiz = document.querySelector('.nav a[href="#quiz"]');
@@ -104,12 +123,33 @@
   function renderAll() {
     document.getElementById("lab-eyebrow").textContent = T(UI.eyebrow) + " · " + T(LAB.title);
     document.getElementById("lab-title").textContent = T(UI.title);
-    document.getElementById("lab-lead").textContent = T(UI.lead);
+    document.getElementById("lab-lead").textContent = T(UI.lead).replace("{t}", LAB.tasks.length);
     if (navLab) navLab.textContent = T(UI.eyebrow);
+    showTask(cur());
+  }
+
+  /* one exercise at a time; state.cur remembers where the learner was */
+  function cur() { const c = state.cur | 0; return c >= 0 && c < LAB.tasks.length ? c : 0; }
+  function showTask(i, focus) {
+    state.cur = i; save();
     const list = document.getElementById("lab-list");
     list.innerHTML = "";
-    LAB.tasks.forEach((t, i) => list.appendChild(renderTask(t, i)));
+    list.appendChild(renderTask(LAB.tasks[i], i));
+    renderNav();
     progress();
+    if (focus) { const f = list.querySelector("input,button.lab-item,.lab-code button,.lab-btn"); if (f) f.focus({ preventScroll: true }); }
+  }
+  function renderNav() {
+    const nav = document.getElementById("lab-nav");
+    nav.setAttribute("aria-label", T(UI.nav));
+    const c = cur();
+    nav.innerHTML = LAB.tasks.map((t, i) => { const s = st(i).status; return `<button type="button" data-i="${i}" class="${s}" aria-current="${i === c}" aria-label="${esc(T(UI.task) + " " + (i + 1) + " · " + T(t.name) + (s ? " · " + T(UI[s]) : ""))}" title="${esc(T(t.name))}">${s === "solved" ? "✓" : i + 1}</button>`; }).join("");
+    nav.querySelectorAll("button").forEach(b => b.onclick = () => showTask(+b.dataset.i, true));
+  }
+  function nextOpen(i) {
+    const n = LAB.tasks.length;
+    for (let k = 1; k <= n; k++) { const j = (i + k) % n; if (!st(j).status) return j; }
+    return -1;
   }
 
   function progress() {
@@ -121,8 +161,8 @@
     if (n === tot) {
       d.hidden = false;
       d.textContent = T(UI.done).replace("{s}", s).replace("{t}", tot);
-      if (!state.saved) {
-        state.saved = true; save();
+      if (state.savedN !== tot) {
+        state.savedN = tot; state.saved = true; save();
         window.dispatchEvent(new CustomEvent("quiz:complete", { detail: { lesson: lessonId + "-lab", title: "Laborator: " + (typeof LAB.title === "string" ? LAB.title : LAB.title.ro), score: s, total: tot, answers: LAB.tasks.map((t, i) => (st(i).status === "solved" ? 1 : 0)) } }));
       }
     } else d.hidden = true;
@@ -134,7 +174,10 @@
     s.status = status; save();
     const fresh = renderTask(LAB.tasks[i], i);
     el.replaceWith(fresh);
+    renderNav();
     progress();
+    const nb = fresh.querySelector('[data-a="next"]');
+    if (nb) nb.focus({ preventScroll: true });
     return fresh;
   }
 
@@ -149,8 +192,9 @@
     const el = document.createElement("div");
     el.className = "lab-task" + (s.status ? " " + s.status : "");
     let h = header(t, i);
-    const solText = t.type === "term" ? `<code>${esc(t.sol)}</code>` : t.type === "order" ? "<ol>" + t.items.map(x => `<li>${esc(T(x))}</li>`).join("") + "</ol>" : `<code>${esc(T(t.show || t.ans[0]))}</code>`;
-    const after = s.status ? `<p class="lab-fb ${s.status === "solved" ? "good" : ""}">${s.status === "solved" ? T(UI.ok) : T(UI.solution) + " " + solText} ${t.why ? T(t.why) : ""}</p>` : "";
+    const solText = t.type === "term" ? `<code>${esc(t.sol)}</code>` : t.type === "order" ? "<ol>" + t.items.map(x => `<li>${esc(T(x))}</li>`).join("") + "</ol>" : t.type === "spot" ? `<code>${esc(T(t.lines[t.bad]).trim())}</code>` : `<code>${esc(T(t.show || t.ans[0]))}</code>`;
+    const ni = s.status ? nextOpen(i) : -1;
+    const after = s.status ? `<p class="lab-fb ${s.status === "solved" ? "good" : ""}">${s.status === "solved" ? T(UI.ok) : T(UI.solution) + " " + solText} ${t.why ? T(t.why) : ""}</p>${ni >= 0 ? `<div class="lab-row"><button type="button" class="lab-btn" data-a="next" data-i="${ni}">${T(UI.next)}</button></div>` : ""}` : "";
 
     if (t.type === "term") {
       const log = s.log.map(l => `<pre><span class="cmd">${esc(t.prompt)} ${esc(l.c)}</span>\n${l.ok ? esc(T(t.out)) : `<span class="err">${esc(l.c.split(" ")[0])}: ${esc(T(UI.notFound))}</span>`}</pre>`).join("");
@@ -163,6 +207,10 @@
       const picked = s.status ? t.items.map((x, k) => k) : s.picked;
       h += `<p class="lab-sub">${T(UI.yours)}</p><ol class="lab-picked">${picked.map(k => `<li>${esc(T(t.items[k]))}</li>`).join("") || ""}</ol>`;
       if (!s.status) h += `<p class="lab-sub">${T(UI.pick)}</p><div class="lab-items">${s.order.map(k => `<button type="button" class="lab-item" data-k="${k}" ${s.picked.includes(k) ? "disabled" : ""}>${esc(T(t.items[k]))}</button>`).join("")}</div>`;
+    } else if (t.type === "spot") {
+      const wrong = s.wrong || [];
+      if (!s.status) h += `<p class="lab-sub">${T(UI.tapLine)}</p>`;
+      h += `<div class="lab-code">${t.lines.map((x, k) => `<button type="button" data-k="${k}" class="${s.status && k === t.bad ? "yes" : wrong.includes(k) ? "no" : ""}" ${s.status || wrong.includes(k) ? "disabled" : ""}><span class="ln">${k + 1}</span><span>${esc(T(x))}</span></button>`).join("")}</div>`;
     }
     if (!s.status) h += `<div class="lab-row">${t.type === "order" ? `<button type="button" class="lab-btn sec" data-a="reset">${T(UI.reset)}</button>` : ""}<button type="button" class="lab-btn sec" data-a="hint">${T(UI.hint)}</button><button type="button" class="lab-btn sec" data-a="sol">${T(UI.sol)}</button></div><p class="lab-fb" aria-live="polite"></p>`;
     h += after;
@@ -173,6 +221,8 @@
 
   function wire(t, i, el) {
     const s = st(i);
+    const nb = el.querySelector('[data-a="next"]');
+    if (nb) nb.onclick = () => { showTask(+nb.dataset.i, true); const top = document.getElementById("lab-nav"); if (top && top.getBoundingClientRect().top < 0) top.scrollIntoView({ block: "start" }); };
     if (s.status) return;
     const fb = el.querySelector(".lab-fb:last-child") || el.querySelector(".lab-fb");
     const say = (msg, cls) => { fb.className = "lab-fb" + (cls ? " " + cls : ""); fb.innerHTML = msg; };
@@ -215,6 +265,15 @@
         const fresh = renderTask(t, i); el.replaceWith(fresh);
       });
       el.querySelector('[data-a="reset"]').onclick = () => { s.picked = []; save(); el.replaceWith(renderTask(t, i)); };
+    } else if (t.type === "spot") {
+      el.querySelectorAll(".lab-code button").forEach(b => b.onclick = () => {
+        const k = +b.dataset.k;
+        if (k === t.bad) { finish(i, "solved", el); return; }
+        s.wrong = (s.wrong || []).concat(k); save();
+        const fresh = renderTask(t, i); el.replaceWith(fresh);
+        const f2 = fresh.querySelector(".lab-fb:last-child"); f2.className = "lab-fb bad"; f2.textContent = T(UI.wrongLine).replace("{n}", k + 1);
+        const nx = fresh.querySelector(".lab-code button:not(:disabled)"); if (nx) nx.focus({ preventScroll: true });
+      });
     }
   }
 
