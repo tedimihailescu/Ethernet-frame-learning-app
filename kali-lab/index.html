@@ -92,9 +92,11 @@ steps:[
 {at:"host",frame:K2,kind:"k",log:{ro:"imaginea verificată",en:"the image verified"},who:"sha256sum",
  title:{ro:"Imaginea oficială, verificată",en:"The official image, verified"},
  body:{ro:`<p>Cea mai simplă variantă pentru un laborator: imaginea gata făcută pentru <strong>VirtualBox</strong> (sau VMware) de pe <code>kali.org</code>. O descarci doar de acolo, nu de pe site-uri cu „Kali modificat”.</p>
-<p>Lângă fiecare imagine, site-ul publică un <strong>SHA256</strong>. <code>sha256sum</code> calculează amprenta fișierului descărcat; dacă e identică, fișierul e exact cel publicat. O unealtă de securitate descărcată modificată ar fi o ironie scumpă.</p>`,
+<p>Lângă fiecare imagine, site-ul publică un <strong>SHA256</strong>. <code>sha256sum</code> calculează amprenta fișierului descărcat; dacă e identică, fișierul e exact cel publicat. O unealtă de securitate descărcată modificată ar fi o ironie scumpă.</p>
+<p>Surse oficiale: <a href="https://www.kali.org/get-kali/#kali-virtual-machines" target="_blank" rel="noopener noreferrer">kali.org/get-kali</a> pentru Kali și <a href="https://www.virtualbox.org/wiki/Downloads" target="_blank" rel="noopener noreferrer">virtualbox.org</a> pentru VirtualBox. Lista completă e în secțiunea de referință.</p>`,
  en:`<p>The simplest option for a lab: the ready-made <strong>VirtualBox</strong> (or VMware) image from <code>kali.org</code>. Download it only from there, not from sites offering a "modified Kali".</p>
-<p>Next to each image, the site publishes a <strong>SHA256</strong>. <code>sha256sum</code> computes the downloaded file's fingerprint; if it matches, the file is exactly the published one. A security tool downloaded already tampered with would be an expensive irony.</p>`},
+<p>Next to each image, the site publishes a <strong>SHA256</strong>. <code>sha256sum</code> computes the downloaded file's fingerprint; if it matches, the file is exactly the published one. A security tool downloaded already tampered with would be an expensive irony.</p>
+<p>Official sources: <a href="https://www.kali.org/get-kali/#kali-virtual-machines" target="_blank" rel="noopener noreferrer">kali.org/get-kali</a> for Kali and <a href="https://www.virtualbox.org/wiki/Downloads" target="_blank" rel="noopener noreferrer">virtualbox.org</a> for VirtualBox. The full list is in the reference section.</p>`},
  try:[{cmd:"sha256sum kali-linux-*-virtualbox-amd64.7z",d:{ro:"Compari rezultatul cu valoarea de pe kali.org.",en:"Compare the result with the value on kali.org."}}]},
 
 {at:["kali","lab"],frame:K3,kind:"k",tables:["modes"],hl:{modes:"Internal Network"},log:{ro:"rețeaua VM-ului",en:"the VM's network"},who:{ro:"Rețeaua",en:"The network"},
@@ -224,7 +226,20 @@ ping -c2 10.0.50.20</pre>
 <pre class="yaml">1. ${ro?"Ținta e a mea / am acord scris?":"Is the target mine / do I have written approval?"}
 2. ${ro?"NAT deconectat? ip route get":"NAT unplugged? ip route get"}
 3. ${ro?"Adresele din comandă sunt din 10.0.50.0/24?":"Are the command's addresses in 10.0.50.0/24?"}
-4. ${ro?"Am un snapshot curat?":"Do I have a clean snapshot?"}</pre></section></div>`;
+4. ${ro?"Am un snapshot curat?":"Do I have a clean snapshot?"}</pre></section>
+<section class="card refcard"><h2>${ro?"De unde descarci (doar surse oficiale)":"Where to download (official sources only)"}</h2>
+<ul class="dl-src" style="overflow-wrap:anywhere">
+<li><a href="https://www.virtualbox.org/wiki/Downloads" target="_blank" rel="noopener noreferrer">virtualbox.org/wiki/Downloads</a>: ${ro?"VirtualBox pentru Windows, macOS și Linux":"VirtualBox for Windows, macOS and Linux"}</li>
+<li><a href="https://download.virtualbox.org/virtualbox/" target="_blank" rel="noopener noreferrer">download.virtualbox.org/virtualbox</a>: ${ro?"toate versiunile, cu fișierul <code>SHA256SUMS</code>":"every version, with the <code>SHA256SUMS</code> file"}</li>
+<li><a href="https://www.kali.org/get-kali/#kali-virtual-machines" target="_blank" rel="noopener noreferrer">kali.org/get-kali → Virtual Machines</a>: ${ro?"imaginea gata făcută pentru VirtualBox (<code>.7z</code>)":"the ready-made VirtualBox image (<code>.7z</code>)"}</li>
+<li><a href="https://cdimage.kali.org/current/" target="_blank" rel="noopener noreferrer">cdimage.kali.org/current</a>: ${ro?"aceleași imagini, plus <code>SHA256SUMS</code> și semnătura <code>.gpg</code>":"the same images, plus <code>SHA256SUMS</code> and the <code>.gpg</code> signature"}</li>
+<li><a href="https://www.kali.org/docs/virtualization/import-premade-virtualbox/" target="_blank" rel="noopener noreferrer">kali.org/docs → Import pre-made VirtualBox</a>: ${ro?"ghidul oficial de import":"the official import guide"}</li>
+</ul>
+<h3>${ro?"Verificare pe Windows (PowerShell)":"Checking on Windows (PowerShell)"}</h3>
+<pre class="yaml">Get-FileHash .\kali-linux-*-virtualbox-amd64.7z
+<span class="c"># ${ro?"compari cu linia din SHA256SUMS":"compare with the line in SHA256SUMS"}</span>
+tar -xf .\kali-linux-*-virtualbox-amd64.7z   <span class="c"># ${ro?"sau 7-Zip":"or 7-Zip"}</span></pre>
+<p>${ro?"Imaginea pornește cu utilizatorul <code>kali</code> / parola <code>kali</code>: schimb-o imediat cu <code>passwd</code>.":"The image starts with user <code>kali</code> / password <code>kali</code>: change it right away with <code>passwd</code>."}</p></section></div>`;
 },
 
 gloss:[
