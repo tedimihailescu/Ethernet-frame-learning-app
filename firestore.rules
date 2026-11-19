@@ -6,6 +6,13 @@ service cloud.firestore {
     // The e-mail stored next to a result or profile must be the account's own (or empty).
     function ownEmail(e) { return e is string && (e == '' || e == request.auth.token.get('email', '')); }
 
+    // A result must be written in the same batch as users/{uid}.lastResult = now,
+    // which userFieldsOk only accepts 10 s after the previous one (see resultTimeOk).
+    function resultPaced() {
+      let u = getAfter(/databases/$(database)/documents/users/$(request.auth.uid));
+      return u != null && u.data.get('lastResult', null) == request.time;
+    }
+
     // One document per finished quiz. Anyone signed in can add their own; nobody can edit or delete.
     match /results/{id} {
       allow create: if signedIn()
@@ -20,7 +27,8 @@ service cloud.firestore {
         && request.resource.data.get('name', '') is string && request.resource.data.get('name', '').size() <= 80
         && ownEmail(request.resource.data.get('email', ''))
         && request.resource.data.get('answers', []) is list && request.resource.data.get('answers', []).size() <= 100
-        && request.resource.data.ts == request.time;
+        && request.resource.data.ts == request.time
+        && resultPaced();
       allow read: if signedIn() && (resource.data.uid == request.auth.uid || isAdmin());
       allow update, delete: if false;
     }
@@ -37,9 +45,14 @@ service cloud.firestore {
         && (resource == null || !('lastSpin' in resource.data)
             || request.time > resource.data.lastSpin + duration.value(4, 's'));
     }
+    function resultTimeOk(d) {
+      return d.lastResult == request.time
+        && (resource == null || !('lastResult' in resource.data)
+            || request.time > resource.data.lastResult + duration.value(10, 's'));
+    }
     function userFieldsOk(keys) {
       let d = request.resource.data;
-      return keys.hasOnly(['name', 'email', 'lastSeen', 'online', 'page', 'path', 'created', 'roulette', 'lastSpin', 'spinId'])
+      return keys.hasOnly(['name', 'email', 'lastSeen', 'online', 'page', 'path', 'created', 'roulette', 'lastSpin', 'spinId', 'lastResult'])
         && (!('name' in keys) || (d.name is string && d.name.size() <= 80))
         && (!('email' in keys) || ownEmail(d.email))
         && (!('lastSeen' in keys) || d.lastSeen == request.time)
@@ -50,6 +63,7 @@ service cloud.firestore {
         && (!('created' in keys) || (d.created is string && d.created.size() <= 40))
         && (!('roulette' in keys) || rouletteOk(d))
         && (!('lastSpin' in keys) || ('roulette' in keys))
+        && (!('lastResult' in keys) || resultTimeOk(d))
         && (!('spinId' in keys) || (('roulette' in keys) && d.spinId is string && d.spinId.size() <= 40));
     }
     match /users/{uid} {

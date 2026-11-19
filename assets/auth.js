@@ -15,7 +15,7 @@ async function boot() {
   // firebase.js is already forwarding .web.app visitors to firebaseapp.com; don't race it.
   if (location.hostname.endsWith(".web.app")) return;
   const { onAuthStateChanged, signOut } = authMod;
-  const { doc, setDoc, getDoc, addDoc, collection, serverTimestamp } = fs;
+  const { doc, setDoc, getDoc, collection, serverTimestamp, writeBatch } = fs;
   const L = (ro, en) => (lang() === "en" ? en : ro);
 
   onAuthStateChanged(auth, async user => {
@@ -104,8 +104,11 @@ async function boot() {
     const user = auth.currentUser;
     if (!user) return;
     const d = e.detail;
-    try {
-      await addDoc(collection(db, "results"), {
+    // The result and users/{uid}.lastResult go in one batch: the rules allow one result
+    // every 10 s per person, so a script can't flood the results (and the points).
+    const saveResult = () => {
+      const b = writeBatch(db);
+      b.set(doc(collection(db, "results")), {
         uid: user.uid,
         name: (user.displayName || (user.email || "").split("@")[0]).slice(0, 80),
         email: user.email || "",
@@ -116,6 +119,17 @@ async function boot() {
         answers: d.answers.map(a => (a === null ? -1 : a | 0)),
         ts: serverTimestamp()
       });
+      b.set(doc(db, "users", user.uid), { lastResult: serverTimestamp() }, { merge: true });
+      return b.commit();
+    };
+    try {
+      // Two results within 10 s (say, a lab and a quiz): wait and try the second one again.
+      try { await saveResult(); }
+      catch (err) {
+        if (!err || err.code !== "permission-denied") throw err;
+        await new Promise(r => setTimeout(r, 11000));
+        await saveResult();
+      }
       if (pts.qualifies(d)) {
         await refreshPoints(user);
         toast(L(`✓ ${d.score} / ${d.total} · 🪙 +${pts.PER_TEST} puncte! Ai acum ${points ?? "?"}.`, `✓ ${d.score} / ${d.total} · 🪙 +${pts.PER_TEST} points! You now have ${points ?? "?"}.`), ROOT + "ruleta/index.html", L("Joacă la ruletă", "Play roulette"));
