@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pachetul care urcă</title>
+<meta name="description" content="Multiplicatorul urcă până se pierde pachetul: încasează la timp, cu punctele câștigate la teste. / The multiplier climbs until the packet is lost: cash out in time, with the points you earn from quizzes.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/theme.css">
+<link rel="stylesheet" href="../assets/casino.css?v=1">
+<style>
+.sky{position:relative;background:#0f1a2e;border:3px solid var(--text);border-radius:18px;overflow:hidden;aspect-ratio:16/9;max-height:360px;width:100%}
+.sky svg{position:absolute;inset:0;width:100%;height:100%}
+.mx{position:absolute;left:0;right:0;top:18%;text-align:center;font:700 clamp(2.2rem,9vw,3.6rem) var(--head);color:#fff;font-variant-numeric:tabular-nums;text-shadow:0 3px 0 #000}
+.mx.lost{color:#ff6b5b}.mx.won{color:#7dffb0}
+.sub{position:absolute;left:0;right:0;top:calc(18% + 4.2rem);text-align:center;font:600 .95rem var(--sans);color:#cdd6e6;padding:0 10px}
+.hist{display:flex;flex-wrap:wrap;gap:4px;margin-top:10px}
+.hist span{font:700 .78rem var(--mono);padding:3px 7px;border-radius:6px;background:var(--surface2);border:1px solid var(--border)}
+.hist span.hi{color:var(--ok)}.hist span.lo{color:var(--bad)}
+.auto{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.auto button{border:2px solid var(--text);background:var(--surface);color:var(--text);border-radius:8px;padding:6px 10px;font:700 .85rem var(--sans);cursor:pointer}
+.auto button[aria-pressed="true"]{background:var(--accent);color:var(--accent-text)}
+.auto button:disabled{opacity:.45;cursor:default}
+#go.cash{background:#1d8a4f;color:#fff}
+</style>
+</head>
+<body>
+<header class="topbar" id="top"><div class="topbar-in">
+  <a class="brand" href="../index.html"><svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="var(--accent)"/><path d="M7 16h18M19 11l6 5-6 5" fill="none" stroke="var(--accent-text)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="16" r="2.6" fill="var(--accent-text)"/></svg><span data-t="brand"></span></a>
+  <nav class="nav"><a href="../index.html" data-t="home"></a><a href="../joc/index.html" data-t="games"></a></nav>
+  <div class="tools"><div class="seg" role="group" aria-label="Limba / Language"><button type="button" data-lang="ro">RO</button><button type="button" data-lang="en">EN</button></div><button type="button" class="icon-btn" id="theme">◐</button></div>
+</div></header>
+
+<main class="page">
+  <h1 data-t="title"></h1>
+  <p class="lead" data-t="lead"></p>
+  <p class="empty" id="noPts" hidden><span data-t="noPts"></span> <a href="../teste/index.html" data-t="toTests"></a></p>
+
+  <section class="card">
+    <div class="croup"><div class="face" id="face" aria-hidden="true">👩‍🚀</div><p class="bubble" aria-live="polite"><span class="who" data-t="who"></span><span id="line"></span></p></div>
+    <div class="hud"><span><span data-t="ptsL"></span> <b id="bal">…</b></span><span><span data-t="betL"></span> <b id="betv">1</b></span><span><span data-t="winL"></span> <b id="pot">–</b></span></div>
+    <div class="sky" id="sky">
+      <svg viewBox="0 0 640 360" preserveAspectRatio="none" aria-hidden="true" id="plot"></svg>
+      <div class="mx" id="big" aria-live="off">1.00×</div>
+      <div class="sub" id="sub"></div>
+    </div>
+    <div class="hist" id="hist" aria-label="history"></div>
+    <div class="row"><button type="button" class="btn big" id="go"></button></div>
+    <p class="result" id="res" aria-live="polite"></p>
+    <div id="betBox">
+      <p class="betL" data-t="pickBet"></p><div class="chips" id="chips"></div>
+      <p class="betL" data-t="autoL"></p><div class="auto" id="auto"></div>
+    </div>
+    <p class="note" data-t="rules"></p>
+  </section>
+
+  <section class="card">
+    <div class="row" style="margin-top:0"><a class="btn sec" href="../sloturi/index.html" data-t="slots"></a><a class="btn sec" href="../mai-mare/index.html" data-t="hilo"></a><a class="btn sec" href="../ruleta/index.html" data-t="rul"></a><a class="btn sec" href="../teste/index.html" data-t="toTests"></a></div>
+  </section>
+</main>
+
+<script type="module" src="../assets/auth.js?v=18"></script>
+<script type="module">
+import { kit, COMMON } from "../assets/casino.js?v=1";
+const UI={brand:["Rețea pas cu pas","Network step by step"],home:["← Lecții","← Lessons"],games:["🎮 Jocuri","🎮 Games"],
+  title:["🚀 Pachetul care urcă","🚀 The climbing packet"],
+  lead:["Pachetul pleacă și multiplicatorul urcă la fiecare hop. La un moment dat pachetul se pierde. Apasă „Încasează” înainte de asta și câștigi miza × multiplicatorul. Dacă se pierde înainte, pierzi miza.","The packet takes off and the multiplier climbs with every hop. At some point the packet gets lost. Press \"Cash out\" before that and you win bet × multiplier. If it's lost first, you lose the bet."],
+  noPts:["Ai rămas fără puncte. Termină un test cu peste 80% și primești 🪙 5 puncte.","You are out of points. Finish a quiz with over 80% and you get 🪙 5 points."],toTests:["✎ Teste","✎ Quizzes"],
+  who:["Pilotul Ana","Pilot Ana"],ptsL:["🪙 Puncte","🪙 Points"],betL:["Miza","Bet"],winL:["Câștig acum","Win now"],
+  pickBet:["Alege miza","Pick your bet"],autoL:["Încasare automată la","Auto cash out at"],
+  rules:["Punctul în care se pierde pachetul e tras la întâmplare la plecare: șansa să ajungă la 2× e 48%, la 10× e 9,6% (casa păstrează 4%). Uneori se pierde chiar la 1.00×. La 30× încasezi automat. Miza maximă: 100. Dacă închizi pagina în zbor, miza e pierdută.","Where the packet gets lost is drawn at random at takeoff: the chance to reach 2× is 48%, 10× is 9.6% (the house keeps 4%). Sometimes it's lost right at 1.00×. At 30× you cash out automatically. Max bet: 100. Closing the page mid-flight loses the bet."],
+  slots:["🍒 Sloturi","🍒 Slots"],hilo:["⬆⬇ Mai mare sau mai mic","⬆⬇ Higher or lower"],rul:["🎰 Ruleta","🎰 Roulette"]};
+const LINES={...COMMON,
+  hello:[["Bine ai venit la bord. TTL-ul e plin, combustibilul e plin, curajul e treaba ta.","Welcome aboard. TTL is full, fuel is full, the courage is up to you."],["Eu pilotez, tu decizi când sari. Nu te lăcomi.","I fly, you decide when to jump. Don't get greedy."]],
+  fly:[["Decolare! Hop 1, hop 2…","Takeoff! Hop 1, hop 2…"],["Pachetul e în aer. Ține degetul pe buton.","The packet is airborne. Keep your finger on the button."]],
+  cash:[["Ai sărit la timp! Câștig confirmat cu ACK.","You jumped in time! Win confirmed with an ACK."],["Încasat! Prudența e și ea un protocol.","Cashed out! Caution is a protocol too."]],
+  lost:[["💥 Pachet pierdut! Un router a avut o zi proastă.","💥 Packet lost! A router had a bad day."],["Pierdut. TTL-ul a ajuns la zero.","Lost. TTL hit zero."],["Coliziune în aer. Miza a plecat cu ea.","Mid-air collision. The bet went with it."]],
+  instant:[["S-a pierdut chiar la decolare. Se întâmplă: cablu scos din priză.","Lost right at takeoff. It happens: someone pulled the cable."]],
+  max:[["30×! Am atins altitudinea maximă, încasez automat pentru tine.","30×! Max altitude reached, cashing out for you."]],
+  saving:[["O clipă, încă salvez zborurile de dinainte…","One moment, still saving the earlier flights…"]]};
+const k=kit({UI,LINES,title:UI.title,chips:[1,2,5,10,25,50,100],faces:{idle:"👩‍🚀",fly:"🧑‍✈️",cash:"🤝",lost:"😬",instant:"🫢",max:"😱",broke:"🫠"}});
+const {$,T,L}=k;
+
+const EDGE=0.96,CAP=30,RATE=0.12; // multiplier = e^(RATE·t), t in seconds
+const AUTOS=[0,1.5,2,3,5,10];let autoAt=0;
+let fl=null,hist=[];
+
+function drawPlot(m,t,lost){
+  // x: time (fits the flight so far), y: multiplier on a log scale up to max(2, m)
+  const W=640,H=360,top=Math.max(2,m*1.15),tm=Math.max(6,t*1.1),ln=Math.log;
+  const X=s=>20+(s/tm)*(W-60),Y=v=>H-24-(ln(v)/ln(top))*(H-60);
+  let grid="";[1.5,2,3,5,10,20,30].filter(v=>v<top).forEach(v=>{grid+=`<line x1="0" x2="${W}" y1="${Y(v)}" y2="${Y(v)}" stroke="#2c3b57" stroke-width="1"/><text x="${W-6}" y="${Y(v)-4}" fill="#6c7fa3" font-size="14" text-anchor="end" font-family="IBM Plex Mono,monospace">${v}×</text>`});
+  let d="",pts=40;for(let i=0;i<=pts;i++){const s=t*i/pts;d+=(i?"L":"M")+X(s).toFixed(1)+" "+Y(Math.exp(RATE*s)).toFixed(1)}
+  const hx=X(t),hy=Y(m);
+  // routers (hops) along the bottom
+  let hops="";for(let s=2;s<tm;s+=2)hops+=`<rect x="${X(s)-7}" y="${H-18}" width="14" height="10" rx="2" fill="${s<=t?"#3fa36b":"#33405a"}"/>`;
+  $("#plot").innerHTML=grid+hops+(t>0?`<path d="${d}" fill="none" stroke="${lost?"#ff6b5b":"#ffe766"}" stroke-width="4" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`:"")+
+    `<text x="${hx}" y="${hy}" font-size="34" text-anchor="middle" dominant-baseline="central">${lost?"💥":"📦"}</text>`;
+}
+function paintAuto(){
+  $("#auto").innerHTML=AUTOS.map(a=>`<button type="button" data-a="${a}" aria-pressed="${a===autoAt}" ${k.locked?"disabled":""}>${a?a+"×":L("Oprit","Off")}</button>`).join("");
+}
+$("#auto").addEventListener("click",e=>{const b=e.target.closest("button");if(b&&!b.disabled){autoAt=+b.dataset.a;paintAuto()}});
+function paintHist(){$("#hist").innerHTML=hist.map(v=>`<span class="${v>=2?"hi":"lo"}">${v.toFixed(2)}×</span>`).join("")}
+function paintGo(){
+  const g=$("#go");
+  if(fl&&fl.live){g.className="btn big cash";g.textContent=L(`💰 Încasează ${Math.floor(fl.bet*fl.m)}`,`💰 Cash out ${Math.floor(fl.bet*fl.m)}`);g.disabled=false}
+  else{g.className="btn big";g.textContent=L("🚀 Lansează","🚀 Launch");g.disabled=!k.canBet()||(fl&&!fl.done)}
+  $("#betv").textContent=fl&&fl.live?fl.bet:k.bet;
+  $("#pot").textContent=fl&&fl.live?Math.floor(fl.bet*fl.m):"–";
+  $("#betBox").hidden=!!(fl&&fl.live);
+}
+k.onPaint(()=>{paintGo();paintAuto()});k.onLang(()=>{paintGo();paintAuto();if(!fl)$("#sub").textContent=L("Alege miza și lansează pachetul.","Pick a bet and launch the packet.")});
+
+function launch(){
+  if(fl&&fl.live)return cash(false);
+  if(!k.canBet()){k.say(k.wallet&&k.wallet.bal<=0?"broke":"tooMuch");return}
+  if(k.wallet.pending()>=3){k.say("saving");return}
+  const bet=k.bet;k.take(bet); // taken now: closing the page mid-flight loses it
+  const u=k.rand01();const crash=Math.min(CAP,Math.max(1,Math.floor(EDGE*100/(1-u))/100));
+  fl={bet,crash,m:1,t:0,live:true,done:false,start:performance.now()};
+  k.locked=true;$("#res").textContent="";$("#res").className="result";$("#big").className="mx";$("#sub").textContent="";
+  k.say("fly");k.paint();requestAnimationFrame(tick);
+}
+function tick(now){
+  if(!fl||!fl.live)return;
+  const t=(now-fl.start)/1000,m=Math.floor(Math.exp(RATE*t)*100)/100;
+  if(m>=fl.crash){fl.m=fl.crash;fl.t=Math.log(fl.crash)/RATE;return lose()}
+  fl.m=m;fl.t=t;
+  $("#big").textContent=m.toFixed(2)+"×";drawPlot(m,t,false);paintGo();
+  if(autoAt&&m>=autoAt){fl.m=autoAt;return cash(true)}
+  if(m>=CAP){fl.m=CAP;k.say("max");return cash(true)}
+  requestAnimationFrame(tick);
+}
+function cash(auto){
+  if(!fl||!fl.live)return;
+  fl.live=false;const won=Math.floor(fl.bet*fl.m);k.pay(won);
+  $("#big").textContent=fl.m.toFixed(2)+"×";$("#big").className="mx won";
+  $("#sub").textContent=L(`Ai încasat la ${fl.m.toFixed(2)}×. Pachetul s-ar fi pierdut la ${fl.crash.toFixed(2)}×.`,`You cashed out at ${fl.m.toFixed(2)}×. The packet would have been lost at ${fl.crash.toFixed(2)}×.`);
+  $("#res").className="result good";$("#res").textContent=L(`Câștigi ${won} (net ${won-fl.bet>=0?"+":""}${won-fl.bet})`,`You win ${won} (net ${won-fl.bet>=0?"+":""}${won-fl.bet})`);
+  if(fl.m<CAP)k.say("cash");finish();
+}
+function lose(){
+  fl.live=false;drawPlot(fl.crash,fl.t,true);
+  $("#big").textContent=fl.crash.toFixed(2)+"×";$("#big").className="mx lost";
+  $("#sub").textContent=L("💥 Pachet pierdut!","💥 Packet lost!");
+  $("#res").className="result bad";$("#res").textContent=L(`Pierzi ${fl.bet}`,`You lose ${fl.bet}`);
+  k.say(fl.crash<=1?"instant":"lost");finish();
+}
+function finish(){
+  hist.unshift(fl.crash);hist=hist.slice(0,12);paintHist();
+  fl.done=true;k.locked=false;k.paint();
+  if(k.wallet.bal<=0)setTimeout(()=>k.say("broke"),2000);
+}
+$("#go").onclick=launch;
+document.addEventListener("keydown",e=>{if(e.code==="Space"&&e.target===document.body){e.preventDefault();launch()}});
+drawPlot(1,0,false);k.render();k.say("hello");k.paint();
+</script>
+</body>
+</html>

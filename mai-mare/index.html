@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mai mare sau mai mic</title>
+<meta name="description" content="Ghicește dacă următoarea carte e mai mare sau mai mică, cu punctele câștigate la teste. / Guess whether the next card is higher or lower, with the points you earn from quizzes.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/theme.css">
+<link rel="stylesheet" href="../assets/casino.css?v=1">
+<style>
+.felt{background:#1d6b45;border:3px solid var(--text);border-radius:18px;padding:18px 12px;display:grid;grid-template-columns:auto minmax(0,1fr);gap:16px;align-items:center}
+.pc{width:118px;height:168px;border-radius:12px;background:#fffaf0;border:2px solid #151515;box-shadow:0 4px 0 rgba(0,0,0,.35);display:grid;grid-template-rows:auto 1fr auto;padding:8px 10px;font:700 1.5rem var(--head);color:#151515;transition:transform .25s ease}
+.pc.red{color:#c0281b}
+.pc .mid{display:grid;place-items:center;font-size:3rem}
+.pc .bot{transform:rotate(180deg)}
+.pc.flip{transform:rotateY(90deg)}
+.pc.back{background:repeating-linear-gradient(45deg,#2457c5 0 8px,#1b3f91 8px 16px);color:transparent}
+.side{color:#fff;min-width:0}
+.mult{font:700 2.2rem var(--head);font-variant-numeric:tabular-nums;margin:0;color:#ffe766}
+.multL{font:600 .8rem var(--mono);text-transform:uppercase;letter-spacing:.04em;opacity:.85;margin:0}
+.trail{display:flex;flex-wrap:wrap;gap:4px;margin-top:10px}
+.trail span{background:#fffaf0;color:#151515;border-radius:5px;padding:2px 6px;font:700 .8rem var(--mono)}
+.trail span.red{color:#c0281b}
+.guess{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:14px}
+.guess .btn{justify-content:center;flex-direction:column;gap:2px}
+.guess small{font:500 .78rem var(--sans);opacity:.85}
+@media (max-width:460px){.felt{grid-template-columns:minmax(0,1fr);justify-items:center;text-align:center}.trail{justify-content:center}}
+@media (prefers-reduced-motion:reduce){.pc{transition:none}}
+</style>
+</head>
+<body>
+<header class="topbar" id="top"><div class="topbar-in">
+  <a class="brand" href="../index.html"><svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="var(--accent)"/><path d="M7 16h18M19 11l6 5-6 5" fill="none" stroke="var(--accent-text)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="16" r="2.6" fill="var(--accent-text)"/></svg><span data-t="brand"></span></a>
+  <nav class="nav"><a href="../index.html" data-t="home"></a><a href="../joc/index.html" data-t="games"></a></nav>
+  <div class="tools"><div class="seg" role="group" aria-label="Limba / Language"><button type="button" data-lang="ro">RO</button><button type="button" data-lang="en">EN</button></div><button type="button" class="icon-btn" id="theme">◐</button></div>
+</div></header>
+
+<main class="page">
+  <h1 data-t="title"></h1>
+  <p class="lead" data-t="lead"></p>
+  <p class="empty" id="noPts" hidden><span data-t="noPts"></span> <a href="../teste/index.html" data-t="toTests"></a></p>
+
+  <section class="card">
+    <div class="croup"><div class="face" id="face" aria-hidden="true">🧑‍💼</div><p class="bubble" aria-live="polite"><span class="who" data-t="who"></span><span id="line"></span></p></div>
+    <div class="hud"><span><span data-t="ptsL"></span> <b id="bal">…</b></span><span><span data-t="betL"></span> <b id="betv">1</b></span><span><span data-t="winL"></span> <b id="pot">–</b></span></div>
+    <div class="felt">
+      <div class="pc back" id="card" aria-live="polite"><span class="top"></span><span class="mid"></span><span class="bot"></span></div>
+      <div class="side">
+        <p class="multL" data-t="multL"></p>
+        <p class="mult" id="mult">1.00×</p>
+        <div class="trail" id="trail"></div>
+      </div>
+    </div>
+    <div class="guess" id="guess" hidden>
+      <button type="button" class="btn" id="hi"><span data-t="hi"></span><small id="hiP"></small></button>
+      <button type="button" class="btn" id="lo"><span data-t="lo"></span><small id="loP"></small></button>
+    </div>
+    <div class="row">
+      <button type="button" class="btn big" id="deal" data-t="deal"></button>
+      <button type="button" class="btn big sec" id="cash" hidden></button>
+    </div>
+    <p class="result" id="res" aria-live="polite"></p>
+    <div id="betBox"><p class="betL" data-t="pickBet"></p><div class="chips" id="chips"></div></div>
+    <p class="note" data-t="rules"></p>
+  </section>
+
+  <section class="card">
+    <div class="row" style="margin-top:0"><a class="btn sec" href="../sloturi/index.html" data-t="slots"></a><a class="btn sec" href="../racheta/index.html" data-t="crash"></a><a class="btn sec" href="../ruleta/index.html" data-t="rul"></a><a class="btn sec" href="../teste/index.html" data-t="toTests"></a></div>
+  </section>
+</main>
+
+<script type="module" src="../assets/auth.js?v=18"></script>
+<script type="module">
+import { kit, COMMON } from "../assets/casino.js?v=1";
+const UI={brand:["Rețea pas cu pas","Network step by step"],home:["← Lecții","← Lessons"],games:["🎮 Jocuri","🎮 Games"],
+  title:["⬆⬇ Mai mare sau mai mic","⬆⬇ Higher or lower"],
+  lead:["Pui miza și primești o carte. Ghicește dacă următoarea e mai mare sau mai mică. Fiecare ghicire corectă crește multiplicatorul; te oprești când vrei și iei câștigul. O greșeală și pierzi miza.","Place a bet and get a card. Guess whether the next one is higher or lower. Every right guess raises the multiplier; stop whenever you like and take the win. One wrong guess and you lose the bet."],
+  noPts:["Ai rămas fără puncte. Termină un test cu peste 80% și primești 🪙 5 puncte.","You are out of points. Finish a quiz with over 80% and you get 🪙 5 points."],toTests:["✎ Teste","✎ Quizzes"],
+  who:["Dealerul Hop","Hop the dealer"],ptsL:["🪙 Puncte","🪙 Points"],betL:["Miza","Bet"],winL:["Câștig acum","Win now"],multL:["Multiplicator","Multiplier"],
+  hi:["⬆ Mai mare sau egal","⬆ Higher or same"],lo:["⬇ Mai mic sau egal","⬇ Lower or same"],deal:["🃏 Împarte","🃏 Deal"],pickBet:["Alege miza","Pick your bet"],
+  rules:["As = 1, J = 11, Q = 12, K = 13. Cărțile vin dintr-un pachet amestecat la fiecare carte. Sub fiecare buton vezi șansa și multiplicatorul nou: cu cât e mai riscant, cu atât crește mai mult (casa păstrează 4%). La 30× iei automat câștigul. Miza maximă: 100.","Ace = 1, J = 11, Q = 12, K = 13. Every card comes from a freshly shuffled deck. Under each button you see the chance and the new multiplier: the riskier the guess, the more it grows (the house keeps 4%). At 30× the win is taken automatically. Max bet: 100."],
+  slots:["🍒 Sloturi","🍒 Slots"],crash:["🚀 Pachetul care urcă","🚀 The climbing packet"],rul:["🎰 Ruleta","🎰 Roulette"]};
+const LINES={...COMMON,
+  hello:[["Bun venit la masă. Aici nu ajută subnetarea, doar instinctul.","Welcome to the table. Subnetting won't help here, only instinct."],["Salut, sunt Hop. Număr cărțile mai bine decât număr hop-urile din traceroute.","Hi, I'm Hop. I count cards better than traceroute counts hops."]],
+  deal:[["Prima carte. Ce zici, urcă sau coboară?","First card. Up or down, what do you think?"],["Cartea e pe masă. Rutează cu grijă.","The card is on the table. Route carefully."]],
+  right:[["Corect! Multiplicatorul urcă.","Right! The multiplier goes up."],["Exact! Ai ghicit ca un switch care știe deja MAC-ul.","Spot on! Like a switch that already knows the MAC."],["Bine! Te oprești sau mai riști un hop?","Nice! Stop here or risk one more hop?"]],
+  wrong:[["Greșit. Pachetul a luat-o pe altă rută.","Wrong. The packet took another route."],["Aoleu. Miza a plecat spre /dev/null.","Ouch. The bet went to /dev/null."]],
+  cash:[["Ai încasat! Decizie de inginer prudent.","Cashed out! A careful engineer's decision."],["Bani în cont. Commit făcut, fără rollback.","Points banked. Committed, no rollback."]],
+  max:[["30×! Ai atins plafonul mesei, îți dau câștigul automat.","30×! You hit the table cap, paying you out automatically."]],
+  saving:[["O clipă, încă salvez mișcările de dinainte…","One moment, still saving the earlier moves…"]]};
+const k=kit({UI,LINES,title:UI.title,chips:[1,2,5,10,25,50,100],faces:{idle:"🧑‍💼",right:"😮",wrong:"😏",cash:"🤝",max:"😱",broke:"🫠"}});
+const {$,T,L}=k;
+
+const SUITS=[["♠",0],["♥",1],["♦",1],["♣",0]],RANK=["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+const EDGE=0.96,CAP=30;
+const newCard=()=>({v:k.rand(13)+1,s:SUITS[k.rand(4)]});
+const pHi=v=>(14-v)/13,pLo=v=>v/13;
+const step=(m,p)=>Math.floor(m*EDGE/p*100)/100;
+
+let round=null; // {bet, card, mult, trail:[]}
+function showCard(c,flip){
+  const el=$("#card");
+  const put=()=>{el.className="pc"+(c.s[1]?" red":"");el.querySelector(".top").textContent=RANK[c.v-1]+c.s[0];el.querySelector(".mid").textContent=c.s[0];el.querySelector(".bot").textContent=RANK[c.v-1]+c.s[0];el.setAttribute("aria-label",RANK[c.v-1]+" "+c.s[0])};
+  if(!flip||k.reduced()){put();return Promise.resolve()}
+  el.classList.add("flip");return new Promise(r=>setTimeout(()=>{put();r()},250));
+}
+function paintRound(){
+  const on=!!round&&round.live;
+  $("#guess").hidden=!on;$("#cash").hidden=!on||round.mult<=1;$("#deal").hidden=on;$("#betBox").hidden=on;
+  $("#betv").textContent=round&&round.live?round.bet:k.bet;
+  $("#mult").textContent=(round?round.mult:1).toFixed(2)+"×";
+  $("#pot").textContent=on&&round.mult>1?Math.floor(round.bet*round.mult):"–";
+  if(on){const v=round.card.v;
+    $("#hiP").textContent=pHi(v)>=1?L("sigur – nu plătește","certain – no pay"):`${Math.round(pHi(v)*100)}% → ${step(round.mult,pHi(v)).toFixed(2)}×`;
+    $("#loP").textContent=pLo(v)>=1?L("sigur – nu plătește","certain – no pay"):`${Math.round(pLo(v)*100)}% → ${step(round.mult,pLo(v)).toFixed(2)}×`;
+    $("#hi").disabled=pHi(v)>=1||round.busy;$("#lo").disabled=pLo(v)>=1||round.busy;$("#cash").disabled=round.busy;
+    $("#cash").textContent=L(`💰 Încasează ${Math.floor(round.bet*round.mult)}`,`💰 Cash out ${Math.floor(round.bet*round.mult)}`)}
+  $("#deal").disabled=!k.canBet();
+  $("#trail").innerHTML=(round?round.trail:[]).map(c=>`<span class="${c.s[1]?"red":""}">${RANK[c.v-1]}${c.s[0]}</span>`).join("");
+}
+k.onPaint(paintRound);k.onLang(paintRound);
+
+async function deal(){
+  if(round&&round.live)return;
+  if(!k.canBet()){k.say(k.wallet&&k.wallet.bal<=0?"broke":"tooMuch");return}
+  if(k.wallet.pending()>=3){k.say("saving");return}
+  const bet=k.bet;k.take(bet); // the bet is taken now: leaving mid-round loses it
+  round={bet,card:newCard(),mult:1,trail:[],live:true,busy:false};round.trail.push(round.card);
+  k.locked=true;$("#res").textContent="";$("#res").className="result";
+  await showCard(round.card,true);k.say("deal");k.paint();
+}
+async function guess(up){
+  if(!round||!round.live||round.busy)return;
+  const v=round.card.v,p=up?pHi(v):pLo(v);if(p>=1)return;
+  round.busy=true;paintRound();
+  const c=newCard();await showCard(c,true);round.trail.push(c);round.card=c;
+  const ok=up?c.v>=v:c.v<=v;
+  if(!ok){round.live=false;$("#res").className="result bad";$("#res").textContent=L(`${RANK[c.v-1]}${c.s[0]} – pierzi ${round.bet}`,`${RANK[c.v-1]}${c.s[0]} – you lose ${round.bet}`);k.say("wrong");end();return}
+  round.mult=Math.min(CAP,step(round.mult,p));round.busy=false;
+  if(round.mult>=CAP){k.say("max");cash(true);return}
+  k.say("right");paintRound();
+}
+function cash(auto){
+  if(!round||!round.live||round.mult<=1)return;
+  const won=Math.floor(round.bet*round.mult);round.live=false;k.pay(won);
+  $("#res").className="result good";$("#res").textContent=L(`Încasezi ${won} (net +${won-round.bet})`,`You cash out ${won} (net +${won-round.bet})`);
+  if(!auto)k.say("cash");end();
+}
+function end(){k.locked=false;k.paint();if(k.wallet.bal<=0)setTimeout(()=>k.say("broke"),2000)}
+$("#deal").onclick=deal;$("#hi").onclick=()=>guess(true);$("#lo").onclick=()=>guess(false);$("#cash").onclick=()=>cash(false);
+k.render();k.say("hello");k.paint();
+</script>
+</body>
+</html>

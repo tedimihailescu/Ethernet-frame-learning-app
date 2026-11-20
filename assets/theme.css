@@ -33,6 +33,11 @@ html.auth-wait body{visibility:hidden}
 .user-menu{display:flex;align-items:center;gap:6px}
 .um-link{display:inline-flex;align-items:center;gap:4px;max-width:160px;padding:6px 10px;border:1px solid var(--bar-muted);border-radius:8px;color:var(--bar-text);text-decoration:none;font:600 .82rem var(--sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .um-link:hover{background:var(--bar-hover)}
+.um-gift{background:#f5c400;color:#151515;border-color:#f5c400;cursor:pointer;animation:um-gift 1.8s ease-in-out infinite}
+.um-gift:hover{background:#ffd633}
+.um-gift:disabled{opacity:.6;cursor:default;animation:none}
+@keyframes um-gift{0%,100%{transform:none}50%{transform:scale(1.08)}}
+@media (prefers-reduced-motion: reduce){.um-gift{animation:none}}
 .um-tests{background:var(--bar-text);color:var(--bar);border-color:var(--bar-text)}
 .um-tests:hover{background:var(--bar-text);filter:brightness(1.08)}
 .um-name{overflow:hidden;text-overflow:ellipsis}

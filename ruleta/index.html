@@ -93,11 +93,11 @@ h1{font:700 clamp(1.5rem,4vw,2.2rem) var(--head);margin:0 0 6px}
   </section>
 
   <section class="card">
-    <div class="row" style="margin-top:0"><a class="btn sec" href="../teste/index.html" data-t="toTests"></a><a class="btn sec" href="../blackjack/index.html" data-t="bj"></a><a class="btn sec" href="../rezultate/index.html" data-t="results"></a></div>
+    <div class="row" style="margin-top:0"><a class="btn sec" href="../teste/index.html" data-t="toTests"></a><a class="btn sec" href="../blackjack/index.html" data-t="bj"></a><a class="btn sec" href="../sloturi/index.html" data-t="slots"></a><a class="btn sec" href="../mai-mare/index.html" data-t="hilo"></a><a class="btn sec" href="../racheta/index.html" data-t="crash"></a><a class="btn sec" href="../rezultate/index.html" data-t="results"></a></div>
   </section>
 </main>
 
-<script type="module" src="../assets/auth.js?v=17"></script>
+<script type="module" src="../assets/auth.js?v=18"></script>
 <script type="module">
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
 let lang=store.get("cadru-lang")==="en"?"en":"ro";
@@ -111,7 +111,7 @@ const UI={brand:["Rețea pas cu pas","Network step by step"],home:["← Lecții"
   who:["Crupierul Pachet","Croupier Packet"],ptsL:["🪙 Puncte","🪙 Points"],betL:["Pe masă","On the table"],lastWin:["Ultimul câștig","Last win"],
   spin:["🎰 Învârte","🎰 Spin"],undo:["↶ Anulează","↶ Undo"],clear:["✕ Golește masa","✕ Clear table"],rebet:["↻ Același pariu","↻ Same bet"],
   rules:["Plăți: număr exact 35:1 · tuzină sau coloană 2:1 · roșu/negru, par/impar, 1–18/19–36 1:1. Pe 0 pierd toate pariurile în afară de cel pe 0. Câștigul se adaugă la punctele tale. Miza maximă: 100 de puncte pe o învârtire.","Payouts: single number 35:1 · dozen or column 2:1 · red/black, even/odd, 1–18/19–36 1:1. On 0 every bet loses except a bet on 0. Winnings are added to your points. Table limit: 100 points per spin."],
-  bj:["🃏 Blackjack","🃏 Blackjack"],results:["★ Rezultate","★ Results"]};
+  bj:["🃏 Blackjack","🃏 Blackjack"],slots:["🍒 Sloturi","🍒 Slots"],hilo:["⬆⬇ Mai mare sau mai mic","⬆⬇ Higher or lower"],crash:["🚀 Pachetul care urcă","🚀 The climbing packet"],results:["★ Rezultate","★ Results"]};
 
 const LINES={
  hello:[["Faceți jocurile! Mingea e ca un pachet UDP: nu știe nici ea unde ajunge.","Place your bets! The ball is like a UDP packet: even it doesn't know where it's going."],["Bine ai venit. Aici punctele câștigate cu greu la teste se pierd ușor. Ca în viață.","Welcome. Points earned the hard way in quizzes are lost the easy way here. Just like life."]],
@@ -278,6 +278,7 @@ function render(){
 }
 
 buildWheel();buildBoard();buildChips();render();say("hello");paint();
+window.addEventListener("points:bonus",async()=>{if(ctx&&!spinning&&!pendingGet()){try{bal=await ctx.reload();paint()}catch(e){}}});
 $("#board").addEventListener("click",e=>{const b=e.target.closest(".cell");if(b)place(b.dataset.b)});
 $("#chips").addEventListener("click",e=>{const b=e.target.closest(".chip");if(b&&!b.disabled){chip=+b.dataset.c;paint()}});
 $("#spin").onclick=spin;$("#undo").onclick=undo;$("#clear").onclick=clearT;$("#rebet").onclick=rebet;
@@ -288,7 +289,7 @@ $("#theme").onclick=()=>{const r=document.documentElement,d=r.dataset.theme?r.da
 // Points come from Firestore when signed in; opened as a local file it runs in demo mode with 50 points.
 if(location.protocol==="file:"||window.RULETA_DEMO){bal=+(store.get("ruleta-demo")||15);paint()}
 else{
-  const [{auth,db},{onAuthStateChanged},fs,pts]=await Promise.all([import("../assets/firebase.js?v=5"),import("https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js"),import("https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js"),import("../assets/points.js?v=11")]);
+  const [{auth,db},{onAuthStateChanged},fs,pts]=await Promise.all([import("../assets/firebase.js?v=5"),import("https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js"),import("https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js"),import("../assets/points.js?v=12")]);
   onAuthStateChanged(auth,async user=>{if(!user)return;
     ctx={db,uid:user.uid,doc:fs.doc,getDoc:fs.getDoc,setDoc:fs.setDoc,increment:fs.increment,now:fs.serverTimestamp,reload:async()=>(await pts.balance(db,user.uid,fs)).total};
     try{await flush()}catch(e){}

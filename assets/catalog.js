@@ -205,6 +205,9 @@ const GAMES=[
  {href:"zar/index.html",icon:"🎲",t:{ro:"Zarul pachetului",en:"The packet die"}},
  {href:"blackjack/index.html",icon:"🃏",t:{ro:"Blackjack",en:"Blackjack"}},
  {href:"ruleta/index.html",icon:"🎰",t:{ro:"Ruleta punctelor",en:"Points roulette"}},
+ {href:"sloturi/index.html",icon:"🍒",t:{ro:"Sloturile de pachete",en:"Packet slots"}},
+ {href:"mai-mare/index.html",icon:"⬆️",t:{ro:"Mai mare sau mai mic",en:"Higher or lower"}},
+ {href:"racheta/index.html",icon:"🚀",t:{ro:"Pachetul care urcă",en:"The climbing packet"}},
  {href:"roata/index.html",icon:"🎡",t:{ro:"Ce învăț azi?",en:"What do I learn today?"}}
 ];
 const ALL=[...LESSONS,...PROD,...EXTRA,...NEW].map(l=>Object.assign({id:l.href.split("/")[0]},l));

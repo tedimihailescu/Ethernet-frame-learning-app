@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sloturile de pachete</title>
+<meta name="description" content="Păcănele cu 3 role jucate cu punctele câștigate la teste. / A 3-reel slot machine played with the points you earn from quizzes.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/theme.css">
+<link rel="stylesheet" href="../assets/casino.css?v=1">
+<style>
+.machine{max-width:420px;margin:0 auto;background:linear-gradient(#7a1f14,#4a120c);border:3px solid var(--text);border-radius:22px;padding:16px 14px 18px;box-shadow:0 6px 0 var(--text)}
+.marquee{text-align:center;font:700 1rem var(--head);color:#ffe766;letter-spacing:.08em;margin:0 0 10px;text-transform:uppercase}
+.reels{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;background:#151515;border-radius:14px;padding:8px;position:relative}
+.reels::after{content:"";position:absolute;left:4px;right:4px;top:50%;height:2px;background:#ffe766;opacity:.55;pointer-events:none}
+.reel{background:#fffaf0;border-radius:10px;height:104px;display:grid;place-items:center;font-size:3.2rem;line-height:1;overflow:hidden;border:2px solid #d9b45a}
+.reel.spin span{animation:blur .12s linear infinite}
+.reel.win{background:#fff3b0;box-shadow:inset 0 0 0 4px #f5c400}
+@keyframes blur{0%{transform:translateY(-30%);opacity:.5}100%{transform:translateY(30%);opacity:.5}}
+.lever{display:flex;justify-content:center;margin-top:14px}
+@media (prefers-reduced-motion:reduce){.reel.spin span{animation:none}}
+@media (max-width:380px){.reel{height:84px;font-size:2.5rem}}
+</style>
+</head>
+<body>
+<header class="topbar" id="top"><div class="topbar-in">
+  <a class="brand" href="../index.html"><svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="var(--accent)"/><path d="M7 16h18M19 11l6 5-6 5" fill="none" stroke="var(--accent-text)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="16" r="2.6" fill="var(--accent-text)"/></svg><span data-t="brand"></span></a>
+  <nav class="nav"><a href="../index.html" data-t="home"></a><a href="../joc/index.html" data-t="games"></a></nav>
+  <div class="tools"><div class="seg" role="group" aria-label="Limba / Language"><button type="button" data-lang="ro">RO</button><button type="button" data-lang="en">EN</button></div><button type="button" class="icon-btn" id="theme">◐</button></div>
+</div></header>
+
+<main class="page">
+  <h1 data-t="title"></h1>
+  <p class="lead" data-t="lead"></p>
+  <p class="empty" id="noPts" hidden><span data-t="noPts"></span> <a href="../teste/index.html" data-t="toTests"></a></p>
+
+  <section class="card">
+    <div class="croup"><div class="face" id="face" aria-hidden="true">🤖</div><p class="bubble" aria-live="polite"><span class="who" data-t="who"></span><span id="line"></span></p></div>
+    <div class="hud"><span><span data-t="ptsL"></span> <b id="bal">…</b></span><span><span data-t="betL"></span> <b id="betv">1</b></span><span><span data-t="lastWin"></span> <b id="lw">–</b></span></div>
+    <div class="machine">
+      <p class="marquee" data-t="marquee"></p>
+      <div class="reels" id="reels" role="img" aria-live="polite"><div class="reel"><span>📦</span></div><div class="reel"><span>📦</span></div><div class="reel"><span>📦</span></div></div>
+      <div class="lever"><button type="button" class="btn big" id="spin" data-t="spin"></button></div>
+    </div>
+    <p class="result" id="res" aria-live="polite"></p>
+    <p class="betL" data-t="pickBet"></p>
+    <div class="chips" id="chips"></div>
+  </section>
+
+  <section class="card">
+    <h2 style="font:700 1.1rem var(--head);margin:0" data-t="payT"></h2>
+    <table class="pay"><tbody id="pay"></tbody></table>
+    <p class="note" data-t="rules"></p>
+  </section>
+
+  <section class="card">
+    <div class="row" style="margin-top:0"><a class="btn sec" href="../mai-mare/index.html" data-t="hilo"></a><a class="btn sec" href="../racheta/index.html" data-t="crash"></a><a class="btn sec" href="../ruleta/index.html" data-t="rul"></a><a class="btn sec" href="../teste/index.html" data-t="toTests"></a></div>
+  </section>
+</main>
+
+<script type="module" src="../assets/auth.js?v=18"></script>
+<script type="module">
+import { kit, COMMON } from "../assets/casino.js?v=1";
+const UI={brand:["Rețea pas cu pas","Network step by step"],home:["← Lecții","← Lessons"],games:["🎮 Jocuri","🎮 Games"],
+  title:["🍒 Sloturile de pachete","🍒 Packet slots"],
+  lead:["Păcănele cu 3 role, jucate cu punctele tale. Alegi miza, tragi de manetă. Trei simboluri la fel câștigă mult, două la fel îți dau măcar miza înapoi.","A 3-reel slot machine played with your points. Pick a bet, pull the lever. Three of a kind wins big, two of a kind at least gives your bet back."],
+  noPts:["Ai rămas fără puncte. Termină un test cu peste 80% și primești 🪙 5 puncte.","You are out of points. Finish a quiz with over 80% and you get 🪙 5 points."],toTests:["✎ Teste","✎ Quizzes"],
+  who:["Robotul Ping","Ping the robot"],ptsL:["🪙 Puncte","🪙 Points"],betL:["Miza","Bet"],lastWin:["Ultimul câștig","Last win"],
+  marquee:["★ Jackpot 300× ★","★ Jackpot 300× ★"],spin:["🎰 Trage!","🎰 Pull!"],pickBet:["Alege miza","Pick your bet"],
+  payT:["Tabel de plăți","Paytable"],
+  rules:["Câștigul e miza înmulțită cu numărul din tabel. Contează doar ce iese pe linia din mijloc. Pe termen lung aparatul dă înapoi cam 95% din ce primește (asta e marja casei). Miza maximă: 10 puncte.","The win is your bet times the number in the table. Only the middle line counts. In the long run the machine pays back about 95% of what it takes (that's the house edge). Max bet: 10 points."],
+  hilo:["⬆⬇ Mai mare sau mai mic","⬆⬇ Higher or lower"],crash:["🚀 Pachetul care urcă","🚀 The climbing packet"],rul:["🎰 Ruleta","🎰 Roulette"]};
+const LINES={...COMMON,
+  hello:[["Bip-bop. Bagă o fisă. Promit că rolele sunt mai aleatoare decât numerele de port efemere.","Beep-boop. Insert a coin. I promise the reels are more random than ephemeral port numbers."],["Salut! Eu sunt Ping. Răspund mereu, dar nu garantez câștigul.","Hi! I'm Ping. I always reply, but I don't guarantee a win."]],
+  spin:[["Rolele se învârt… ca un pachet pierdut într-o buclă de rutare.","Reels spinning… like a packet stuck in a routing loop."],["Calculez checksum-ul norocului…","Computing the luck checksum…"],["Trimit SYN la noroc… aștept SYN-ACK.","Sending SYN to luck… waiting for SYN-ACK."]],
+  pair:[["Două la fel. Măcar n-ai pierdut pachetul.","A pair. At least you didn't lose the packet."],["Pereche! Ca două NIC-uri în bonding.","A pair! Like two NICs in a bond."]],
+  win:[["Trei la fel! Ruta e verde de la un capăt la altul.","Three of a kind! The route is green end to end."],["Câștig! Îți trimit punctele cu prioritate QoS.","A win! Sending your points with QoS priority."]],
+  jackpot:[["JACKPOT! 🚀🚀🚀 Am declanșat o alertă în NOC!","JACKPOT! 🚀🚀🚀 I just triggered an alert in the NOC!"]],
+  lose:[["Nimic. Pachetul a plecat spre /dev/null.","Nothing. The packet went to /dev/null."],["Timeout. Mai încearcă.","Timeout. Try again."],["Niciun match în tabela de rutare.","No match in the routing table."]],
+  saving:[["O clipă, încă salvez învârtirile de dinainte…","One moment, still saving the earlier spins…"]]};
+const k=kit({UI,LINES,title:UI.title,chips:[1,2,5,10],faces:{idle:"🤖",win:"🤩",jackpot:"😱",pair:"🙂",lose:"😐",broke:"🫠",spin:"🤖"}});
+const {$,T,L}=k;
+
+// Symbol, weight on each reel, pay for three, pay for two.
+const SYM=[["🍪",9,4,1],["📦",7,8,1],["🔌",6,12,1],["📡",4,30,2],["🛡️",3,60,2],["🔑",2,150,3],["🚀",1,300,5]];
+const NAMES={"🍪":["Cookie","Cookie"],"📦":["Pachet","Packet"],"🔌":["Cablu","Cable"],"📡":["Antenă","Antenna"],"🛡️":["Firewall","Firewall"],"🔑":["Cheie","Key"],"🚀":["Rachetă","Rocket"]};
+const W=SYM.reduce((a,s)=>a+s[1],0);
+function draw(){let r=k.rand(W);for(const s of SYM){if(r<s[1])return s[0];r-=s[1]}return SYM[0][0]}
+function payout(a){
+  const c={};a.forEach(s=>c[s]=(c[s]||0)+1);
+  for(const s of SYM){if(c[s[0]]===3)return {mult:s[2],kind:s[0]==="🚀"?"jackpot":"win",sym:s[0]};}
+  for(const s of SYM){if(c[s[0]]===2)return {mult:s[3],kind:"pair",sym:s[0]};}
+  return {mult:0,kind:"lose"};
+}
+function payTable(){
+  $("#pay").innerHTML=SYM.slice().reverse().map(s=>`<tr><td>${s[0]} ${s[0]} ${s[0]} <small>${T(NAMES[s[0]])}</small></td><td>${s[2]}×</td></tr>`).join("")+
+    `<tr><td>${L("Două la fel","Any two of a kind")} (🍪📦🔌 / 📡🛡️ / 🔑 / 🚀)</td><td>1× / 2× / 3× / 5×</td></tr>`;
+}
+k.onLang(payTable);
+
+let spinning=false;
+k.onPaint(()=>{$("#betv").textContent=k.bet;$("#spin").disabled=spinning||!k.canBet()});
+function spin(){
+  if(spinning)return;
+  if(!k.canBet()){k.say(k.wallet&&k.wallet.bal<=0?"broke":"tooMuch");return}
+  if(k.wallet.pending()>=3){k.say("saving");return}
+  const bet=k.bet,res=[draw(),draw(),draw()],p=payout(res),won=bet*p.mult;
+  // Saved at once (net change), before the animation, so a reload can't undo the result.
+  k.hold=k.wallet.bal-bet;k.wallet.commit(won-bet);
+  spinning=true;k.locked=true;k.paint();k.say("spin");$("#res").textContent="";$("#res").className="result";
+  const reels=[...document.querySelectorAll(".reel")];reels.forEach(r=>r.classList.remove("win"));
+  const fast=k.reduced(),ticks=[];
+  reels.forEach((r,i)=>{r.classList.add("spin");ticks[i]=setInterval(()=>{r.firstChild.textContent=SYM[k.rand(SYM.length)][0]},70)});
+  reels.forEach((r,i)=>setTimeout(()=>{clearInterval(ticks[i]);r.classList.remove("spin");r.firstChild.textContent=res[i];
+    if(i===2)done(bet,res,p,won)},fast?60:650+i*420));
+}
+function done(bet,res,p,won){
+  const reels=[...document.querySelectorAll(".reel")];
+  if(p.mult)reels.forEach((r,i)=>{if(res[i]===p.sym)r.classList.add("win")});
+  $("#reels").setAttribute("aria-label",res.join(" "));
+  $("#res").className="result "+(won>bet?"good":won===bet?"":"bad");
+  $("#res").textContent=won?L(`${p.mult}× → câștigi ${won} (net ${won-bet>=0?"+":""}${won-bet})`,`${p.mult}× → you win ${won} (net ${won-bet>=0?"+":""}${won-bet})`):L(`Pierzi ${bet}`,`You lose ${bet}`);
+  $("#lw").textContent=won?"+"+won:"0";
+  k.say(p.kind);spinning=false;k.locked=false;k.hold=null;k.paint();
+  if(k.wallet.bal<=0)setTimeout(()=>k.say("broke"),2000);
+}
+$("#spin").onclick=spin;
+document.addEventListener("keydown",e=>{if(e.code==="Space"&&e.target===document.body){e.preventDefault();spin()}});
+k.render();payTable();k.say("hello");k.paint();
+</script>
+</body>
+</html>

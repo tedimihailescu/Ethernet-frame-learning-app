@@ -50,9 +50,18 @@ service cloud.firestore {
         && (resource == null || !('lastResult' in resource.data)
             || request.time > resource.data.lastResult + duration.value(10, 's'));
     }
+    // Daily bonus: exactly +5, at most once every 20 hours.
+    function bonusOk(d) {
+      let before = resource == null ? 0 : resource.data.get('bonus', 0);
+      return d.bonus is int
+        && d.bonus - before == 5
+        && d.get('lastBonus', null) == request.time
+        && (resource == null || !('lastBonus' in resource.data)
+            || request.time > resource.data.lastBonus + duration.value(20, 'h'));
+    }
     function userFieldsOk(keys) {
       let d = request.resource.data;
-      return keys.hasOnly(['name', 'email', 'lastSeen', 'online', 'page', 'path', 'created', 'roulette', 'lastSpin', 'spinId', 'lastResult'])
+      return keys.hasOnly(['name', 'email', 'lastSeen', 'online', 'page', 'path', 'created', 'roulette', 'lastSpin', 'spinId', 'lastResult', 'bonus', 'lastBonus'])
         && (!('name' in keys) || (d.name is string && d.name.size() <= 80))
         && (!('email' in keys) || ownEmail(d.email))
         && (!('lastSeen' in keys) || d.lastSeen == request.time)
@@ -64,6 +73,8 @@ service cloud.firestore {
         && (!('roulette' in keys) || rouletteOk(d))
         && (!('lastSpin' in keys) || ('roulette' in keys))
         && (!('lastResult' in keys) || resultTimeOk(d))
+        && (!('bonus' in keys) || bonusOk(d))
+        && (!('lastBonus' in keys) || ('bonus' in keys))
         && (!('spinId' in keys) || (('roulette' in keys) && d.spinId is string && d.spinId.size() <= 40));
     }
     match /users/{uid} {

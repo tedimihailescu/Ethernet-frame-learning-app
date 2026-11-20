@@ -10,12 +10,12 @@ async function boot() {
     import("./firebase.js?v=5"),
     import("https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js"),
     import("https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js"),
-    import("./points.js?v=11")
+    import("./points.js?v=12")
   ]);
   // firebase.js is already forwarding .web.app visitors to firebaseapp.com; don't race it.
   if (location.hostname.endsWith(".web.app")) return;
   const { onAuthStateChanged, signOut } = authMod;
-  const { doc, setDoc, getDoc, collection, serverTimestamp, writeBatch } = fs;
+  const { doc, setDoc, getDoc, collection, serverTimestamp, writeBatch, increment } = fs;
   const L = (ro, en) => (lang() === "en" ? en : ro);
 
   onAuthStateChanged(auth, async user => {
@@ -42,7 +42,32 @@ async function boot() {
     if (el) el.textContent = n;
   }
   async function refreshPoints(user) {
-    try { const b = await pts.balance(db, user.uid, fs); showPoints(b.total); mergeProgress(b.results); } catch (e) { console.warn("points", e); }
+    try { const b = await pts.balance(db, user.uid, fs); showPoints(b.total); mergeProgress(b.results); showGift(user, b.nextBonus); } catch (e) { console.warn("points", e); }
+  }
+
+  // Daily bonus: a 🎁 button in the top bar, +5 points at most once every 20 hours
+  // (the Firestore rules check both the amount and the time).
+  let giftTimer = null;
+  function showGift(user, next) {
+    const g = document.querySelector("#user-menu .um-gift");
+    if (!g) return;
+    clearTimeout(giftTimer);
+    const wait = (next || 0) - Date.now();
+    g.hidden = wait > 0;
+    if (wait > 0 && wait < 2 ** 31) giftTimer = setTimeout(() => showGift(user, 0), wait + 1000);
+    g.onclick = async () => {
+      g.disabled = true;
+      try {
+        await setDoc(doc(db, "users", user.uid), { bonus: increment(pts.DAILY), lastBonus: serverTimestamp() }, { merge: true });
+        await refreshPoints(user);
+        window.dispatchEvent(new CustomEvent("points:bonus", { detail: { total: points } }));
+        toast(L(`🎁 +${pts.DAILY} puncte! Ai acum ${points ?? "?"}. Următorul bonus peste 20 de ore.`, `🎁 +${pts.DAILY} points! You now have ${points ?? "?"}. Next bonus in 20 hours.`), ROOT + "joc/index.html", L("Mergi la jocuri", "Go to the games"));
+      } catch (e) {
+        console.warn("bonus", e);
+        await refreshPoints(user);
+        toast(L("Bonusul nu a putut fi luat acum. Poate l-ai luat deja azi.", "The bonus couldn't be claimed now. Maybe you already took it today."));
+      } finally { g.disabled = false; }
+    };
   }
   // Copy the best saved quiz / lab scores into the local progress, so the checkmarks
   // on the lessons page also show what was done on another device.
@@ -151,7 +176,7 @@ async function boot() {
     const wrap = document.createElement("div");
     wrap.id = "user-menu";
     wrap.className = "user-menu";
-    wrap.innerHTML = `<a class="um-link um-pts" href="${ROOT}ruleta/index.html" title="${L("Punctele tale (joacă la ruletă)", "Your points (play roulette)")}">🪙 <b>${points ?? "…"}</b></a><a class="um-link" href="${ROOT}joc/index.html" title="${L("Mini-joc", "Mini-game")}">🎮 <span class="um-name">${L("Joc", "Game")}</span></a><a class="um-link um-tests" href="${ROOT}teste/index.html">✎ <span class="um-name">${L("Teste", "Quizzes")}</span></a><a class="um-link" href="${ROOT}rezultate/index.html" title="${L("Rezultatele mele", "My results")}">★ <span class="um-name um-user"></span></a><button type="button" class="icon-btn um-out" title="${L("Ieșire", "Sign out")}" aria-label="${L("Ieșire", "Sign out")}">⎋</button>`;
+    wrap.innerHTML = `<a class="um-link um-pts" href="${ROOT}ruleta/index.html" title="${L("Punctele tale (joacă la ruletă)", "Your points (play roulette)")}">🪙 <b>${points ?? "…"}</b></a><button type="button" class="um-link um-gift" hidden title="${L("Bonus zilnic: +5 puncte", "Daily bonus: +5 points")}">🎁 <span class="um-name">+5</span></button><a class="um-link" href="${ROOT}joc/index.html" title="${L("Jocuri", "Games")}">🎮 <span class="um-name">${L("Jocuri", "Games")}</span></a><a class="um-link um-tests" href="${ROOT}teste/index.html">✎ <span class="um-name">${L("Teste", "Quizzes")}</span></a><a class="um-link" href="${ROOT}rezultate/index.html" title="${L("Rezultatele mele", "My results")}">★ <span class="um-name um-user"></span></a><button type="button" class="icon-btn um-out" title="${L("Ieșire", "Sign out")}" aria-label="${L("Ieșire", "Sign out")}">⎋</button>`;
     wrap.querySelector(".um-user").textContent = name;
     wrap.querySelector(".um-out").onclick = () => signOut(auth);
     tools.prepend(wrap);
