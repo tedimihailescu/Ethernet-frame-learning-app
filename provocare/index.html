@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Provocarea zilei</title>
+<meta name="description" content="Cinci exerciții noi în fiecare zi, alese din toate laboratoarele, și seria ta de zile. / Five new exercises every day, picked from every lab, and your day streak.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/theme.css">
+<style>
+.page{max-width:900px;margin:0 auto;padding:24px max(16px,env(safe-area-inset-right,0px)) 40px max(16px,env(safe-area-inset-left,0px))}
+h1{font:700 clamp(1.6rem,4vw,2.4rem) var(--head);margin:0 0 6px}
+.lead{color:var(--muted);margin:0 0 16px}
+.streak{display:grid;grid-template-columns:auto minmax(0,1fr);gap:14px 20px;align-items:center;background:var(--surface);border:2px solid var(--text);border-radius:14px;padding:16px;margin-bottom:18px}
+.fire{font:700 2.6rem var(--head);line-height:1;text-align:center;min-width:3.2ch}
+.fire small{display:block;font:600 .75rem var(--mono);text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-top:4px}
+.sinfo b{font:700 1.1rem var(--head)}
+.sinfo p{margin:2px 0;color:var(--muted);font-size:.9rem}
+.cal{grid-column:1/-1;display:grid;grid-template-columns:repeat(14,minmax(0,1fr));gap:4px}
+.cal span{aspect-ratio:1;border-radius:6px;border:1px solid var(--border);display:grid;place-items:center;font:600 .68rem var(--mono);color:var(--muted);min-width:0}
+.cal span.y{background:var(--ok);border-color:var(--ok);color:#fff}
+.cal span.t{outline:2px solid var(--accent);outline-offset:1px}
+.today{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;margin:0 0 8px}
+.today b{font:700 1rem var(--head)}
+.src{font-size:.85rem;color:var(--muted);margin:0 0 12px}
+.src a{color:var(--link)}
+#quiz{display:none}
+@media (max-width:460px){.cal{gap:2px}.cal span{font-size:.55rem;border-radius:4px}}
+</style>
+</head>
+<body>
+<header class="topbar" id="top"><div class="topbar-in">
+  <a class="brand" href="../index.html"><svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="var(--accent)"/><path d="M7 16h18M19 11l6 5-6 5" fill="none" stroke="var(--accent-text)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="16" r="2.6" fill="var(--accent-text)"/></svg><span data-t="brand"></span></a>
+  <nav class="nav" data-menu data-root="../" aria-label="Meniu / Menu"></nav>
+  <div class="tools"><div class="seg" role="group" aria-label="Limba / Language"><button type="button" data-lang="ro">RO</button><button type="button" data-lang="en">EN</button></div><button type="button" class="icon-btn" id="theme">◐</button></div>
+</div></header>
+
+<main class="page">
+  <h1 data-t="title"></h1>
+  <p class="lead" data-t="lead"></p>
+
+  <section class="streak" aria-live="polite">
+    <div class="fire"><span id="cur">0</span>🔥<small data-t="days"></small></div>
+    <div class="sinfo"><b id="sTitle"></b><p id="sBest"></p><p id="sNext"></p></div>
+    <div class="cal" id="cal" aria-label="14 zile / 14 days"></div>
+  </section>
+
+  <div class="today"><b id="dayL"></b></div>
+  <p class="src" id="src"></p>
+  <div id="quiz"></div>
+</main>
+
+<script src="../assets/catalog.js?v=11"></script>
+<script src="../assets/menu.js?v=7"></script>
+<script src="../assets/labs-data.js?v=11"></script>
+<script>
+/* Build today's challenge before lab.js runs: 5 tasks (terminal, spot the bug, calculation,
+   order, plus one of any type), each from a different lab, picked with a seed made from the
+   date, so everyone gets the same set on the same day. */
+(function(){
+"use strict";
+const pad=n=>String(n).padStart(2,"0");
+const d=new Date(),DAY=d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+window.PROVOCARE_DAY=DAY;
+let seed=0;for(const c of "provocare:"+DAY)seed=(Math.imul(seed,31)+c.charCodeAt(0))|0;
+const rnd=()=>{seed=(seed+0x6D2B79F5)|0;let t=seed;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296};
+const LABS=window.LABS||{},ids=Object.keys(LABS).filter(k=>k!=="provocare").sort();
+const want=["term","spot","input","order",null],used=new Set(),tasks=[];
+for(const type of want){
+  for(let tries=0;tries<200;tries++){
+    const id=ids[Math.floor(rnd()*ids.length)];if(used.has(id))continue;
+    const pool=LABS[id].tasks.filter(t=>!type||t.type===type);if(!pool.length)continue;
+    const t=pool[Math.floor(rnd()*pool.length)];used.add(id);
+    const tt=LABS[id].title,tn=t.name;
+    const ro=(typeof tt==="string"?tt:tt.ro)+" · "+(typeof tn==="string"?tn:tn.ro),en=(typeof tt==="string"?tt:tt.en)+" · "+(typeof tn==="string"?tn:tn.en);
+    tasks.push(Object.assign({},t,{name:{ro,en},from:id}));break;
+  }
+}
+LABS.provocare={title:{ro:"Provocarea zilei "+DAY,en:"Daily challenge "+DAY},tasks};
+// A new day starts a fresh lab (the lab keeps its answers under "lab-provocare").
+try{if(localStorage.getItem("provocare-zi")!==DAY){localStorage.removeItem("lab-provocare");localStorage.setItem("provocare-zi",DAY)}}catch(e){}
+})();
+</script>
+<script src="../assets/lab.js?v=2"></script>
+<script>
+(function(){
+"use strict";
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+let lang=store.get("cadru-lang")==="en"?"en":"ro";
+const T=v=>v&&typeof v==="object"&&!Array.isArray(v)?v[lang]:Array.isArray(v)?v[lang==="en"?1:0]:v;
+const L=(ro,en)=>lang==="en"?en:ro;
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
+const DAY=window.PROVOCARE_DAY,C=window.CATALOG;
+const UI={brand:["Rețea pas cu pas","Network step by step"],title:["🔥 Provocarea zilei","🔥 Daily challenge"],
+  lead:["Cinci exerciții noi în fiecare zi, alese din toate laboratoarele: o comandă, o greșeală de găsit, un calcul, o ordine de pași și o surpriză. Toată lumea primește aceleași exerciții în aceeași zi. Rezolvă cel puțin 3 din 5 fără să te uiți la soluție și seria ta crește cu o zi.","Five new exercises every day, picked from every lab: a command, a bug to spot, a calculation, an order of steps and a surprise. Everyone gets the same set on the same day. Solve at least 3 of 5 without looking at the solution and your streak grows by a day."],
+  days:["zile la rând","days in a row"]};
+
+// Days with a finished challenge: kept locally, and merged with saved results once signed in.
+const KEY="provocare-zile",MIN=3;let lastScore=(()=>{const v=(store.get("provocare-scor")||"").split("|");return v[0]===DAY?+v[1]:null})();
+let days=new Set((()=>{try{return JSON.parse(store.get(KEY)||"[]")}catch(e){return []}})());
+const saveDays=()=>store.set(KEY,JSON.stringify([...days].sort().slice(-400)));
+const pad=n=>String(n).padStart(2,"0"),fmt=d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+const back=n=>{const d=new Date();d.setHours(12,0,0,0);d.setDate(d.getDate()-n);return d};
+function streak(){
+  // Today not done yet doesn't break the streak until midnight.
+  let n=0,i=days.has(fmt(back(0)))?0:1;
+  for(;days.has(fmt(back(i)));i++)n++;
+  return n;
+}
+function best(){const s=[...days].sort();let b=0,c=0,prev=null;for(const k of s){const d=new Date(k+"T12:00:00");c=prev&&(d-prev)/864e5===1?c+1:1;b=Math.max(b,c);prev=d}return b}
+function untilMidnight(){const n=new Date(),m=new Date(n);m.setHours(24,0,0,0);const s=Math.max(0,Math.round((m-n)/60000));return Math.floor(s/60)+"h "+pad(s%60)+"m"}
+function draw(){
+  const doneToday=days.has(DAY),cur=streak();
+  $("#cur").textContent=cur;
+  $("#sTitle").textContent=!doneToday&&lastScore!==null?L(`Ai rezolvat ${lastScore} din 5 fără soluție. Pentru serie ai nevoie de cel puțin ${MIN}; mâine e o nouă șansă.`,`You solved ${lastScore} of 5 without the solution. The streak needs at least ${MIN}; tomorrow is a new chance.`):doneToday?L("✓ Provocarea de azi e gata!","✓ Today's challenge is done!"):cur?L("Termină provocarea de azi ca să nu pierzi seria.","Finish today's challenge to keep your streak."):L("Începe o serie nouă azi.","Start a new streak today.");
+  $("#sBest").textContent=L("Cea mai lungă serie: ","Longest streak: ")+best()+" · "+L("total zile: ","total days: ")+days.size;
+  $("#sNext").textContent=L("Provocare nouă peste ","New challenge in ")+untilMidnight();
+  const wd=lang==="en"?["S","M","T","W","T","F","S"]:["D","L","M","M","J","V","S"];
+  $("#cal").innerHTML=Array.from({length:14},(_,k)=>{const d=back(13-k),key=fmt(d);return `<span class="${days.has(key)?"y":""} ${k===13?"t":""}" title="${key}">${wd[d.getDay()]}</span>`}).join("");
+  $("#dayL").textContent=L("Exercițiile pentru ","Exercises for ")+new Date().toLocaleDateString(lang==="en"?"en-GB":"ro-RO",{weekday:"long",day:"numeric",month:"long"});
+  const t=(window.LABS.provocare||{tasks:[]}).tasks;
+  $("#src").innerHTML=L("Din lecțiile: ","From the lessons: ")+[...new Set(t.map(x=>x.from))].map(id=>{const l=C&&C.byId(id);return l?`<a href="../${l.href}">${esc(T(l.t))}</a>`:esc(id)}).join(" · ");
+}
+window.addEventListener("quiz:complete",e=>{const d=e.detail;if(d&&d.lesson==="provocare-lab"){lastScore=d.score;store.set("provocare-scor",DAY+"|"+d.score);if(d.score>=MIN){days.add(DAY);saveDays()}draw()}});
+function render(){
+  document.documentElement.lang=lang;document.title=L("Provocarea zilei","Daily challenge");
+  document.querySelectorAll("[data-t]").forEach(e=>{if(UI[e.dataset.t])e.textContent=T(UI[e.dataset.t])});
+  document.querySelectorAll("[data-lang]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.lang===lang?"true":"false"));
+  draw();
+}
+document.querySelectorAll("[data-lang]").forEach(b=>b.addEventListener("click",()=>{lang=b.dataset.lang;store.set("cadru-lang",lang);render();window.dispatchEvent(new Event("cadru:lang"))}));
+const saved=store.get("cadru-theme");if(saved==="light"||saved==="dark")document.documentElement.dataset.theme=saved;
+$("#theme").onclick=()=>{const r=document.documentElement,d=r.dataset.theme?r.dataset.theme==="dark":matchMedia("(prefers-color-scheme: dark)").matches;const nt=d?"light":"dark";r.dataset.theme=nt;store.set("cadru-theme",nt)};
+setInterval(()=>{$("#sNext").textContent=L("Provocare nouă peste ","New challenge in ")+untilMidnight()},60000);
+window.PROVOCARE_MERGE=list=>{list.forEach(k=>days.add(k));saveDays();draw()};
+render();
+})();
+</script>
+<script type="module">
+// Signed in: add the days from saved results (so the streak follows you across devices).
+if(location.protocol!=="file:"){
+  const [{auth,db},{onAuthStateChanged},fs]=await Promise.all([import("../assets/firebase.js?v=5"),import("https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js"),import("https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js")]);
+  onAuthStateChanged(auth,async user=>{if(!user)return;
+    try{
+      const snap=await fs.getDocs(fs.query(fs.collection(db,"results"),fs.where("uid","==",user.uid),fs.where("lesson","==","provocare-lab")));
+      const ok=snap.docs.map(d=>d.data()).filter(r=>(r.score|0)>=3);
+      const pad=n=>String(n).padStart(2,"0");
+      window.PROVOCARE_MERGE(ok.map(r=>r.ts).filter(t=>t&&t.toDate).map(t=>{const x=t.toDate();return x.getFullYear()+"-"+pad(x.getMonth()+1)+"-"+pad(x.getDate())}));
+    }catch(e){console.warn("streak",e)}});
+}
+</script>
+<script type="module" src="../assets/auth.js?v=19"></script>
+</body>
+</html>
