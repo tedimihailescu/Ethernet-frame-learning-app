@@ -1,6 +1,6 @@
 // Shared page helpers for the points games: language, theme, the dealer's speech bubble,
 // the chip picker and the points wallet. Each game passes its own texts.
-import { openWallet } from "./wallet.js?v=1";
+import { openWallet } from "./wallet.js?v=2";
 
 export function kit({ UI, LINES, faces = {}, chips = [1, 2, 5, 10, 25], title }) {
   const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };

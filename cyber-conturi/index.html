@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Conturi și dispozitive protejate: phishing, parole, MFA</title>
+<meta name="description" content="Lecție interactivă: cum recunoști phishing-ul (expeditor, link, antete SPF/DKIM/DMARC), parole lungi și managerul de parole, MFA și passkeys, actualizări, drepturi minime, criptarea discului, backup 3-2-1 și ce faci după un click greșit. / Interactive lesson: protecting accounts and devices.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/diagram.css?v=1">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<script>
+(function(){
+const BAD="bad",OK="ok";
+const FAKE="magazin-plati.example",REAL="magazin.example";
+const A1={q:{ro:"Ce a primit Mihai?",en:"What did Mihai get?"},tag:BAD,see:{ro:"De la: „Contabilitate” <facturi@"+FAKE+"> · Subiect: URGENT: factură neplătită, contul se blochează azi · buton „Plătește acum”",en:"From: \"Accounts\" <facturi@"+FAKE+"> · Subject: URGENT: unpaid invoice, account blocked today · a \"Pay now\" button"},act:{ro:"nu da click încă; verifici expeditorul și linkul",en:"don't click yet; check the sender and the link"}};
+const A2={q:{ro:"Cine a trimis de fapt mesajul?",en:"Who actually sent the message?"},tag:BAD,see:{ro:"domeniul e "+FAKE+", nu "+REAL+" · antete: spf=fail, dkim=none, dmarc=fail",en:"the domain is "+FAKE+", not "+REAL+" · headers: spf=fail, dkim=none, dmarc=fail"},act:{ro:"numele afișat se poate falsifica; contează domeniul și rezultatele SPF/DKIM/DMARC",en:"the display name can be faked; what counts is the domain and the SPF/DKIM/DMARC results"}};
+const A3={q:{ro:"Unde duce butonul?",en:"Where does the button lead?"},tag:BAD,see:{ro:"textul spune "+REAL+"/facturi, dar linkul real (la hover) e http://"+REAL+".login-verificare.example/f",en:"the text says "+REAL+"/facturi, but the real link (on hover) is http://"+REAL+".login-verificare.example/f"},act:{ro:"domeniul real e cel dinaintea primului „/”, citit de la dreapta: login-verificare.example",en:"the real domain is what's before the first \"/\", read from the right: login-verificare.example"}};
+const A4={q:{ro:"De ce nu a completat managerul de parole?",en:"Why didn't the password manager fill in?"},tag:OK,see:{ro:"pagina arată exact ca login-ul magazinului, dar managerul de parole nu oferă parola",en:"the page looks exactly like the shop's login, but the password manager doesn't offer the password"},act:{ro:"managerul compară domeniul, nu aspectul: e un semnal clar de pagină falsă",en:"the manager compares the domain, not the look: a clear sign of a fake page"}};
+const A5={q:{ro:"Ce parolă e bună?",en:"Which password is good?"},tag:OK,see:{ro:"„Magazin2024!” (12 caractere, folosită și pe alt site) vs. „cartof-ploaie-tramvai-verde” (27 de caractere, unică)",en:"\"Magazin2024!\" (12 characters, also used on another site) vs \"potato-rain-tram-green\" (22 characters, unique)"},act:{ro:"lungimea bate complexitatea; o parolă unică per site oprește credential stuffing",en:"length beats complexity; a unique password per site stops credential stuffing"}};
+const A6={q:{ro:"Dacă parola tot e furată?",en:"What if the password is stolen anyway?"},tag:OK,see:{ro:"login nou din altă țară: parola e corectă, dar se cere codul MFA · Mihai primește 9 notificări „Aprobi?” la 2 noaptea",en:"a new login from another country: the password is right, but the MFA code is required · Mihai gets 9 \"Approve?\" prompts at 2 a.m."},act:{ro:"MFA oprește atacul; NU aprobi ce n-ai cerut; passkey-urile (FIDO2) nu pot fi păcălite de o pagină falsă",en:"MFA stops the attack; DON'T approve what you didn't request; passkeys (FIDO2) can't be fooled by a fake page"}};
+const A7={q:{ro:"Și atașamentul „factura.zip”?",en:"And the \"factura.zip\" attachment?"},tag:BAD,see:{ro:"în arhivă: factura.pdf.js · cititorul PDF de pe laptop e cu 8 luni în urmă",en:"in the archive: factura.pdf.js · the laptop's PDF reader is 8 months behind"},act:{ro:"extensia dublă ascunde un script; actualizările automate închid exact găurile pe care le caută atașamentele",en:"the double extension hides a script; automatic updates close exactly the holes attachments look for"}};
+const A8={q:{ro:"Cu ce drepturi lucrează Mihai zilnic?",en:"What rights does Mihai use every day?"},tag:OK,see:{ro:"contul zilnic e administrator local · contul de admin al magazinului e același cu cel de e-mail",en:"the daily account is a local administrator · the shop's admin account is the same as the e-mail one"},act:{ro:"drepturi minime: cont zilnic fără admin, cont separat pentru administrare",en:"least privilege: a daily account without admin, a separate account for administration"}};
+const A9={q:{ro:"Dacă laptopul e uitat în tren?",en:"What if the laptop is left on a train?"},tag:OK,see:{ro:"discul nu e criptat · blocarea ecranului e dezactivată",en:"the disk isn't encrypted · the screen lock is disabled"},act:{ro:"criptarea discului (BitLocker, FileVault, LUKS) + blocare automată: laptopul pierdut nu mai înseamnă date pierdute",en:"disk encryption (BitLocker, FileVault, LUKS) + auto-lock: a lost laptop no longer means lost data"}};
+const A10={q:{ro:"Dacă totuși vine ransomware-ul?",en:"What if ransomware comes anyway?"},tag:OK,see:{ro:"backup doar pe un disc USB conectat permanent: criptat și el · ultimul test de restaurare: niciodată",en:"backup only on a permanently plugged-in USB disk: encrypted too · last restore test: never"},act:{ro:"regula 3-2-1: 3 copii, 2 medii diferite, 1 offline sau în altă locație; și testezi restaurarea",en:"the 3-2-1 rule: 3 copies, 2 different media, 1 offline or off-site; and you test the restore"}};
+const A11={q:{ro:"Mihai a dat click. Acum ce?",en:"Mihai clicked. Now what?"},tag:OK,see:{ro:"a introdus parola pe pagina falsă acum 10 minute",en:"he typed his password on the fake page 10 minutes ago"},act:{ro:"anunță IT imediat · schimbă parola (de pe alt dispozitiv) · deconectează sesiunile · verifică regulile de e-mail · fără rușine: viteza contează",en:"tell IT immediately · change the password (from another device) · sign out all sessions · check mail rules · no shame: speed matters"}};
+
+window.LESSON={
+docTitle:{ro:"Conturi și dispozitive protejate: phishing, parole, MFA",en:"Protecting accounts and devices: phishing, passwords, MFA"},
+eyebrow:{ro:"Lecție interactivă · Securitate cibernetică",en:"Interactive lesson · Cybersecurity"},
+title:{ro:"Conturi și dispozitive protejate: phishing, parole, MFA",en:"Protecting accounts and devices: phishing, passwords, MFA"},
+sub:{ro:"Mihai, colegul Anei de la magazinul online, primește un e-mail „urgent” cu o factură. Urmărim atacul pas cu pas și, la fiecare pas, apărarea care l-ar opri: recunoașterea phishing-ului, managerul de parole, parole lungi și unice, MFA, actualizări, drepturi minime, criptarea discului și backup-uri. La final: ce faci dacă ai dat totuși click.",en:"Mihai, Ana's colleague at the online shop, gets an \"urgent\" e-mail with an invoice. We follow the attack step by step and, at each step, the defense that would stop it: spotting phishing, the password manager, long unique passwords, MFA, updates, least privilege, disk encryption and backups. At the end: what to do if you clicked anyway."},
+meta:[{ro:"≈ 25 minute",en:"≈ 25 minutes"},{ro:"12 pași",en:"12 steps"},{ro:"8 întrebări",en:"8 questions"},{ro:"Începător",en:"Beginner"}],
+goals:[{ro:"Recunoști phishing-ul: expeditor, link real, antete SPF/DKIM/DMARC",en:"Spot phishing: sender, the real link, SPF/DKIM/DMARC headers"},{ro:"Parole lungi și unice, managerul de parole, MFA și passkeys",en:"Long unique passwords, the password manager, MFA and passkeys"},{ro:"Actualizări, drepturi minime, criptare, backup 3-2-1",en:"Updates, least privilege, encryption, 3-2-1 backups"},{ro:"Ce faci în primele minute după un click greșit",en:"What to do in the first minutes after a wrong click"}],
+foot:{ro:"Mesaje, domenii și nume fictive (.example). Nu deschide atașamente suspecte nici „ca să vezi ce e”.",en:"Fictional messages, domains and names (.example). Don't open suspicious attachments even \"to see what it is\"."},
+ui:{frameT:{ro:"Atacul și apărarea (live)",en:"The attack and the defense (live)"},refT:{ro:"Lista de verificare",en:"The checklist"},refLead:{ro:"Semnele unui phishing și setările de bază pentru conturi și dispozitive.",en:"The signs of phishing and the basic settings for accounts and devices."}},
+tryT:{ro:"Încearcă (pe dispozitivul tău)",en:"Try it (on your device)"},
+legend:[["lg-tcp","!",{ro:"semnal de atac",en:"attack signal"}],["lg-app","OK",{ro:"apărare",en:"defense"}]],
+
+nodes:{
+  atk:{type:"globe",name:{ro:"atacator",en:"attacker"},lines:[FAKE]},
+  mail:{type:"svc",name:{ro:"server e-mail",en:"mail server"},lines:["SPF · DKIM · DMARC"]},
+  mihai:{type:"user",name:"Mihai",lines:[{ro:"contabilitate",en:"accounts"}]},
+  lap:{type:"host",name:{ro:"laptop",en:"laptop"},lines:[{ro:"Windows 11",en:"Windows 11"}]},
+  fake:{type:"box",name:{ro:"pagină falsă",en:"fake page"},lines:["login-verificare.example"]},
+  shop:{type:"server",name:{ro:"admin magazin",en:"shop admin"},lines:[REAL]},
+  bak:{type:"db",name:"backup",lines:["3-2-1"]}
+},
+links:[["atk","mail"],["mail","lap"],["lap","mihai"],["lap","fake"],["lap","shop"],["shop","bak"]],
+linkLabels:{"atk-mail":"SMTP","mail-lap":"IMAP","lap-fake":{"ro":"click?","en":"click?"},"lap-shop":"HTTPS"},
+layouts:{
+  wide:{vb:[0,0,1000,500],n:{atk:[90,120],mail:[310,120],lap:[520,260],mihai:[520,440],fake:[310,380],shop:[760,260],bak:[920,420]}},
+  narrow:{vb:[0,0,360,860],n:{atk:[70,70],mail:[250,180],lap:[180,380],mihai:[290,560],fake:[70,560],shop:[180,700],bak:[300,810]}}
+},
+groups:[
+  {id:"q",color:"l7",fields:["q"],name:{ro:"Întrebarea",en:"The question"},short:"Q",grow:2},
+  {id:"s",color:"l3",fields:["see"],name:{ro:"Ce vezi",en:"What you see"},short:{ro:"Vezi",en:"See"},grow:4},
+  {id:"a",color:"arp",fields:["act"],name:{ro:"Ce faci",en:"What you do"},short:{ro:"Faci",en:"Do"},grow:4}
+],
+fieldLabels:{q:{ro:"Întrebarea",en:"The question"},see:{ro:"Ce vezi",en:"What you see"},act:{ro:"Ce faci",en:"What you do"}},
+pdu:f=>f.tag===BAD?{badge:{ro:"Semnal de atac",en:"Attack signal"},tok:["!","k-tcp"]}:{badge:{ro:"Apărare",en:"Defense"},tok:["OK","k-app"]},
+
+init:{},
+tables:{
+  flags:{idx:true,title:{ro:"Semnele unui phishing",en:"The signs of phishing"},cols:[{ro:"Semnul",en:"The sign"},{ro:"În e-mailul lui Mihai",en:"In Mihai's e-mail"}],plain:[0,1],
+    rows:()=>[[{ro:"urgență, amenințare",en:"urgency, a threat"},{ro:"„contul se blochează azi”",en:"\"account blocked today\""}],[{ro:"domeniu asemănător",en:"a look-alike domain"},FAKE],[{ro:"link diferit de text",en:"a link different from its text"},"login-verificare.example"],[{ro:"autentificare eșuată",en:"failed authentication"},"spf=fail · dmarc=fail"],[{ro:"atașament ciudat",en:"an odd attachment"},"factura.zip → factura.pdf.js"],[{ro:"cere parola sau plata",en:"asks for a password or payment"},{ro:"„Plătește acum”",en:"\"Pay now\""}]]},
+  pw:{title:{ro:"Parole: ce contează",en:"Passwords: what matters"},cols:[{ro:"Parola",en:"Password"},{ro:"Lungime",en:"Length"},{ro:"Unică?",en:"Unique?"},{ro:"Verdict",en:"Verdict"}],plain:[1,2,3],
+    rows:()=>[["Magazin2024!","12",{ro:"nu",en:"no"},{ro:"slabă: ghicibilă și refolosită",en:"weak: guessable and reused"}],["P@r0l@",  "6",{ro:"da",en:"yes"},{ro:"slabă: prea scurtă",en:"weak: too short"}],[{ro:"cartof-ploaie-tramvai-verde",en:"potato-rain-tram-green"},"27",{ro:"da",en:"yes"},{ro:"bună: lungă, ușor de ținut minte",en:"good: long, easy to remember"}],["x8#Lq…(20)","20",{ro:"da, din manager",en:"yes, from a manager"},{ro:"foarte bună",en:"very good"}]]},
+  mfa:{title:{ro:"Tipuri de MFA",en:"Kinds of MFA"},cols:[{ro:"Metoda",en:"Method"},{ro:"Rezistă la pagină falsă?",en:"Resists a fake page?"},{ro:"Observații",en:"Notes"}],plain:[0,1,2],
+    rows:()=>[["SMS",{ro:"nu",en:"no"},{ro:"mai bun decât nimic; SIM swap",en:"better than nothing; SIM swap"}],[{ro:"cod TOTP (aplicație)",en:"TOTP code (app)"},{ro:"nu",en:"no"},{ro:"codul poate fi cerut pe pagina falsă",en:"the code can be phished on the fake page"}],[{ro:"notificare push",en:"push notification"},{ro:"parțial",en:"partly"},{ro:"atenție la „MFA fatigue”; cere potrivire de număr",en:"beware \"MFA fatigue\"; use number matching"}],[{ro:"passkey / cheie FIDO2",en:"passkey / FIDO2 key"},{ro:"da",en:"yes"},{ro:"legată de domeniul real",en:"bound to the real domain"}]]}
+},
+log:{title:{ro:"Atacul, pas cu pas",en:"The attack, step by step"},lead:{ro:"Ce s-a văzut și ce apărare a funcționat.",en:"What was seen and which defense worked."},first:{ro:"Pas",en:"Step"},minWidth:600,
+  cols:[{h:{ro:"Ce vezi",en:"What you see"},v:f=>f.see||"",cls:""},{h:{ro:"Ce faci",en:"What you do"},v:f=>f.act||"",cls:""}]},
+
+steps:[
+{at:["atk","mail","lap"],frame:A1,kind:"d",move:[[["atk","mail"]],[["mail","lap"]]],marks:{lap:{k:"drop",t:"URGENT"}},tables:["flags"],hl:{flags:0},log:{ro:"e-mailul",en:"the e-mail"},who:{ro:"E-mailul",en:"The e-mail"},
+ title:{ro:"Un e-mail „urgent” de la contabilitate",en:"An \"urgent\" e-mail from accounts"},
+ body:{ro:`<p>Luni dimineață, Mihai primește un e-mail de la „Contabilitate”: o factură neplătită, contul magazinului „se blochează azi”, iar soluția e un buton mare <strong>Plătește acum</strong>.</p>
+<p>Mesajul apasă pe trei butoane psihologice deodată: <strong>urgență</strong> (azi), <strong>frică</strong> (blocare) și <strong>autoritate</strong> (contabilitatea). Asta e rețeta clasică a phishing-ului: să acționezi înainte să gândești.</p>
+<p class="key">Primul reflex sănătos: cu cât un mesaj e mai urgent, cu atât îl citești mai încet.</p>`,
+ en:`<p>On Monday morning, Mihai gets an e-mail from "Accounts": an unpaid invoice, the shop account is "blocked today", and the fix is a big <strong>Pay now</strong> button.</p>
+<p>The message pushes three psychological buttons at once: <strong>urgency</strong> (today), <strong>fear</strong> (blocking) and <strong>authority</strong> (accounts). That's the classic phishing recipe: make you act before you think.</p>
+<p class="key">The first healthy reflex: the more urgent a message is, the slower you read it.</p>`}},
+
+{at:["mail","atk"],frame:A2,kind:"d",marks:{mail:{k:"drop",t:"dmarc=fail"}},tables:["flags"],hl:{flags:3},log:{ro:"expeditorul real",en:"the real sender"},who:{ro:"Expeditor",en:"Sender"},
+ title:{ro:"Cine a trimis de fapt: domeniul și antetele",en:"Who really sent it: the domain and the headers"},
+ body:{ro:`<p>Numele afișat („Contabilitate”) îl poate scrie oricine. Ce contează e <strong>adresa</strong>: <code>facturi@${FAKE}</code>. Magazinul e <code>${REAL}</code>; domeniul atacatorului doar seamănă.</p>
+<p>Serverul de e-mail verifică automat trei lucruri și scrie rezultatul în antetul <code>Authentication-Results</code>:</p>
+<ul><li><strong>SPF</strong>: serverul care a trimis are voie să trimită pentru domeniul ăsta?</li>
+<li><strong>DKIM</strong>: mesajul are o semnătură validă a domeniului?</li>
+<li><strong>DMARC</strong>: domeniul din „From” se potrivește cu cele verificate de SPF/DKIM?</li></ul>
+<p>Aici: <code>spf=fail</code>, <code>dkim=none</code>, <code>dmarc=fail</code>. Un semnal foarte puternic.</p>`,
+ en:`<p>Anyone can write the display name ("Accounts"). What counts is the <strong>address</strong>: <code>facturi@${FAKE}</code>. The shop is <code>${REAL}</code>; the attacker's domain only looks similar.</p>
+<p>The mail server automatically checks three things and writes the result in the <code>Authentication-Results</code> header:</p>
+<ul><li><strong>SPF</strong>: is the sending server allowed to send for this domain?</li>
+<li><strong>DKIM</strong>: does the message carry a valid signature from the domain?</li>
+<li><strong>DMARC</strong>: does the "From" domain match the ones SPF/DKIM verified?</li></ul>
+<p>Here: <code>spf=fail</code>, <code>dkim=none</code>, <code>dmarc=fail</code>. A very strong signal.</p>`},
+ more:{ro:`<p>În Gmail: ⋮ → „Afișează originalul”; în Outlook: Fișier → Proprietăți → „Antete internet”. Atenție: un domeniu fals bine configurat poate avea SPF și DKIM corecte pentru <em>el însuși</em>. De aceea contează și domeniul, nu doar „pass”.</p>`,en:`<p>In Gmail: ⋮ → "Show original"; in Outlook: File → Properties → "Internet headers". Careful: a well-set-up fake domain can have correct SPF and DKIM for <em>itself</em>. That's why the domain matters too, not just "pass".</p>`},
+ try:[{cmd:"grep -i \"^Authentication-Results\" mesaj.eml",d:{ro:"Pe un e-mail salvat (.eml): rezultatele SPF, DKIM, DMARC.",en:"On a saved e-mail (.eml): the SPF, DKIM, DMARC results."}}]},
+
+{at:["lap","fake"],frame:A3,kind:"d",move:[[["lap","fake"]]],marks:{fake:{k:"drop",t:{ro:"domeniu fals",en:"fake domain"}}},tables:["flags"],hl:{flags:2},log:{ro:"linkul real",en:"the real link"},who:"Link",
+ title:{ro:"Unde duce linkul: citește domeniul de la dreapta",en:"Where the link goes: read the domain from the right"},
+ body:{ro:`<p>Butonul scrie <code>${REAL}/facturi</code>, dar textul unui link poate fi orice. Ții mouse-ul deasupra (pe telefon: apeși lung) și vezi adresa reală:</p>
+<p><code>http://${REAL}.login-verificare.example/f</code></p>
+<p>Regula: domeniul real e partea dinaintea primului <code>/</code>, citită <strong>de la dreapta</strong>: <code>example</code> ← <code>login-verificare</code>. Tot ce e în stânga (<code>${REAL}.</code>) e doar un subdomeniu ales de atacator ca să te păcălească.</p>
+<p class="key">Nu intri pe conturi din linkuri primite. Deschizi singur site-ul, din favorite sau tastând adresa.</p>`,
+ en:`<p>The button says <code>${REAL}/facturi</code>, but a link's text can be anything. Hover the mouse over it (on a phone: long-press) and see the real address:</p>
+<p><code>http://${REAL}.login-verificare.example/f</code></p>
+<p>The rule: the real domain is the part before the first <code>/</code>, read <strong>from the right</strong>: <code>example</code> ← <code>login-verificare</code>. Everything on the left (<code>${REAL}.</code>) is just a subdomain the attacker picked to fool you.</p>
+<p class="key">Don't log in from links you receive. Open the site yourself, from bookmarks or by typing the address.</p>`}},
+
+{at:["fake","lap"],frame:A4,kind:"d",marks:{fake:{k:"ok",t:{ro:"managerul tace",en:"manager stays silent"}}},log:{ro:"managerul de parole",en:"the password manager"},who:{ro:"Manager",en:"Manager"},
+ title:{ro:"Managerul de parole: un detector de pagini false",en:"The password manager: a fake-page detector"},
+ body:{ro:`<p>Să zicem că Mihai a dat totuși click. Pagina e o copie perfectă a login-ului magazinului. Dar <strong>managerul de parole nu oferă parola</strong>.</p>
+<p>Omul se uită la aspect; managerul se uită la <strong>domeniu</strong>. Parola a fost salvată pentru <code>${REAL}</code>, iar pagina e pe <code>login-verificare.example</code>. Nu se potrivește, deci nu completează.</p>
+<p class="key">Dacă managerul „nu găsește” parola pe un site pe care îl folosești zilnic, oprește-te. Nu o copia de mână.</p>`,
+ en:`<p>Say Mihai clicked anyway. The page is a perfect copy of the shop's login. But <strong>the password manager doesn't offer the password</strong>.</p>
+<p>A person looks at the design; the manager looks at the <strong>domain</strong>. The password was saved for <code>${REAL}</code>, and the page is on <code>login-verificare.example</code>. No match, so no autofill.</p>
+<p class="key">If the manager "can't find" the password on a site you use every day, stop. Don't copy it in by hand.</p>`},
+ more:{ro:`<p>Exemple: Bitwarden, 1Password, KeePassXC sau managerul din browser. Important e să ai unul, cu o parolă principală lungă și MFA.</p>`,en:`<p>Examples: Bitwarden, 1Password, KeePassXC or the browser's built-in manager. What matters is having one, with a long master password and MFA.</p>`}},
+
+{at:["shop","lap"],frame:A5,kind:"d",tables:["pw"],hl:{pw:0},log:{ro:"parole",en:"passwords"},who:{ro:"Parole",en:"Passwords"},
+ title:{ro:"Parole: lungi și unice bat „complicate”",en:"Passwords: long and unique beat \"complicated\""},
+ body:{ro:`<p>Parola veche a lui Mihai era <code>Magazin2024!</code>: are majuscule, cifre și simbol, dar e scurtă, previzibilă și <strong>folosită și pe un forum</strong> spart anul trecut. Atacatorii încearcă automat perechile email+parolă scurse pe alte site-uri: <em>credential stuffing</em>.</p>
+<ul><li><strong>lungime</strong>: o frază din 4–5 cuvinte întâmplătoare e lungă și ușor de ținut minte;</li>
+<li><strong>unică</strong> pentru fiecare site: o scurgere într-un loc nu deschide restul;</li>
+<li>pentru rest, <strong>managerul de parole</strong> generează și ține minte.</li></ul>`,
+ en:`<p>Mihai's old password was <code>Magazin2024!</code>: it has capitals, digits and a symbol, but it's short, predictable and <strong>also used on a forum</strong> that was breached last year. Attackers automatically try e-mail+password pairs leaked from other sites: <em>credential stuffing</em>.</p>
+<ul><li><strong>length</strong>: a phrase of 4–5 random words is long and easy to remember;</li>
+<li><strong>unique</strong> per site: a leak in one place doesn't open the rest;</li>
+<li>for everything else, the <strong>password manager</strong> generates and remembers.</li></ul>`},
+ more:{ro:`<p>Pe <em>haveibeenpwned.com</em> verifici dacă adresa ta de e-mail apare în scurgeri cunoscute. Dacă da: schimbi parola acolo și oriunde ai refolosit-o.</p>`,en:`<p>On <em>haveibeenpwned.com</em> you can check whether your e-mail address appears in known breaches. If it does: change that password and anywhere you reused it.</p>`}},
+
+{at:["fake","shop","mihai"],frame:A6,kind:"d",move:[[["fake","lap"],["lap","shop"]]],marks:{shop:{k:"ok",t:{ro:"cere MFA",en:"MFA required"}}},tables:["mfa"],hl:{mfa:3},log:{ro:"MFA",en:"MFA"},who:"MFA",
+ title:{ro:"MFA: parola furată nu mai ajunge",en:"MFA: a stolen password is no longer enough"},
+ body:{ro:`<p>Atacatorul încearcă parola furată pe adminul magazinului. Parola e corectă, dar serverul cere <strong>al doilea factor</strong>: un cod din aplicație, o notificare sau o cheie. Atacul se oprește aici.</p>
+<p>Atacatorii au două trucuri împotriva MFA:</p>
+<ul><li><strong>MFA fatigue</strong>: trimit notificări „Aprobi?” iar și iar, noaptea, sperând că apeși din greșeală. Regula: <strong>nu aprobi niciodată un login pe care nu tocmai l-ai făcut tu</strong>, și anunți IT;</li>
+<li>pagina falsă cere și codul TOTP, pe loc. Aici ajută <strong>passkey-urile / cheile FIDO2</strong>: sunt legate de domeniul real și pur și simplu nu funcționează pe un domeniu fals.</li></ul>`,
+ en:`<p>The attacker tries the stolen password on the shop admin. The password is right, but the server asks for the <strong>second factor</strong>: an app code, a notification or a key. The attack stops here.</p>
+<p>Attackers have two tricks against MFA:</p>
+<ul><li><strong>MFA fatigue</strong>: they send "Approve?" prompts again and again, at night, hoping you tap by mistake. The rule: <strong>never approve a login you didn't just make yourself</strong>, and tell IT;</li>
+<li>the fake page asks for the TOTP code too, on the spot. That's where <strong>passkeys / FIDO2 keys</strong> help: they're bound to the real domain and simply don't work on a fake one.</li></ul>`}},
+
+{at:["lap","mail"],frame:A7,kind:"d",move:[[["mail","lap"]]],marks:{lap:{k:"drop",t:".pdf.js"}},tables:["flags"],hl:{flags:4},log:{ro:"atașament + actualizări",en:"attachment + updates"},who:{ro:"Actualizări",en:"Updates"},
+ title:{ro:"Atașamentul și actualizările",en:"The attachment and updates"},
+ body:{ro:`<p>Al doilea e-mail are <code>factura.zip</code>. În arhivă: <code>factura.pdf.js</code>. Windows ascunde implicit extensiile cunoscute, deci Mihai ar vedea doar „factura.pdf”, dar fișierul e un <strong>script</strong>.</p>
+<ul><li>activează <strong>afișarea extensiilor</strong> (Explorer → Vizualizare → Extensii nume fișiere);</li>
+<li>facturile reale nu vin ca .zip, .html, .js, .iso sau .exe;</li>
+<li><strong>actualizările automate</strong> (sistem, browser, cititor PDF, Office) închid exact vulnerabilitățile pe care le caută astfel de atașamente.</li></ul>
+<p class="key">„Amân actualizarea până vineri” e una dintre cele mai scumpe amânări din IT.</p>`,
+ en:`<p>A second e-mail has <code>factura.zip</code>. Inside: <code>factura.pdf.js</code>. Windows hides known extensions by default, so Mihai would only see "factura.pdf", but the file is a <strong>script</strong>.</p>
+<ul><li>turn on <strong>showing extensions</strong> (Explorer → View → File name extensions);</li>
+<li>real invoices don't come as .zip, .html, .js, .iso or .exe;</li>
+<li><strong>automatic updates</strong> (system, browser, PDF reader, Office) close exactly the vulnerabilities such attachments look for.</li></ul>
+<p class="key">"I'll postpone the update until Friday" is one of the most expensive delays in IT.</p>`},
+ try:[{cmd:"winget upgrade",d:{ro:"Windows: ce programe au actualizări disponibile.",en:"Windows: which programs have updates available."}},{cmd:"sudo apt update && apt list --upgradable",d:{ro:"Debian/Ubuntu: pachetele care pot fi actualizate.",en:"Debian/Ubuntu: the packages that can be upgraded."}}]},
+
+{at:["lap","shop"],frame:A8,kind:"d",marks:{lap:{k:"drop",t:"admin"}},log:{ro:"drepturi minime",en:"least privilege"},who:{ro:"Drepturi",en:"Privilege"},
+ title:{ro:"Drepturi minime: contul de zi cu zi nu e admin",en:"Least privilege: the everyday account isn't admin"},
+ body:{ro:`<p>Mihai lucrează zilnic cu un cont de <strong>administrator local</strong>. Orice script pornit din greșeală are deci drept de administrator: poate instala ce vrea și poate opri antivirusul.</p>
+<ul><li>contul zilnic: <strong>utilizator standard</strong>; când trebuie instalat ceva, se cere parola de admin;</li>
+<li>contul de <strong>administrare a magazinului</strong> e separat de cel de e-mail, cu MFA și folosit doar când e nevoie;</li>
+<li>fiecare om are doar accesul de care are nevoie pentru munca lui.</li></ul>
+<p class="key">Drepturile minime nu opresc atacul, dar limitează cât de departe ajunge.</p>`,
+ en:`<p>Mihai works every day as a <strong>local administrator</strong>. So any script launched by mistake has admin rights: it can install anything and turn off the antivirus.</p>
+<ul><li>the daily account: a <strong>standard user</strong>; installing something asks for the admin password;</li>
+<li>the <strong>shop admin account</strong> is separate from the e-mail one, with MFA, used only when needed;</li>
+<li>each person has only the access their work needs.</li></ul>
+<p class="key">Least privilege doesn't stop the attack, but it limits how far it gets.</p>`},
+ try:[{cmd:"whoami /groups | findstr /i admin",d:{ro:"Windows: ești în grupul Administrators?",en:"Windows: are you in the Administrators group?"}},{cmd:"id",d:{ro:"Linux: în ce grupuri ești (sudo, wheel?).",en:"Linux: which groups you're in (sudo, wheel?)."}}]},
+
+{at:["lap"],frame:A9,kind:"d",marks:{lap:{k:"ok",t:{ro:"criptat",en:"encrypted"}}},log:{ro:"criptare",en:"encryption"},who:{ro:"Criptare",en:"Encryption"},
+ title:{ro:"Laptopul pierdut: criptarea discului",en:"The lost laptop: disk encryption"},
+ body:{ro:`<p>Nu toate incidentele vin din internet. Un laptop uitat în tren, cu discul <strong>necriptat</strong>, înseamnă că oricine scoate discul citește tot: e-mailuri, exporturi de clienți, parole salvate în fișiere.</p>
+<ul><li><strong>BitLocker</strong> (Windows), <strong>FileVault</strong> (macOS), <strong>LUKS</strong> (Linux): discul e ilizibil fără parolă sau cheie;</li>
+<li>cheia de recuperare se păstrează în siguranță (nu pe același laptop);</li>
+<li><strong>blocare automată</strong> a ecranului după câteva minute, și <kbd>Win</kbd>+<kbd>L</kbd> când pleci de la birou.</li></ul>`,
+ en:`<p>Not every incident comes from the internet. A laptop left on a train with an <strong>unencrypted</strong> disk means anyone who pulls the disk reads everything: e-mails, customer exports, passwords saved in files.</p>
+<ul><li><strong>BitLocker</strong> (Windows), <strong>FileVault</strong> (macOS), <strong>LUKS</strong> (Linux): the disk is unreadable without the password or key;</li>
+<li>the recovery key is stored safely (not on the same laptop);</li>
+<li><strong>auto-lock</strong> after a few minutes, and <kbd>Win</kbd>+<kbd>L</kbd> when you leave your desk.</li></ul>`},
+ try:[{cmd:"manage-bde -status C:",d:{ro:"Windows (ca admin): starea BitLocker pentru C:.",en:"Windows (as admin): BitLocker status for C:."}},{cmd:"lsblk -f",d:{ro:"Linux: partițiile; „crypto_LUKS” înseamnă criptat.",en:"Linux: the partitions; \"crypto_LUKS\" means encrypted."}}]},
+
+{at:["shop","bak"],frame:A10,kind:"d",move:[[["shop","bak"]]],marks:{bak:{k:"ok",t:"3-2-1"}},log:{ro:"backup 3-2-1",en:"3-2-1 backup"},who:"Backup",
+ title:{ro:"Backup 3-2-1 și testul de restaurare",en:"3-2-1 backups and the restore test"},
+ body:{ro:`<p>Backup-ul magazinului era pe un disc USB <strong>conectat permanent</strong>. Ransomware-ul criptează tot ce vede, deci și backup-ul. Iar restaurarea nu fusese testată niciodată.</p>
+<p>Regula <strong>3-2-1</strong>:</p>
+<ul><li><strong>3</strong> copii ale datelor (originalul + 2 backup-uri);</li>
+<li>pe <strong>2</strong> medii diferite (ex. disc + cloud);</li>
+<li><strong>1</strong> copie offline sau în altă locație, pe care ransomware-ul nu o poate atinge (ori imutabilă).</li></ul>
+<p class="key">Un backup netestat e doar o speranță. Restaurezi de probă, periodic, și cronometrezi cât durează.</p>`,
+ en:`<p>The shop's backup lived on a USB disk that was <strong>always plugged in</strong>. Ransomware encrypts everything it can see, so the backup too. And the restore had never been tested.</p>
+<p>The <strong>3-2-1</strong> rule:</p>
+<ul><li><strong>3</strong> copies of the data (the original + 2 backups);</li>
+<li>on <strong>2</strong> different media (e.g. a disk + the cloud);</li>
+<li><strong>1</strong> copy offline or off-site, out of ransomware's reach (or immutable).</li></ul>
+<p class="key">An untested backup is just a hope. Do a trial restore regularly, and time how long it takes.</p>`}},
+
+{at:["mihai","lap","shop"],frame:A11,kind:"d",marks:{mihai:{k:"ok",t:{ro:"raportează",en:"reports it"}}},log:{ro:"după click",en:"after the click"},who:{ro:"Răspuns",en:"Response"},
+ title:{ro:"Ai dat click? Primele 15 minute",en:"Clicked? The first 15 minutes"},
+ body:{ro:`<p>Se întâmplă oricui, inclusiv specialiștilor. Ce contează e <strong>viteza</strong>:</p>
+<ol><li><strong>anunți IT</strong> imediat (sau pe cine se ocupă), fără rușine: fiecare minut contează;</li>
+<li><strong>schimbi parola</strong> contului afectat, de pe <em>alt</em> dispozitiv, și oriunde ai refolosit-o;</li>
+<li><strong>deconectezi toate sesiunile</strong> (opțiunea „Sign out everywhere”) și verifici metodele MFA;</li>
+<li>verifici <strong>regulile de e-mail</strong>: atacatorii adaugă des o regulă care redirecționează sau șterge mesaje;</li>
+<li>dacă ai deschis un atașament: <strong>deconectezi laptopul de la rețea</strong> și îl lași așa pentru IT.</li></ol>
+<p class="key">O firmă unde oamenii raportează repede e mult mai sigură decât una unde se tem să recunoască.</p>`,
+ en:`<p>It happens to anyone, specialists included. What matters is <strong>speed</strong>:</p>
+<ol><li><strong>tell IT</strong> immediately (or whoever handles it), no shame: every minute counts;</li>
+<li><strong>change the password</strong> of the affected account, from <em>another</em> device, and anywhere you reused it;</li>
+<li><strong>sign out all sessions</strong> ("Sign out everywhere") and check the MFA methods;</li>
+<li>check <strong>mail rules</strong>: attackers often add a rule that forwards or deletes messages;</li>
+<li>if you opened an attachment: <strong>disconnect the laptop from the network</strong> and leave it like that for IT.</li></ol>
+<p class="key">A company where people report quickly is far safer than one where they're afraid to admit it.</p>`}},
+
+{at:["atk","mail","lap","mihai","fake","shop","bak"],frame:null,kind:"none",summary:true,
+ title:{ro:"Recapitulare",en:"Recap"},
+ body:{ro:`<ul><li>Phishing: <strong>urgență</strong>, domeniu asemănător, link diferit de text, <code>spf/dmarc=fail</code>, atașament ciudat. Citești domeniul de la dreapta.</li>
+<li>Nu intri pe conturi din linkuri primite; managerul de parole care „tace” e un semnal de pagină falsă.</li>
+<li>Parole <strong>lungi și unice</strong>, generate și ținute de un manager. <strong>MFA</strong> peste tot; passkey-urile rezistă la phishing; nu aprobi ce n-ai cerut.</li>
+<li>Actualizări automate, extensiile vizibile, cont zilnic fără admin.</li>
+<li>Disc criptat, ecran blocat, backup <strong>3-2-1</strong> cu restaurare testată.</li>
+<li>După un click: raportezi imediat, schimbi parola, închizi sesiunile, verifici regulile de e-mail.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Mergi la laborator ↓</button></p>`,
+ en:`<ul><li>Phishing: <strong>urgency</strong>, a look-alike domain, a link different from its text, <code>spf/dmarc=fail</code>, an odd attachment. Read the domain from the right.</li>
+<li>Don't log in from links you receive; a password manager that "stays silent" signals a fake page.</li>
+<li><strong>Long, unique</strong> passwords, generated and kept by a manager. <strong>MFA</strong> everywhere; passkeys resist phishing; don't approve what you didn't request.</li>
+<li>Automatic updates, visible extensions, a daily account without admin.</li>
+<li>An encrypted disk, a locked screen, <strong>3-2-1</strong> backups with a tested restore.</li>
+<li>After a click: report immediately, change the password, end sessions, check mail rules.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Go to the lab ↓</button></p>`}}
+],
+
+reference:(T,lang)=>{
+  const ro=lang==="ro";
+  return `<div class="ref-grid"><section class="card refcard"><h2>${ro?"E phishing?":"Is it phishing?"}</h2>
+<ul><li>${ro?"Urgență, frică, „azi”, „ultima notificare”":"Urgency, fear, \"today\", \"final notice\""}</li>
+<li>${ro?"Domeniul expeditorului e diferit sau doar asemănător":"The sender's domain is different or only similar"}</li>
+<li>${ro?"Linkul real (hover) diferă de text; domeniul se citește de la dreapta":"The real link (hover) differs from its text; read the domain from the right"}</li>
+<li><code>Authentication-Results: spf=fail / dmarc=fail</code></li>
+<li>${ro?"Atașamente .zip, .html, .js, .iso sau extensie dublă":"Attachments .zip, .html, .js, .iso or a double extension"}</li>
+<li>${ro?"Cere parola, codul MFA sau o plată":"Asks for a password, an MFA code or a payment"}</li></ul>
+<h3>${ro?"Verificări rapide":"Quick checks"}</h3>
+<pre class="yaml">grep -i "^Authentication-Results" mesaj.eml
+whoami /groups | findstr /i admin      <span class="c"># Windows</span>
+manage-bde -status C:                  <span class="c"># ${ro?"Windows, ca admin":"Windows, as admin"}</span>
+lsblk -f                               <span class="c"># Linux: crypto_LUKS?</span>
+sudo apt update && apt list --upgradable</pre></section>
+<section class="card refcard"><h2>${ro?"Setări de bază":"Baseline settings"}</h2>
+<ul><li>${ro?"Manager de parole + parole unice, lungi":"Password manager + long, unique passwords"}</li>
+<li>${ro?"MFA pe e-mail, bancă, hosting, admin; passkeys unde se poate":"MFA on e-mail, bank, hosting, admin; passkeys where possible"}</li>
+<li>${ro?"Actualizări automate; extensiile de fișiere vizibile":"Automatic updates; file extensions visible"}</li>
+<li>${ro?"Cont zilnic standard; admin separat":"Standard daily account; separate admin"}</li>
+<li>${ro?"BitLocker / FileVault / LUKS + blocare automată":"BitLocker / FileVault / LUKS + auto-lock"}</li>
+<li>${ro?"Backup 3-2-1, restaurare testată":"3-2-1 backups, tested restore"}</li></ul>
+<h3>${ro?"După un click greșit":"After a wrong click"}</h3>
+<p>${ro?"Raportezi → schimbi parola de pe alt dispozitiv → închizi sesiunile → verifici regulile de e-mail → deconectezi laptopul dacă ai deschis un atașament.":"Report → change the password from another device → end sessions → check mail rules → disconnect the laptop if you opened an attachment."}</p></section></div>`;
+},
+
+gloss:[
+ ["Phishing",null,{ro:"Mesaj care se dă drept cineva de încredere ca să-ți ia parola, banii sau să te facă să rulezi ceva.",en:"A message pretending to be someone trusted, to get your password, money or make you run something."}],
+ ["SPF",null,{ro:"Înregistrare DNS: ce servere au voie să trimită e-mail pentru un domeniu.",en:"A DNS record: which servers may send e-mail for a domain."}],
+ ["DKIM",null,{ro:"Semnătură criptografică a domeniului pe mesaj.",en:"The domain's cryptographic signature on a message."}],
+ ["DMARC",null,{ro:"Politica ce leagă domeniul din From de SPF/DKIM și spune ce faci cu mesajele care pică.",en:"The policy tying the From domain to SPF/DKIM and saying what to do with failing messages."}],
+ ["Credential stuffing",null,{ro:"Încercarea automată a perechilor email+parolă scurse de pe alte site-uri.",en:"Automatically trying e-mail+password pairs leaked from other sites."}],
+ ["MFA",null,{ro:"Autentificare cu mai mulți factori: ceva ce știi + ceva ce ai (telefon, cheie).",en:"Multi-factor authentication: something you know + something you have (phone, key)."}],
+ ["Passkey",null,{ro:"Login fără parolă, bazat pe FIDO2, legat de domeniul real: rezistă la phishing.",en:"Passwordless login based on FIDO2, bound to the real domain: phishing-resistant."}],
+ [{ro:"Drepturi minime",en:"Least privilege"},null,{ro:"Fiecare cont are doar accesul strict necesar.",en:"Each account has only the access it strictly needs."}],
+ ["3-2-1",null,{ro:"3 copii, 2 medii, 1 offline sau în altă locație.",en:"3 copies, 2 media, 1 offline or off-site."}],
+ ["Ransomware",null,{ro:"Program care criptează datele și cere răscumpărare; adesea le și fură.",en:"Malware that encrypts data and demands a ransom; often steals it too."}]
+],
+glossEx:{
+ "DMARC":{ro:"dmarc=fail pe un mesaj „de la contabilitate” e un semnal foarte puternic.",en:"dmarc=fail on a message \"from accounts\" is a very strong signal."},
+ "3-2-1":{ro:"Discul USB mereu conectat nu e copia offline.",en:"The always-plugged USB disk isn't the offline copy."}
+},
+
+quiz:[
+ {"q":{"ro":"Care e domeniul real în http://magazin.example.login-verificare.example/f ?","en":"What's the real domain in http://magazin.example.login-verificare.example/f ?"},"o":[{"ro":"magazin.example","en":"magazin.example"},{"ro":"login-verificare.example","en":"login-verificare.example"},{"ro":"f","en":"f"},{"ro":"http","en":"http"}],"a":1,"e":{"ro":"Se citește de la dreapta, înainte de primul „/”.","en":"Read it from the right, before the first \"/\"."}},
+ {"q":{"ro":"Antetul arată spf=fail și dmarc=fail pentru un e-mail „de la bancă”. Ce înseamnă?","en":"The header shows spf=fail and dmarc=fail for an e-mail \"from the bank\". What does it mean?"},"o":[{"ro":"E sigur","en":"It's safe"},{"ro":"Serverul băncii e lent","en":"The bank's server is slow"},{"ro":"Mesajul probabil nu vine de unde pretinde: tratezi ca phishing","en":"The message probably doesn't come from where it claims: treat it as phishing"},{"ro":"Trebuie să răspunzi ca să confirmi","en":"You must reply to confirm"}],"a":2,"e":{"ro":"Verificarea domeniului a eșuat.","en":"The domain check failed."}},
+ {"q":{"ro":"Managerul de parole nu-ți oferă parola pe o pagină de login care arată normal. Ce faci?","en":"The password manager doesn't offer your password on a login page that looks normal. What do you do?"},"o":[{"ro":"Copiezi parola de mână","en":"Copy the password by hand"},{"ro":"Te oprești și verifici domeniul: probabil e o pagină falsă","en":"Stop and check the domain: it's probably a fake page"},{"ro":"Reinstalezi managerul","en":"Reinstall the manager"},{"ro":"Dezactivezi managerul","en":"Disable the manager"}],"a":1,"e":{"ro":"Managerul compară domeniul, nu aspectul.","en":"The manager compares the domain, not the look."}},
+ {"q":{"ro":"Care parolă e cea mai bună?","en":"Which password is best?"},"o":[{"ro":"P@r0l@","en":"P@r0l@"},{"ro":"Magazin2024! (folosită pe 3 site-uri)","en":"Magazin2024! (used on 3 sites)"},{"ro":"O frază lungă și unică, sau una generată de manager","en":"A long, unique phrase, or one generated by a manager"},{"ro":"Data nașterii","en":"Your birthday"}],"a":2,"e":{"ro":"Lungimea și unicitatea contează cel mai mult.","en":"Length and uniqueness matter most."}},
+ {"q":{"ro":"Primești 9 notificări MFA „Aprobi?” la 2 noaptea. Ce faci?","en":"You get 9 MFA \"Approve?\" prompts at 2 a.m. What do you do?"},"o":[{"ro":"Aprobi una ca să se oprească","en":"Approve one so they stop"},{"ro":"Le ignori și uiți","en":"Ignore them and forget"},{"ro":"Respingi, schimbi parola și anunți IT: cineva are parola ta","en":"Deny, change your password and tell IT: someone has your password"},{"ro":"Dezinstalezi aplicația","en":"Uninstall the app"}],"a":2,"e":{"ro":"E un atac de tip MFA fatigue.","en":"It's an MFA fatigue attack."}},
+ {"q":{"ro":"Ce tip de MFA rezistă la o pagină de phishing?","en":"Which kind of MFA resists a phishing page?"},"o":[{"ro":"SMS","en":"SMS"},{"ro":"Cod TOTP din aplicație","en":"An app TOTP code"},{"ro":"Întrebare de securitate","en":"A security question"},{"ro":"Passkey / cheie FIDO2","en":"A passkey / FIDO2 key"}],"a":3,"e":{"ro":"E legată criptografic de domeniul real.","en":"It's cryptographically bound to the real domain."}},
+ {"q":{"ro":"Ce înseamnă regula 3-2-1?","en":"What does the 3-2-1 rule mean?"},"o":[{"ro":"3 copii, 2 medii diferite, 1 offline sau în altă locație","en":"3 copies, 2 different media, 1 offline or off-site"},{"ro":"3 parole, 2 conturi, 1 manager","en":"3 passwords, 2 accounts, 1 manager"},{"ro":"Backup la 3 zile, 2 ore, 1 minut","en":"Backup every 3 days, 2 hours, 1 minute"},{"ro":"3 discuri USB conectate permanent","en":"3 always-plugged USB disks"}],"a":0,"e":{"ro":"Și testezi restaurarea.","en":"And you test the restore."}},
+ {"q":{"ro":"Ai introdus parola pe o pagină falsă. Care e primul pas?","en":"You typed your password on a fake page. What's the first step?"},"o":[{"ro":"Aștepți să vezi ce se întâmplă","en":"Wait and see"},{"ro":"Anunți IT imediat și schimbi parola de pe alt dispozitiv","en":"Tell IT immediately and change the password from another device"},{"ro":"Ștergi e-mailul și nu spui nimic","en":"Delete the e-mail and say nothing"},{"ro":"Reinstalezi browserul","en":"Reinstall the browser"}],"a":1,"e":{"ro":"Viteza contează; apoi închizi sesiunile și verifici regulile de e-mail.","en":"Speed matters; then end sessions and check mail rules."}}
+]
+};
+})();
+</script>
+<script src="../assets/engine.js?v=4"></script>
+<script src="../assets/labs-data.js?v=11"></script>
+<script src="../assets/lab.js?v=2"></script>
+<script type="module" src="../assets/auth.js?v=19"></script>
+</body>
+</html>

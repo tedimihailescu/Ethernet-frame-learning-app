@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Trasee de învățare</title>
+<meta name="description" content="Trasee de învățare: lecțiile în ordinea potrivită, progresul tău și un certificat la final. / Learning paths: lessons in the right order, your progress and a certificate at the end.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/theme.css">
+<style>
+.page{max-width:1000px;margin:0 auto;padding:24px max(16px,env(safe-area-inset-right,0px)) 40px max(16px,env(safe-area-inset-left,0px))}
+h1{font:700 clamp(1.6rem,4vw,2.4rem) var(--head);margin:0 0 6px}
+.lead{color:var(--muted);margin:0 0 18px}
+.tabs{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px}
+.tab{border:2px solid var(--text);background:var(--surface);color:var(--text);border-radius:999px;padding:7px 13px;font:600 .9rem var(--sans);cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+.tab[aria-selected="true"]{background:var(--accent);color:var(--accent-text)}
+.tab small{font:600 .72rem var(--mono);opacity:.8}
+.card{background:var(--surface);border:2px solid var(--text);border-radius:14px;padding:18px;min-width:0;margin-bottom:14px}
+.ph{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:flex-start;justify-content:space-between}
+.ph h2{font:700 1.35rem var(--head);margin:0}
+.ph p{margin:4px 0 0;color:var(--muted);max-width:62ch}
+.meter{flex:1 1 100%;height:12px;border:2px solid var(--text);border-radius:999px;overflow:hidden;background:var(--surface2);margin-top:10px}
+.meter i{display:block;height:100%;background:var(--accent);transition:width .4s}
+.cnt{font:700 .9rem var(--mono)}
+ol.steps{list-style:none;margin:16px 0 0;padding:0;position:relative}
+ol.steps::before{content:"";position:absolute;left:19px;top:10px;bottom:10px;width:3px;background:var(--border)}
+ol.steps li{position:relative;display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 0}
+.dot{width:40px;height:40px;border-radius:50%;border:2px solid var(--text);background:var(--surface);display:grid;place-items:center;font:700 .95rem var(--head);position:relative;z-index:1}
+li.done .dot{background:var(--ok);color:#fff}
+li.next .dot{background:var(--accent);color:var(--accent-text);box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 35%,transparent)}
+.st a{font:700 1rem var(--sans);color:var(--text);text-decoration:none}
+.st a:hover{text-decoration:underline}
+.st .why{display:block;font-size:.85rem;color:var(--muted);margin-top:2px}
+.parts{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}
+.parts span{font:600 .72rem var(--mono);padding:2px 7px;border-radius:999px;border:1px solid var(--border);color:var(--muted);white-space:nowrap}
+.parts span.y{background:var(--ok);color:#fff;border-color:var(--ok)}
+.btn{border:2px solid var(--text);background:var(--accent);color:var(--accent-text);border-radius:10px;padding:10px 15px;font:700 .95rem var(--sans);cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+.btn.sec{background:var(--surface);color:var(--text)}
+.btn:disabled{opacity:.45;cursor:default}
+.row{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;align-items:center}
+.note{font-size:.85rem;color:var(--muted);margin:8px 0 0}
+.certbox{border-top:2px dashed var(--border);margin-top:18px;padding-top:14px}
+.certbox label{font:600 .85rem var(--sans);display:block;margin-bottom:4px}
+.certbox input{font:500 1rem var(--sans);padding:9px 12px;border:2px solid var(--text);border-radius:10px;background:var(--surface);color:var(--text);width:min(360px,100%)}
+/* the certificate itself */
+#cert{display:none}
+.cert{background:#fffaf0;color:#1b1b1b;border:10px double #b8860b;border-radius:6px;padding:36px 32px;text-align:center;max-width:820px;margin:16px auto 0;font-family:var(--sans)}
+.cert .k{font:700 .8rem var(--mono);letter-spacing:.2em;text-transform:uppercase;color:#7a5b10}
+.cert h3{font:700 2.1rem var(--head);margin:10px 0 4px}
+.cert .who{font:700 1.8rem var(--head);border-bottom:2px solid #b8860b;display:inline-block;padding:0 18px 4px;margin:14px 0 8px;min-width:50%}
+.cert .path{font:700 1.3rem var(--head);margin:6px 0 14px}
+.cert ul{list-style:none;padding:0;margin:0 auto 18px;columns:2;max-width:640px;text-align:left;font-size:.85rem}
+.cert li{break-inside:avoid;margin-bottom:3px}
+.cert .foot{display:flex;justify-content:space-between;gap:12px;font-size:.85rem;margin-top:16px;flex-wrap:wrap}
+.cert .seal{font-size:2.4rem}
+@media (max-width:560px){ol.steps li{grid-template-columns:42px minmax(0,1fr)}.parts{grid-column:2;justify-content:flex-start}.cert{padding:22px 14px}.cert ul{columns:1}.cert h3{font-size:1.6rem}}
+@media print{
+  body *{visibility:hidden}
+  #cert,#cert *{visibility:visible}
+  #cert{display:block!important;position:absolute;left:0;top:0;width:100%}
+  .cert{margin:0 auto;box-shadow:none}
+  @page{size:A4 landscape;margin:12mm}
+}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<header class="topbar" id="top"><div class="topbar-in">
+  <a class="brand" href="../index.html"><svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="var(--accent)"/><path d="M7 16h18M19 11l6 5-6 5" fill="none" stroke="var(--accent-text)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="16" r="2.6" fill="var(--accent-text)"/></svg><span data-t="brand"></span></a>
+  <nav class="nav" data-menu data-root="../" aria-label="Meniu / Menu"></nav>
+  <div class="tools"><div class="seg" role="group" aria-label="Limba / Language"><button type="button" data-lang="ro">RO</button><button type="button" data-lang="en">EN</button></div><button type="button" class="icon-btn" id="theme">◐</button></div>
+</div></header>
+
+<main class="page">
+  <h1 data-t="title"></h1>
+  <p class="lead" data-t="lead"></p>
+  <div class="tabs" role="tablist" id="tabs"></div>
+  <section class="card" id="path" role="tabpanel"></section>
+  <div id="cert" aria-live="polite"></div>
+</main>
+
+<script src="../assets/catalog.js?v=11"></script>
+<script src="../assets/menu.js?v=5"></script>
+<script>
+(function(){
+"use strict";
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+let lang=store.get("cadru-lang")==="en"?"en":"ro";
+const T=v=>v&&typeof v==="object"&&!Array.isArray(v)?v[lang]:Array.isArray(v)?v[lang==="en"?1:0]:v;
+const L=(ro,en)=>lang==="en"?en:ro;
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
+const C=window.CATALOG;
+const UI={brand:["Rețea pas cu pas","Network step by step"],title:["🧭 Trasee de învățare","🧭 Learning paths"],
+  lead:["Lecțiile, puse în ordinea în care au cel mai mult sens. O lecție e gata când ai citit toți pașii, ai făcut laboratorul și ai trecut testul cu peste 80%. La final primești un certificat pe care îl poți tipări.","The lessons, in the order that makes the most sense. A lesson is done when you've read every step, done the lab and passed the quiz with over 80%. At the end you get a certificate you can print."]};
+
+// Each path: id, icon, title, description, and the lessons in order, each with a "why now" note.
+const PATHS=[
+ {id:"cyber",icon:"🔐",t:{ro:"Începe în securitate cibernetică",en:"Start in cybersecurity"},d:{ro:"De la zero la primul incident investigat: bazele, rețeaua și Linux de care ai nevoie, apărarea conturilor, laboratorul Kali și răspunsul la incident.",en:"From zero to your first investigated incident: the basics, the networking and Linux you need, account defense, the Kali lab and incident response."},
+  list:[["cyber-start",{ro:"harta domeniului și planul tău",en:"the map of the field and your plan"}],["ethernet",{ro:"cum circulă un pachet: baza oricărei analize",en:"how a packet travels: the base of any analysis"}],["dns",{ro:"numele, folosite și abuzate de phishing",en:"names, used and abused by phishing"}],["https",{ro:"TLS și certificate: ce înseamnă (și ce nu) lacătul",en:"TLS and certificates: what the padlock means (and doesn't)"}],["cyber-conturi",{ro:"phishing, parole, MFA, backup",en:"phishing, passwords, MFA, backups"}],["linux-servicii",{ro:"servicii și jurnale pe Linux",en:"services and logs on Linux"}],["kali-lab",{ro:"un laborator legal și izolat",en:"a legal, isolated lab"}],["kali-descoperire",{ro:"ce e în rețea",en:"what's on the network"}],["kali-nmap",{ro:"ce expune fiecare mașină",en:"what each machine exposes"}],["cyber-incident",{ro:"loguri, alerte, răspuns",en:"logs, alerts, response"}]]},
+ {id:"retele",icon:"🔌",t:{ro:"Rețele de la zero",en:"Networking from zero"},d:{ro:"De la cadrul Ethernet la internetul global: tot ce trebuie să știi ca să înțelegi orice rețea.",en:"From the Ethernet frame to the global internet: everything you need to understand any network."},
+  list:[["ethernet",{ro:"MAC, IP, ARP, TTL",en:"MAC, IP, ARP, TTL"}],["vlan",{ro:"o rețea fizică, mai multe logice",en:"one physical network, many logical ones"}],["nat",{ro:"adrese private spre internet",en:"private addresses to the internet"}],["dns",{ro:"de la nume la adresă",en:"from name to address"}],["https",{ro:"conexiuni sigure",en:"secure connections"}],["ipv6",{ro:"următoarea generație de adrese",en:"the next generation of addresses"}],["bgp",{ro:"cum se leagă rețelele lumii",en:"how the world's networks connect"}],["load-balancing",{ro:"cum împarți traficul",en:"how to split traffic"}]]},
+ {id:"linux",icon:"🐧",t:{ro:"Administrator Linux",en:"Linux administrator"},d:{ro:"Depanare pe servere, ca la un interviu LFCS: rețea, servicii, discuri, memorie, plus identitate și certificate.",en:"Server troubleshooting, LFCS-interview style: networking, services, disks, memory, plus identity and certificates."},
+  list:[["linux-retea",{ro:"de ce dă timeout conexiunea",en:"why the connection times out"}],["linux-servicii",{ro:"un serviciu care nu pornește",en:"a service that won't start"}],["linux-disc",{ro:"disc plin, inode-uri, LVM",en:"full disk, inodes, LVM"}],["linux-performanta",{ro:"CPU, memorie, OOM",en:"CPU, memory, OOM"}],["certificate",{ro:"certificate TLS pe servere",en:"TLS certificates on servers"}],["ldap",{ro:"login centralizat",en:"central sign-in"}]]},
+ {id:"cloud",icon:"☸️",t:{ro:"Kubernetes și cloud",en:"Kubernetes and cloud"},d:{ro:"Cum ajunge o cerere la un pod și cum operezi un cluster: Service-uri, Ingress, rețeaua GKE, Istio și observabilitate.",en:"How a request reaches a pod and how to run a cluster: Services, Ingress, GKE networking, Istio and observability."},
+  list:[["kubernetes",{ro:"Service-uri și DNS în cluster",en:"Services and DNS in the cluster"}],["ingress",{ro:"intrarea HTTP în cluster",en:"HTTP into the cluster"}],["k8s-intrare",{ro:"drumul complet al unei cereri",en:"a request's full path"}],["gke-retea",{ro:"rețeaua în GKE",en:"networking in GKE"}],["service-mesh",{ro:"ce rezolvă un mesh",en:"what a mesh solves"}],["istio",{ro:"Istio în practică",en:"Istio in practice"}],["observabilitate",{ro:"metrici, loguri, trasări",en:"metrics, logs, traces"}]]},
+ {id:"devops",icon:"🚚",t:{ro:"DevOps și livrare",en:"DevOps and delivery"},d:{ro:"De la cod la producție: microservicii, pachete, GitOps, infrastructură ca și cod și mesagerie.",en:"From code to production: microservices, packages, GitOps, infrastructure as code and messaging."},
+  list:[["microservicii",{ro:"de ce și cum se împarte o aplicație",en:"why and how an app is split"}],["artifactory",{ro:"unde stau pachetele",en:"where packages live"}],["gitops",{ro:"lansare printr-un commit",en:"releasing with a commit"}],["terraform",{ro:"infrastructura ca și cod",en:"infrastructure as code"}],["terraform-deploy",{ro:"deploy real cu Terraform",en:"a real Terraform deploy"}],["kafka",{ro:"evenimente între servicii",en:"events between services"}]]}
+];
+PATHS.forEach(p=>p.list=p.list.filter(([id])=>C&&C.byId(id)));
+
+let cur=store.get("trasee-tab")||"cyber";if(!PATHS.find(p=>p.id===cur))cur="cyber";
+function stat(p){const ps=p.list.map(([id])=>C.progress(id));const done=ps.filter(x=>x.complete).length;const parts=ps.reduce((a,x)=>a+x.done,0);return {ps,done,parts,total:p.list.length,pct:Math.round(parts/(p.list.length*3)*100)}}
+function tabs(){
+  $("#tabs").innerHTML=PATHS.map(p=>{const s=stat(p);return `<button type="button" class="tab" role="tab" aria-selected="${p.id===cur}" data-p="${p.id}">${p.icon} ${esc(T(p.t))} <small>${s.done}/${s.total}</small></button>`}).join("");
+}
+function name(){return store.get("cert-name")||(document.querySelector("#user-menu .um-user")||{}).textContent||""}
+function draw(){
+  tabs();
+  const p=PATHS.find(x=>x.id===cur),s=stat(p);
+  const nextI=s.ps.findIndex(x=>!x.complete);
+  const steps=p.list.map(([id,why],k)=>{const l=C.byId(id),pr=s.ps[k];const cls=pr.complete?"done":k===nextI?"next":"";
+    const parts=[[pr.read,L("citit","read")],[pr.lab,L("laborator","lab")],[pr.quiz&&pr.quiz.pass,L("test","quiz")]].map(([y,t])=>`<span class="${y?"y":""}">${y?"✓ ":""}${t}</span>`).join("");
+    return `<li class="${cls}"><span class="dot">${pr.complete?"✓":k+1}</span><span class="st"><a href="../${l.href}">${esc(T(l.t))}</a><span class="why">${esc(T(why))}</span></span><span class="parts">${parts}</span></li>`}).join("");
+  const nl=nextI>=0?C.byId(p.list[nextI][0]):null;
+  const complete=s.done===s.total;
+  $("#path").innerHTML=`<div class="ph"><div><h2>${p.icon} ${esc(T(p.t))}</h2><p>${esc(T(p.d))}</p></div><span class="cnt">${s.done}/${s.total} · ${s.pct}%</span><div class="meter" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${s.pct}"><i style="width:${s.pct}%"></i></div></div>
+  <ol class="steps">${steps}</ol>
+  <div class="row">${nl?`<a class="btn" href="../${nl.href}">${s.parts?L("Continuă","Continue"):L("Începe","Start")}: ${esc(T(nl.t))} →</a>`:`<span class="cnt">🎉 ${L("Traseu terminat!","Path complete!")}</span>`}</div>
+  <div class="certbox"><b>🎓 ${L("Certificatul traseului","The path certificate")}</b>
+  ${complete?`<p class="note">${L("Felicitări! Scrie numele cum vrei să apară și tipărește-l (sau salvează-l ca PDF).","Congratulations! Type your name as you want it shown and print it (or save it as a PDF).")}</p>
+  <label for="nm">${L("Numele de pe certificat","Name on the certificate")}</label><input id="nm" maxlength="60" autocomplete="name" value="${esc(name())}">
+  <div class="row"><button type="button" class="btn" id="show">${L("Arată certificatul","Show the certificate")}</button><button type="button" class="btn sec" id="print">🖨 ${L("Tipărește / PDF","Print / PDF")}</button></div>`
+  :`<p class="note">${L(`Îl primești după ce termini toate cele ${s.total} lecții din traseu (mai ai ${s.total-s.done}).`,`You get it once you finish all ${s.total} lessons in the path (${s.total-s.done} to go).`)}</p>`}</div>`;
+  $("#cert").style.display="none";$("#cert").innerHTML="";
+  document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{cur=b.dataset.p;store.set("trasee-tab",cur);draw()});
+  if(complete){
+    $("#nm").oninput=e=>store.set("cert-name",e.target.value.trim());
+    $("#show").onclick=()=>{cert(p);$("#cert").scrollIntoView({behavior:"smooth",block:"start"})};
+    $("#print").onclick=()=>{cert(p);window.print()};
+  }
+}
+function cert(p){
+  const nm=($("#nm").value||"").trim()||L("Cursant","Learner");
+  const d=new Date().toLocaleDateString(lang==="en"?"en-GB":"ro-RO",{day:"numeric",month:"long",year:"numeric"});
+  $("#cert").innerHTML=`<div class="cert"><div class="seal">🎓</div><div class="k">${L("Certificat de parcurgere","Certificate of completion")}</div><h3>${L("Rețea pas cu pas","Network step by step")}</h3><p>${L("Se acordă lui / ei","Awarded to")}</p><div class="who">${esc(nm)}</div><p>${L("pentru parcurgerea completă a traseului","for completing the learning path")}</p><div class="path">${p.icon} ${esc(T(p.t))}</div><ul>${p.list.map(([id])=>`<li>✓ ${esc(T(C.byId(id).t))}</li>`).join("")}</ul><p class="note" style="color:#555">${L("Fiecare lecție: simularea citită, laboratorul făcut și testul trecut cu peste 80%.","Each lesson: the simulation read, the lab done and the quiz passed with over 80%.")}</p><div class="foot"><span>${L("Data","Date")}: <b>${esc(d)}</b></span><span>ethernet-frame-learning-app.firebaseapp.com</span></div></div>`;
+  $("#cert").style.display="block";
+}
+function render(){
+  document.documentElement.lang=lang;document.title=L("Trasee de învățare","Learning paths");
+  document.querySelectorAll("[data-t]").forEach(e=>{if(UI[e.dataset.t])e.textContent=T(UI[e.dataset.t])});
+  document.querySelectorAll("[data-lang]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.lang===lang?"true":"false"));
+  draw();
+}
+document.querySelectorAll("[data-lang]").forEach(b=>b.onclick=()=>{lang=b.dataset.lang;store.set("cadru-lang",lang);render();window.dispatchEvent(new Event("cadru:lang"))});
+const saved=store.get("cadru-theme");if(saved==="light"||saved==="dark")document.documentElement.dataset.theme=saved;
+$("#theme").onclick=()=>{const r=document.documentElement,d=r.dataset.theme?r.dataset.theme==="dark":matchMedia("(prefers-color-scheme: dark)").matches;const nt=d?"light":"dark";r.dataset.theme=nt;store.set("cadru-theme",nt)};
+// Progress saved on another device arrives once auth.js has merged the results.
+window.addEventListener("progress:changed",()=>draw());
+render();
+})();
+</script>
+<script type="module" src="../assets/auth.js?v=19"></script>
+</body>
+</html>

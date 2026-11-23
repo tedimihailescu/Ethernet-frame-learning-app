@@ -33,6 +33,8 @@ nav[data-menu]{overflow:visible;gap:2px}
 .dd-menu .all{grid-column:1/-1;border-top:1px solid var(--border);padding-top:8px;margin-top:2px}
 .dd-menu .all a{font-weight:700;color:var(--text)}
 .dd-games{min-width:230px;left:auto;right:0}
+.dd-link{font:500 .9rem var(--sans);color:var(--bar-text,var(--text));text-decoration:none;padding:6px 10px;border-radius:6px;white-space:nowrap}
+.dd-link:hover{background:var(--bar-hover,var(--surface2))}
 @media (max-width:760px){.dd-menu,.dd-mega{position:fixed;left:8px;right:8px;top:58px;width:auto;transform:none;max-height:calc(100vh - 70px);overflow:auto}.dd-mega{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.dd:hover:not(.open) .dd-menu{display:none}}
 @media (max-width:420px){.dd-mega{grid-template-columns:minmax(0,1fr)}}`;
   document.head.appendChild(css);
@@ -41,7 +43,8 @@ nav[data-menu]{overflow:visible;gap:2px}
     const cats = C.CATS.map(c => `<div class="dd-col"><h4><a href="${ROOT}lectii/index.html#${c.id}">${c.icon} ${T(c.t)}</a></h4>${c.d ? `<p class="dd-d">${T(c.d)}</p>` : ""}${c.list.map(id => { const l = C.byId(id); if (!l) return ""; const p = C.progress ? C.progress(id) : null; return `<a class="it" href="${ROOT}${l.href}">${p && p.complete ? "✓ " : ""}${T(l.t)}</a>`; }).join("")}</div>`).join("");
     nav.innerHTML =
       `<div class="dd"><button type="button" aria-expanded="false">📚 ${L("Lecții", "Lessons")}</button><div class="dd-menu dd-mega">${cats}<div class="all"><a href="${ROOT}lectii/index.html">${L("Toate lecțiile, cu descrieri →", "All lessons, with descriptions →")}</a></div></div></div>` +
-      `<div class="dd"><button type="button" aria-expanded="false">🎮 ${L("Jocuri", "Games")}</button><div class="dd-menu dd-games">${C.GAMES.map(g => `<a class="it" href="${ROOT}${g.href}">${g.icon} ${T(g.t)}</a>`).join("")}</div></div>`;
+      `<div class="dd"><button type="button" aria-expanded="false">🎮 ${L("Jocuri", "Games")}</button><div class="dd-menu dd-games">${C.GAMES.map(g => `<a class="it" href="${ROOT}${g.href}">${g.icon} ${T(g.t)}</a>`).join("")}</div></div>` +
+      `<a class="dd-link" href="${ROOT}trasee/index.html">🧭 ${L("Trasee", "Paths")}</a>`;
     nav.querySelectorAll(".dd>button").forEach(b => b.onclick = e => {
       e.stopPropagation();
       const d = b.parentElement, open = !d.classList.contains("open");

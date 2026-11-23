@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cum începi în securitatea cibernetică</title>
+<meta name="description" content="Lecție interactivă: primii pași în securitatea cibernetică: ce protejezi (CIA), amenințare, vulnerabilitate și risc, suprafața de atac, apărarea în straturi, atacurile frecvente, rolurile din domeniu, legea și permisiunea, traseul de învățare și cum exersezi legal. / Interactive lesson: how to get started in cybersecurity.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/lesson.css?v=2">
+<link rel="stylesheet" href="../assets/diagram.css?v=1">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:16px">Această pagină are nevoie de JavaScript. / This page needs JavaScript.</p></noscript>
+<script>
+(function(){
+const DEF="def",RISK="risk",PATH="path";
+const S1={q:{ro:"Ce trebuie protejat la magazinul online?",en:"What needs protecting at the online shop?"},tag:DEF,concept:{ro:"Triada CIA: confidențialitate, integritate, disponibilitate",en:"The CIA triad: confidentiality, integrity, availability"},ex:{ro:"datele clienților să nu ajungă la alții (C) · prețurile și comenzile să nu fie modificate (I) · site-ul să meargă de Black Friday (A)",en:"customer data must not reach others (C) · prices and orders must not be altered (I) · the site must be up on Black Friday (A)"}};
+const S2={q:{ro:"Ce avem, de fapt?",en:"What do we actually have?"},tag:DEF,concept:{ro:"Inventarul: nu poți apăra ce nu știi că ai",en:"Inventory: you can't defend what you don't know you have"},ex:{ro:"web-shop, baza de date, 6 laptopuri, routerul, contul de e-mail, panoul de hosting · plus un server de test uitat pornit",en:"web-shop, the database, 6 laptops, the router, the e-mail account, the hosting panel · plus a forgotten test server still running"}};
+const S3={q:{ro:"Cât de grav e un plugin neactualizat?",en:"How bad is an outdated plugin?"},tag:RISK,concept:{ro:"Amenințare × vulnerabilitate → risc (probabilitate × impact)",en:"Threat × vulnerability → risk (likelihood × impact)"},ex:{ro:"vulnerabilitate: pluginul de plăți e vechi · amenințare: roboți care caută exact pluginul ăsta · impact: comenzi furate → risc MARE",en:"vulnerability: the payment plugin is old · threat: bots hunting for exactly that plugin · impact: stolen orders → HIGH risk"}};
+const S4={q:{ro:"Pe unde poate intra cineva?",en:"Where could someone get in?"},tag:RISK,concept:{ro:"Suprafața de atac: tot ce e expus",en:"The attack surface: everything exposed"},ex:{ro:"443 (site) · 22 (SSH deschis spre tot internetul) · panoul de admin public · e-mailul angajaților (phishing) · parola Wi-Fi lipită pe perete",en:"443 (the site) · 22 (SSH open to the whole internet) · the public admin panel · staff e-mail (phishing) · the Wi-Fi password taped to the wall"}};
+const S5={q:{ro:"Ajunge un singur firewall?",en:"Is a single firewall enough?"},tag:DEF,concept:{ro:"Apărarea în straturi (defense in depth)",en:"Defense in depth"},ex:{ro:"firewall → actualizări → MFA → drepturi minime → criptare → backup-uri → loguri și alerte: dacă un strat cedează, următorul oprește atacul",en:"firewall → updates → MFA → least privilege → encryption → backups → logs and alerts: if one layer fails, the next one stops the attack"}};
+const S6={q:{ro:"Cum se întâmplă de obicei?",en:"How does it usually happen?"},tag:RISK,concept:{ro:"Atacurile frecvente, nu cele de film",en:"The common attacks, not the movie ones"},ex:{ro:"phishing · parole slabe sau refolosite · software neactualizat · configurări greșite (un bucket public) · ransomware care le folosește pe toate",en:"phishing · weak or reused passwords · unpatched software · misconfigurations (a public bucket) · ransomware riding on all of them"}};
+const S7={q:{ro:"Cine face ce în securitate?",en:"Who does what in security?"},tag:PATH,concept:{ro:"Rolurile: blue team, red team, GRC, AppSec/cloud",en:"The roles: blue team, red team, GRC, AppSec/cloud"},ex:{ro:"analistul SOC citește alerte · pentesterul testează cu acord scris · GRC scrie politici și evaluează riscul · AppSec verifică codul magazinului",en:"the SOC analyst reads alerts · the pentester tests with written approval · GRC writes policies and assesses risk · AppSec reviews the shop's code"}};
+const S8={q:{ro:"Pot „testa” site-ul unui vecin?",en:"Can I \"test\" a neighbour's site?"},tag:RISK,concept:{ro:"Legea și permisiunea: doar cu acord scris",en:"The law and permission: written approval only"},ex:{ro:"fără acord = acces ilegal (în România, Codul penal, art. 360) · cu acord: scop scris, ferestre de timp, ce ai voie și ce nu, cui raportezi",en:"no approval = illegal access (in Romania, Criminal Code art. 360) · with approval: written scope, time windows, what's allowed and not, who you report to"}};
+const S9={q:{ro:"Ce învăț întâi?",en:"What do I learn first?"},tag:PATH,concept:{ro:"Fundamentele: rețele, Linux, un limbaj de scripting",en:"The fundamentals: networking, Linux, a scripting language"},ex:{ro:"rețele (Ethernet, IP, DNS, HTTPS) → Linux (servicii, loguri, permisiuni) → Python sau Bash → abia apoi unelte de securitate",en:"networking (Ethernet, IP, DNS, HTTPS) → Linux (services, logs, permissions) → Python or Bash → only then security tools"}};
+const S10={q:{ro:"Unde exersez fără să încalc legea?",en:"Where do I practise without breaking the law?"},tag:PATH,concept:{ro:"Laborator propriu, CTF-uri și platforme de exerciții",en:"Your own lab, CTFs and practice platforms"},ex:{ro:"VM-uri proprii (lecția Kali) · OverTheWire Bandit · picoCTF · TryHackMe · Hack The Box · pentru blue team: CyberDefenders, LetsDefend",en:"your own VMs (the Kali lesson) · OverTheWire Bandit · picoCTF · TryHackMe · Hack The Box · for blue team: CyberDefenders, LetsDefend"}};
+const S11={q:{ro:"Cum arăt că știu?",en:"How do I show what I know?"},tag:PATH,concept:{ro:"Un plan pe 90 de zile și un portofoliu",en:"A 90-day plan and a portfolio"},ex:{ro:"luna 1: rețele și Linux · luna 2: laborator și CTF-uri · luna 3: un proiect (ex. monitorizare cu loguri) · scrii despre fiecare (write-up) · o certificare de început (ex. CompTIA Security+ sau ISC2 CC)",en:"month 1: networking and Linux · month 2: lab and CTFs · month 3: a project (e.g. log monitoring) · write up each one · an entry certification (e.g. CompTIA Security+ or ISC2 CC)"}};
+
+window.LESSON={
+docTitle:{ro:"Cum începi în securitatea cibernetică",en:"How to get started in cybersecurity"},
+eyebrow:{ro:"Lecție interactivă · Securitate cibernetică",en:"Interactive lesson · Cybersecurity"},
+title:{ro:"Cum începi în securitatea cibernetică",en:"How to get started in cybersecurity"},
+sub:{ro:"Ana lucrează în IT la un mic magazin online și vrea să treacă în securitate. Nu începe cu unelte de „hacking”, ci cu întrebările pe care le pune orice specialist: ce protejăm, de cine, pe unde se poate intra și cum ne apărăm în straturi. Apoi vedem rolurile din domeniu, ce spune legea, ce înveți întâi și unde exersezi legal.",en:"Ana works in IT at a small online shop and wants to move into security. She doesn't start with \"hacking\" tools, but with the questions every specialist asks: what are we protecting, from whom, where could someone get in, and how do we defend in layers. Then we look at the roles in the field, what the law says, what to learn first and where to practise legally."},
+meta:[{ro:"≈ 25 minute",en:"≈ 25 minutes"},{ro:"12 pași",en:"12 steps"},{ro:"8 întrebări",en:"8 questions"},{ro:"Începător",en:"Beginner"}],
+goals:[{ro:"Triada CIA și inventarul: ce protejezi",en:"The CIA triad and inventory: what you protect"},{ro:"Amenințare, vulnerabilitate, risc și suprafața de atac",en:"Threat, vulnerability, risk and the attack surface"},{ro:"Apărarea în straturi și atacurile cele mai frecvente",en:"Defense in depth and the most common attacks"},{ro:"Rolurile, legea, traseul de învățare și exersarea legală",en:"The roles, the law, the learning path and legal practice"}],
+foot:{ro:"Magazin, nume și adrese fictive. Orice test de securitate se face doar pe sisteme proprii sau cu acord scris.",en:"Fictional shop, names and addresses. Any security test is done only on your own systems or with written approval."},
+ui:{frameT:{ro:"Fișa de securitate (live)",en:"The security card (live)"},refT:{ro:"Harta începătorului",en:"The beginner's map"},refLead:{ro:"Conceptele de bază, rolurile și resursele de exersat, pe o singură pagină.",en:"The core concepts, the roles and practice resources, on one page."}},
+tryT:{ro:"Încearcă",en:"Try it"},
+legend:[["lg-app","DEF",{ro:"apărare",en:"defense"}],["lg-tcp","RISK",{ro:"risc",en:"risk"}],["lg-ip","PATH",{ro:"traseul tău",en:"your path"}]],
+
+nodes:{
+  cust:{type:"user",name:{ro:"client",en:"customer"},lines:[{ro:"cumpără online",en:"shops online"}]},
+  net:{type:"globe",name:"internet",lines:[{ro:"roboți, scanări",en:"bots, scans"}]},
+  fw:{type:"router",name:"firewall",lines:["203.0.113.10"]},
+  web:{type:"server",name:"web-shop",lines:[":443 · :22"]},
+  db:{type:"db",name:{ro:"baza clienți",en:"customer DB"},lines:["10.0.10.20"]},
+  staff:{type:"host",name:{ro:"laptop angajat",en:"staff laptop"},lines:[{ro:"e-mail, browser",en:"e-mail, browser"}]},
+  ana:{type:"user",name:"Ana",lines:[{ro:"IT → securitate",en:"IT → security"}]}
+},
+links:[["cust","net"],["net","fw"],["fw","web"],["web","db"],["fw","staff"],["staff","ana"]],
+linkLabels:{"net-fw":"HTTPS · SSH","fw-web":":443","web-db":"SQL","fw-staff":{"ro":"e-mail, web","en":"e-mail, web"}},
+layouts:{
+  wide:{vb:[0,0,1000,500],n:{cust:[80,250],net:[260,250],fw:[460,250],web:[680,130],db:[900,130],staff:[680,380],ana:[900,380]},
+    zones:[{x:380,y:40,w:600,h:440,top:true,cls:"virt",l:{ro:"magazinul (ce protejăm)",en:"the shop (what we protect)"}}]},
+  narrow:{vb:[0,0,360,860],n:{cust:[70,70],net:[250,160],fw:[180,320],web:[70,480],db:[70,690],staff:[290,480],ana:[290,690]}}
+},
+groups:[
+  {id:"q",color:"l7",fields:["q"],name:{ro:"Întrebarea",en:"The question"},short:"Q",grow:2},
+  {id:"c",color:"l3",fields:["concept"],name:{ro:"Conceptul",en:"The concept"},short:{ro:"Concept",en:"Concept"},grow:3},
+  {id:"e",color:"arp",fields:["ex"],name:{ro:"La magazin",en:"At the shop"},short:{ro:"Exemplu",en:"Example"},grow:4}
+],
+fieldLabels:{q:{ro:"Întrebarea",en:"The question"},concept:{ro:"Conceptul",en:"The concept"},ex:{ro:"La magazin",en:"At the shop"}},
+pdu:f=>f.tag===RISK?{badge:{ro:"Risc: de știut",en:"Risk: know it"},tok:["RISK","k-tcp"]}:f.tag===PATH?{badge:{ro:"Traseul tău",en:"Your path"},tok:["PATH","k-ip"]}:{badge:{ro:"Apărare",en:"Defense"},tok:["DEF","k-app"]},
+
+init:{},
+tables:{
+  cia:{title:{ro:"Triada CIA",en:"The CIA triad"},cols:["",{ro:"Înseamnă",en:"Means"},{ro:"Atac tipic",en:"Typical attack"},{ro:"Apărare",en:"Defense"}],plain:[0,1,2,3],
+    rows:()=>[[{ro:"Confidențialitate",en:"Confidentiality"},{ro:"doar cine trebuie vede datele",en:"only the right people see the data"},{ro:"furt de date, parolă ghicită",en:"data theft, a guessed password"},{ro:"criptare, MFA, drepturi minime",en:"encryption, MFA, least privilege"}],[{ro:"Integritate",en:"Integrity"},{ro:"datele nu sunt modificate pe ascuns",en:"data isn't secretly altered"},{ro:"prețuri schimbate, cont IBAN înlocuit",en:"changed prices, a swapped IBAN"},{ro:"semnături, hash-uri, jurnale",en:"signatures, hashes, audit logs"}],[{ro:"Disponibilitate",en:"Availability"},{ro:"sistemul merge când e nevoie",en:"the system works when needed"},{ro:"DDoS, ransomware",en:"DDoS, ransomware"},{ro:"redundanță, backup-uri, CDN",en:"redundancy, backups, a CDN"}]]},
+  risk:{title:{ro:"Risc = probabilitate × impact",en:"Risk = likelihood × impact"},cols:[{ro:"Problema",en:"The issue"},{ro:"Probabilitate",en:"Likelihood"},{ro:"Impact",en:"Impact"},{ro:"Prioritate",en:"Priority"}],plain:[0,1,2,3],
+    rows:()=>[[{ro:"plugin de plăți neactualizat",en:"outdated payment plugin"},{ro:"mare",en:"high"},{ro:"mare",en:"high"},{ro:"1 · acum",en:"1 · now"}],[{ro:"SSH deschis spre internet, cu parolă",en:"SSH open to the internet, with a password"},{ro:"mare",en:"high"},{ro:"mare",en:"high"},{ro:"2 · azi",en:"2 · today"}],[{ro:"server de test uitat",en:"forgotten test server"},{ro:"medie",en:"medium"},{ro:"medie",en:"medium"},{ro:"3 · săptămâna asta",en:"3 · this week"}],[{ro:"parola Wi-Fi pe perete",en:"Wi-Fi password on the wall"},{ro:"mică",en:"low"},{ro:"medie",en:"medium"},{ro:"4 · luna asta",en:"4 · this month"}]]},
+  roles:{title:{ro:"Rolurile din securitate",en:"Roles in security"},cols:[{ro:"Rol",en:"Role"},{ro:"Ce face",en:"What they do"},{ro:"Bun pentru început?",en:"Good to start with?"}],plain:[0,1,2],
+    rows:()=>[[{ro:"Analist SOC (blue team)",en:"SOC analyst (blue team)"},{ro:"urmărește alerte, investighează loguri",en:"watches alerts, investigates logs"},{ro:"da, cel mai des",en:"yes, the most common"}],[{ro:"Incident responder",en:"Incident responder"},{ro:"oprește și curăță un atac în desfășurare",en:"stops and cleans up an attack in progress"},{ro:"după SOC",en:"after SOC"}],[{ro:"Pentester (red team)",en:"Pentester (red team)"},{ro:"atacă, cu acord scris, ca să găsească probleme",en:"attacks, with written approval, to find problems"},{ro:"după bazele solide",en:"after solid basics"}],[{ro:"GRC",en:"GRC"},{ro:"politici, riscuri, conformitate (GDPR, ISO 27001, NIS2)",en:"policies, risk, compliance (GDPR, ISO 27001, NIS2)"},{ro:"da, din zona non-tehnică",en:"yes, from a non-technical side"}],[{ro:"AppSec / cloud security",en:"AppSec / cloud security"},{ro:"cod sigur, configurări cloud",en:"secure code, cloud configuration"},{ro:"din dezvoltare sau DevOps",en:"from development or DevOps"}]]},
+  path:{idx:true,title:{ro:"Traseul recomandat",en:"The recommended path"},cols:[{ro:"Etapa",en:"Stage"},{ro:"Ce înveți",en:"What you learn"},{ro:"Pe acest site",en:"On this site"}],plain:[0,1,2],
+    rows:()=>[[{ro:"Rețele",en:"Networking"},"Ethernet, IP, ARP, DNS, TLS",{ro:"Ethernet, NAT, DNS, HTTPS",en:"Ethernet, NAT, DNS, HTTPS"}],["Linux",{ro:"servicii, loguri, permisiuni, rețea",en:"services, logs, permissions, networking"},{ro:"lecțiile Linux",en:"the Linux lessons"}],[{ro:"Apărare de bază",en:"Basic defense"},{ro:"parole, MFA, phishing, backup",en:"passwords, MFA, phishing, backups"},{ro:"Conturi și dispozitive",en:"Accounts and devices"}],[{ro:"Laborator",en:"Lab"},{ro:"VM-uri izolate, descoperire, porturi",en:"isolated VMs, discovery, ports"},{ro:"lecțiile Kali",en:"the Kali lessons"}],[{ro:"Detecție și răspuns",en:"Detection and response"},{ro:"loguri, alerte, incident",en:"logs, alerts, incidents"},{ro:"Primul incident",en:"Your first incident"}]]}
+},
+log:{title:{ro:"Notițele Anei",en:"Ana's notes"},lead:{ro:"Ce a notat Ana la fiecare pas.",en:"What Ana wrote down at each step."},first:{ro:"Pas",en:"Step"},minWidth:600,
+  cols:[{h:{ro:"Conceptul",en:"The concept"},v:f=>f.concept||"",cls:""},{h:{ro:"La magazin",en:"At the shop"},v:f=>f.ex||"",cls:""}]},
+
+steps:[
+{at:["web","db","staff"],frame:S1,kind:"d",tables:["cia"],log:{ro:"CIA",en:"CIA"},who:"CIA",
+ title:{ro:"Ce protejăm: confidențialitate, integritate, disponibilitate",en:"What we protect: confidentiality, integrity, availability"},
+ body:{ro:`<p>Securitatea nu începe cu unelte, ci cu o întrebare: <strong>ce trebuie protejat și de ce?</strong> Răspunsul clasic e triada <strong>CIA</strong>:</p>
+<ul><li><strong>Confidențialitate</strong>: adresele și telefoanele clienților le văd doar cine trebuie;</li>
+<li><strong>Integritate</strong>: nimeni nu schimbă pe ascuns prețurile, comenzile sau IBAN-ul de pe factură;</li>
+<li><strong>Disponibilitate</strong>: magazinul merge exact când vin clienții.</li></ul>
+<p class="key">Orice incident lovește cel puțin una din cele trei. Când citești despre un atac, întreabă-te: care literă a fost lovită?</p>`,
+ en:`<p>Security doesn't start with tools but with a question: <strong>what needs protecting, and why?</strong> The classic answer is the <strong>CIA</strong> triad:</p>
+<ul><li><strong>Confidentiality</strong>: only the right people see customers' addresses and phone numbers;</li>
+<li><strong>Integrity</strong>: nobody secretly changes prices, orders or the IBAN on an invoice;</li>
+<li><strong>Availability</strong>: the shop works exactly when customers come.</li></ul>
+<p class="key">Every incident hits at least one of the three. When you read about an attack, ask: which letter was hit?</p>`},
+ more:{ro:`<p>Ransomware, de exemplu, lovește disponibilitatea (fișierele sunt criptate) și, tot mai des, confidențialitatea: atacatorii copiază datele înainte și amenință că le publică.</p>`,en:`<p>Ransomware, for example, hits availability (files get encrypted) and, more and more, confidentiality: attackers copy the data first and threaten to publish it.</p>`}},
+
+{at:["fw","web","db","staff"],frame:S2,kind:"d",marks:{web:{k:"drop",t:{ro:"+ server de test uitat",en:"+ forgotten test server"}}},log:{ro:"inventar",en:"inventory"},who:{ro:"Inventar",en:"Inventory"},
+ title:{ro:"Inventarul: nu poți apăra ce nu știi că ai",en:"Inventory: you can't defend what you don't know you have"},
+ body:{ro:`<p>Primul lucru pe care îl face Ana: o listă cu tot ce are magazinul. Servere, laptopuri, routerul, conturile (e-mail, hosting, plăți), domeniul și cine are acces la fiecare.</p>
+<p>Surpriza: un <strong>server de test</strong> pornit acum doi ani, cu o copie veche a bazei de date și fără actualizări. Nimeni nu-l mai folosea, deci nimeni nu-l mai păzea.</p>
+<p class="key">Atacatorii găsesc rapid lucrurile uitate. Inventarul e baza oricărei apărări.</p>`,
+ en:`<p>The first thing Ana does: a list of everything the shop has. Servers, laptops, the router, the accounts (e-mail, hosting, payments), the domain, and who has access to each.</p>
+<p>The surprise: a <strong>test server</strong> started two years ago, with an old copy of the database and no updates. Nobody used it any more, so nobody guarded it either.</p>
+<p class="key">Attackers find forgotten things fast. The inventory is the base of any defense.</p>`},
+ more:{ro:`<p>În lecția „Descoperirea rețelei” faci exact asta tehnic: găsești ce e pornit într-o rețea și compari inventarul în timp.</p>`,en:`<p>In the "Network discovery" lesson you do exactly this, technically: find what's up on a network and compare the inventory over time.</p>`}},
+
+{at:"web",frame:S3,kind:"d",move:[[["net","fw"],["fw","web"]]],marks:{web:{k:"drop",t:{ro:"plugin vechi",en:"old plugin"}}},tables:["risk"],hl:{risk:0},log:{ro:"risc",en:"risk"},who:{ro:"Risc",en:"Risk"},
+ title:{ro:"Amenințare, vulnerabilitate, risc",en:"Threat, vulnerability, risk"},
+ body:{ro:`<p>Trei cuvinte pe care le vei auzi zilnic:</p>
+<ul><li><strong>Vulnerabilitatea</strong> e slăbiciunea: pluginul de plăți are o versiune veche, cu o problemă publicată (un <strong>CVE</strong>);</li>
+<li><strong>Amenințarea</strong> e cine sau ce ar putea profita: roboți care scanează internetul după exact acel plugin;</li>
+<li><strong>Riscul</strong> e combinația: cât de probabil e să se întâmple × cât de rău ar fi.</li></ul>
+<p>Nu poți repara tot deodată. Faci o listă și o ordonezi după risc: întâi ce e și probabil, și grav.</p>`,
+ en:`<p>Three words you'll hear every day:</p>
+<ul><li>The <strong>vulnerability</strong> is the weakness: the payment plugin runs an old version with a published flaw (a <strong>CVE</strong>);</li>
+<li>The <strong>threat</strong> is who or what could take advantage: bots scanning the internet for exactly that plugin;</li>
+<li>The <strong>risk</strong> is the combination: how likely it is × how bad it would be.</li></ul>
+<p>You can't fix everything at once. You make a list and order it by risk: first what's both likely and severe.</p>`}},
+
+{at:["fw","web","staff"],frame:S4,kind:"d",move:[[["net","fw"]],[["fw","web"],["fw","staff"]]],marks:{web:{k:"drop",t:":22"},staff:{k:"drop",t:"phishing"}},tables:["risk"],hl:{risk:1},log:{ro:"suprafața de atac",en:"attack surface"},who:{ro:"Suprafața",en:"Surface"},
+ title:{ro:"Suprafața de atac: pe unde se poate intra",en:"The attack surface: where someone could get in"},
+ body:{ro:`<p>Suprafața de atac e tot ce poate atinge cineva din afară:</p>
+<ul><li>portul <strong>443</strong> al site-ului: trebuie să fie deschis, e magazinul;</li>
+<li>portul <strong>22</strong> (SSH), deschis spre tot internetul și cu login prin parolă: roboții încearcă parole aici non-stop;</li>
+<li>panoul de administrare, accesibil de oriunde;</li>
+<li>și oamenii: oricine primește e-mail poate primi <strong>phishing</strong>.</li></ul>
+<p class="key">Cea mai ieftină apărare: micșorezi suprafața. SSH doar din VPN, panoul de admin doar din birou, servere uitate oprite.</p>`,
+ en:`<p>The attack surface is everything someone can reach from outside:</p>
+<ul><li>the site's port <strong>443</strong>: it must be open, it's the shop;</li>
+<li>port <strong>22</strong> (SSH), open to the whole internet with password login: bots try passwords here non-stop;</li>
+<li>the admin panel, reachable from anywhere;</li>
+<li>and the people: anyone who gets e-mail can get <strong>phishing</strong>.</li></ul>
+<p class="key">The cheapest defense: shrink the surface. SSH only over VPN, the admin panel only from the office, forgotten servers switched off.</p>`},
+ more:{ro:`<p>Lecția „Scanarea porturilor cu nmap” arată cum vezi suprafața ta așa cum o vede un străin (în laboratorul tău).</p>`,en:`<p>The "Port scanning with nmap" lesson shows how to see your surface the way a stranger does (in your own lab).</p>`}},
+
+{at:["fw","web","db","staff"],frame:S5,kind:"d",marks:{fw:{k:"ok",t:{ro:"strat 1",en:"layer 1"}},web:{k:"ok",t:{ro:"actualizări",en:"updates"}},db:{k:"ok",t:{ro:"criptare, backup",en:"encryption, backup"}},staff:{k:"ok",t:"MFA"}},log:{ro:"straturi",en:"layers"},who:{ro:"Straturi",en:"Layers"},
+ title:{ro:"Apărarea în straturi",en:"Defense in depth"},
+ body:{ro:`<p>Niciun control nu e perfect. De aceea pui mai multe, unul după altul, ca straturile unei cepe:</p>
+<ul><li><strong>rețea</strong>: firewall, doar porturile necesare;</li>
+<li><strong>sisteme</strong>: actualizări, servicii inutile oprite;</li>
+<li><strong>identitate</strong>: parole lungi, <strong>MFA</strong>, drepturi minime;</li>
+<li><strong>date</strong>: criptare și <strong>backup-uri</strong> testate;</li>
+<li><strong>detecție</strong>: loguri și alerte, ca să afli când ceva tot a trecut.</li></ul>
+<p class="key">Dacă parola unui angajat e furată, MFA oprește atacul. Dacă MFA e ocolit, drepturile minime limitează paguba. Dacă totul cedează, backup-ul te salvează.</p>`,
+ en:`<p>No control is perfect. So you stack several, one after another, like the layers of an onion:</p>
+<ul><li><strong>network</strong>: a firewall, only the ports you need;</li>
+<li><strong>systems</strong>: updates, unneeded services off;</li>
+<li><strong>identity</strong>: long passwords, <strong>MFA</strong>, least privilege;</li>
+<li><strong>data</strong>: encryption and tested <strong>backups</strong>;</li>
+<li><strong>detection</strong>: logs and alerts, so you know when something got through anyway.</li></ul>
+<p class="key">If a staff password is stolen, MFA stops the attack. If MFA is bypassed, least privilege limits the damage. If everything fails, the backup saves you.</p>`}},
+
+{at:["net","staff","web"],frame:S6,kind:"d",move:[[["net","fw"]],[["fw","staff"]]],marks:{staff:{k:"drop",t:{ro:"e-mail fals",en:"fake e-mail"}}},log:{ro:"atacuri frecvente",en:"common attacks"},who:{ro:"Atacuri",en:"Attacks"},
+ title:{ro:"Atacurile frecvente (nu cele din filme)",en:"The common attacks (not the movie ones)"},
+ body:{ro:`<p>În realitate, majoritatea incidentelor la firme mici încep banal:</p>
+<ul><li><strong>phishing</strong>: un e-mail „de la curier” sau „de la bancă” cere o parolă sau un click;</li>
+<li><strong>parole slabe sau refolosite</strong>: parola furată de pe alt site merge și aici (<em>credential stuffing</em>);</li>
+<li><strong>software neactualizat</strong>: un CVE public, exploatat automat de roboți;</li>
+<li><strong>configurări greșite</strong>: o bază de date sau un bucket accesibil public;</li>
+<li><strong>ransomware</strong>: de obicei ultima etapă, după unul dintre cele de mai sus.</li></ul>
+<p class="key">Dacă știi să te aperi de aceste cinci, ești deja peste media firmelor mici.</p>`,
+ en:`<p>In reality, most incidents at small companies start in a mundane way:</p>
+<ul><li><strong>phishing</strong>: an e-mail "from the courier" or "from the bank" asks for a password or a click;</li>
+<li><strong>weak or reused passwords</strong>: a password stolen from another site works here too (<em>credential stuffing</em>);</li>
+<li><strong>unpatched software</strong>: a public CVE, exploited automatically by bots;</li>
+<li><strong>misconfigurations</strong>: a database or bucket open to the public;</li>
+<li><strong>ransomware</strong>: usually the last stage, after one of the above.</li></ul>
+<p class="key">If you can defend against these five, you're already above the average small company.</p>`},
+ more:{ro:`<p>Lecția următoare, „Conturi și dispozitive protejate”, intră în detaliu pe phishing, parole, MFA, actualizări și backup.</p>`,en:`<p>The next lesson, "Protecting accounts and devices", goes into detail on phishing, passwords, MFA, updates and backups.</p>`}},
+
+{at:["ana"],frame:S7,kind:"d",tables:["roles"],log:{ro:"roluri",en:"roles"},who:{ro:"Roluri",en:"Roles"},
+ title:{ro:"Cine face ce: rolurile din securitate",en:"Who does what: the roles in security"},
+ body:{ro:`<p>„Securitate” nu e o singură meserie:</p>
+<ul><li><strong>Blue team</strong>: apără. Analistul <strong>SOC</strong> urmărește alerte și investighează; incident responder-ul oprește atacurile în desfășurare;</li>
+<li><strong>Red team / pentest</strong>: atacă, <em>cu acord scris</em>, ca să găsească probleme înaintea altora;</li>
+<li><strong>GRC</strong> (guvernanță, risc, conformitate): politici, evaluări de risc, GDPR, ISO 27001, NIS2;</li>
+<li><strong>AppSec / cloud security</strong>: cod sigur și configurări cloud corecte.</li></ul>
+<p>Cei mai mulți încep în <strong>SOC</strong> sau vin din IT (admin, rețele, DevOps), exact ca Ana.</p>`,
+ en:`<p>"Security" isn't a single job:</p>
+<ul><li><strong>Blue team</strong>: defends. The <strong>SOC</strong> analyst watches alerts and investigates; the incident responder stops attacks in progress;</li>
+<li><strong>Red team / pentest</strong>: attacks, <em>with written approval</em>, to find problems before others do;</li>
+<li><strong>GRC</strong> (governance, risk, compliance): policies, risk assessments, GDPR, ISO 27001, NIS2;</li>
+<li><strong>AppSec / cloud security</strong>: secure code and correct cloud configuration.</li></ul>
+<p>Most people start in a <strong>SOC</strong> or come from IT (admin, networking, DevOps), just like Ana.</p>`}},
+
+{at:["net","web"],frame:S8,kind:"d",marks:{web:{k:"drop",t:{ro:"fără acord = ilegal",en:"no approval = illegal"}}},log:{ro:"legea",en:"the law"},who:{ro:"Legea",en:"The law"},
+ title:{ro:"Legea și permisiunea: regula numărul 1",en:"The law and permission: rule number 1"},
+ body:{ro:`<p>Curiozitatea e bună, dar „doar m-am uitat” nu e o apărare. Să intri sau să încerci să intri într-un sistem fără drept e infracțiune: în România, Codul penal pedepsește <strong>accesul ilegal la un sistem informatic</strong> (art. 360), iar legi asemănătoare există peste tot.</p>
+<p>Un test legitim are mereu un <strong>acord scris</strong> cu: ce sisteme (scopul), când, ce tehnici sunt permise și ce nu, cine e persoana de contact și cum raportezi.</p>
+<p class="key">Exersezi doar pe sistemele tale, în laborator sau pe platforme făcute pentru asta. Fără excepții.</p>`,
+ en:`<p>Curiosity is good, but "I was only looking" isn't a defense. Getting into, or trying to get into, a system without the right to is a crime: in Romania the Criminal Code punishes <strong>illegal access to a computer system</strong> (art. 360), and similar laws exist everywhere.</p>
+<p>A legitimate test always has <strong>written approval</strong> stating: which systems (the scope), when, which techniques are allowed and which aren't, who the contact is and how you report.</p>
+<p class="key">You practise only on your own systems, in a lab or on platforms built for it. No exceptions.</p>`}},
+
+{at:["ana"],frame:S9,kind:"d",tables:["path"],log:{ro:"fundamente",en:"fundamentals"},who:{ro:"Fundamente",en:"Fundamentals"},
+ title:{ro:"Ce înveți întâi: fundamentele",en:"What to learn first: the fundamentals"},
+ body:{ro:`<p>Securitatea se construiește peste IT. Ca să recunoști ceva ciudat, trebuie să știi cum arată normalul:</p>
+<ul><li><strong>rețele</strong>: cum circulă un pachet, ce sunt IP, ARP, DNS, TCP, TLS;</li>
+<li><strong>Linux</strong> (și puțin Windows): servicii, utilizatori, permisiuni, loguri;</li>
+<li><strong>scripting</strong>: Python sau Bash, ca să automatizezi și să citești rapid loguri;</li>
+<li>abia apoi <strong>unelte de securitate</strong>: nmap, Wireshark, un SIEM.</li></ul>
+<p class="key">Lecțiile de rețele și Linux de pe acest site sunt exact primul pas. Tabelul arată ordinea.</p>`,
+ en:`<p>Security is built on top of IT. To recognise something odd, you need to know what normal looks like:</p>
+<ul><li><strong>networking</strong>: how a packet travels, what IP, ARP, DNS, TCP and TLS are;</li>
+<li><strong>Linux</strong> (and some Windows): services, users, permissions, logs;</li>
+<li><strong>scripting</strong>: Python or Bash, to automate and read logs fast;</li>
+<li>only then <strong>security tools</strong>: nmap, Wireshark, a SIEM.</li></ul>
+<p class="key">The networking and Linux lessons on this site are exactly that first step. The table shows the order.</p>`},
+ try:[{cmd:"ip -br addr",d:{ro:"Pe Linux: adresele tale. Știi ce înseamnă fiecare coloană?",en:"On Linux: your addresses. Do you know what each column means?"}},{cmd:"ss -tulpn",d:{ro:"Ce porturi ascultă pe calculatorul tău și ce program le-a deschis.",en:"Which ports are listening on your computer and which program opened them."}}]},
+
+{at:["ana","staff"],frame:S10,kind:"d",log:{ro:"exersare legală",en:"legal practice"},who:{ro:"Exersare",en:"Practice"},
+ title:{ro:"Unde exersezi legal",en:"Where to practise legally"},
+ body:{ro:`<p>Există mult loc de joacă legal:</p>
+<ul><li><strong>laboratorul tău</strong>: VM-uri izolate, ca în lecția „Kali Linux: un laborator sigur”;</li>
+<li><strong>OverTheWire Bandit</strong>: Linux și linia de comandă, nivel cu nivel;</li>
+<li><strong>picoCTF</strong>: concursuri CTF pentru începători, cu exerciții rămase online;</li>
+<li><strong>TryHackMe</strong> și <strong>Hack The Box</strong>: mașini vulnerabile făcute pentru antrenament;</li>
+<li>pentru blue team: <strong>CyberDefenders</strong> și <strong>LetsDefend</strong>, cu loguri și alerte reale de analizat.</li></ul>
+<p>Platformele îți dau acordul prin regulile lor, dar doar pentru țintele lor. Nu și pentru restul internetului.</p>`,
+ en:`<p>There's plenty of legal playground:</p>
+<ul><li><strong>your own lab</strong>: isolated VMs, as in the "Kali Linux: a safe lab" lesson;</li>
+<li><strong>OverTheWire Bandit</strong>: Linux and the command line, level by level;</li>
+<li><strong>picoCTF</strong>: beginner CTF competitions, with the challenges kept online;</li>
+<li><strong>TryHackMe</strong> and <strong>Hack The Box</strong>: vulnerable machines built for training;</li>
+<li>for blue team: <strong>CyberDefenders</strong> and <strong>LetsDefend</strong>, with real logs and alerts to analyse.</li></ul>
+<p>The platforms give you permission through their rules, but only for their targets. Not for the rest of the internet.</p>`},
+ try:[{cmd:"ssh bandit0@bandit.labs.overthewire.org -p 2220",d:{ro:"Primul nivel din Bandit (parola e chiar pe pagina nivelului 0).",en:"Bandit's first level (the password is on the level 0 page)."}}]},
+
+{at:["ana"],frame:S11,kind:"d",log:{ro:"plan 90 de zile",en:"90-day plan"},who:{ro:"Plan",en:"Plan"},
+ title:{ro:"Un plan pe 90 de zile și un portofoliu",en:"A 90-day plan and a portfolio"},
+ body:{ro:`<p>Ana își face un plan simplu, cu câteva ore pe săptămână:</p>
+<ul><li><strong>luna 1</strong>: rețele și Linux (lecțiile de aici + Bandit);</li>
+<li><strong>luna 2</strong>: laboratorul Kali, descoperire și porturi, primele CTF-uri;</li>
+<li><strong>luna 3</strong>: un proiect mic de apărare: colectează logurile serverelor de test, scrie o alertă pentru login-uri eșuate (lecția „Primul tău incident”).</li></ul>
+<p>Pentru fiecare lucru învățat scrie o notă scurtă (un <em>write-up</em>) pe un blog sau pe GitHub. La un interviu, un portofoliu concret contează mult. O certificare de început, ca <strong>CompTIA Security+</strong> sau <strong>ISC2 CC</strong>, ajută la trecerea de primul filtru.</p>
+<p class="key">Consecvența bate intensitatea: o oră pe zi timp de trei luni e mai mult decât un weekend întreg o dată.</p>`,
+ en:`<p>Ana makes a simple plan, a few hours a week:</p>
+<ul><li><strong>month 1</strong>: networking and Linux (the lessons here + Bandit);</li>
+<li><strong>month 2</strong>: the Kali lab, discovery and ports, her first CTFs;</li>
+<li><strong>month 3</strong>: a small defense project: collect the test servers' logs, write an alert for failed logins (the "Your first incident" lesson).</li></ul>
+<p>For everything she learns she writes a short note (a <em>write-up</em>) on a blog or GitHub. At an interview, a concrete portfolio counts for a lot. An entry certification, such as <strong>CompTIA Security+</strong> or <strong>ISC2 CC</strong>, helps get past the first filter.</p>
+<p class="key">Consistency beats intensity: an hour a day for three months is more than one whole weekend once.</p>`}},
+
+{at:["cust","net","fw","web","db","staff","ana"],frame:null,kind:"none",summary:true,
+ title:{ro:"Recapitulare",en:"Recap"},
+ body:{ro:`<ul><li>Întâi întrebi <strong>ce protejezi</strong>: confidențialitate, integritate, disponibilitate. Și faci <strong>inventarul</strong>.</li>
+<li><strong>Risc</strong> = probabilitate × impact; vulnerabilitatea e slăbiciunea, amenințarea e cine profită de ea.</li>
+<li>Micșorezi <strong>suprafața de atac</strong> și aperi <strong>în straturi</strong>: rețea, sisteme, identitate, date, detecție.</li>
+<li>Atacurile frecvente: phishing, parole, software neactualizat, configurări greșite, ransomware.</li>
+<li>Roluri: SOC, incident response, pentest, GRC, AppSec. <strong>Doar cu acord scris</strong>.</li>
+<li>Traseu: rețele → Linux → scripting → laborator → detecție. Exersezi legal și scrii despre ce înveți.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Mergi la laborator ↓</button></p>`,
+ en:`<ul><li>First you ask <strong>what you're protecting</strong>: confidentiality, integrity, availability. And you take <strong>inventory</strong>.</li>
+<li><strong>Risk</strong> = likelihood × impact; the vulnerability is the weakness, the threat is who exploits it.</li>
+<li>You shrink the <strong>attack surface</strong> and defend <strong>in layers</strong>: network, systems, identity, data, detection.</li>
+<li>The common attacks: phishing, passwords, unpatched software, misconfigurations, ransomware.</li>
+<li>Roles: SOC, incident response, pentest, GRC, AppSec. <strong>Only with written approval</strong>.</li>
+<li>The path: networking → Linux → scripting → lab → detection. Practise legally and write about what you learn.</li></ul>
+<p><button type="button" class="btn primary" data-goto="lab">Go to the lab ↓</button></p>`}}
+],
+
+reference:(T,lang)=>{
+  const ro=lang==="ro";
+  return `<div class="ref-grid"><section class="card refcard"><h2>${ro?"Conceptele de bază":"The core concepts"}</h2>
+<ul><li><strong>CIA</strong>: ${ro?"confidențialitate, integritate, disponibilitate":"confidentiality, integrity, availability"}</li>
+<li><strong>${ro?"Risc":"Risk"}</strong> = ${ro?"probabilitate × impact":"likelihood × impact"}</li>
+<li><strong>${ro?"Vulnerabilitate":"Vulnerability"}</strong>: ${ro?"slăbiciunea (ex. un CVE)":"the weakness (e.g. a CVE)"}; <strong>${ro?"amenințare":"threat"}</strong>: ${ro?"cine profită":"who exploits it"}</li>
+<li><strong>${ro?"Suprafața de atac":"Attack surface"}</strong>: ${ro?"tot ce e expus":"everything exposed"}</li>
+<li><strong>Defense in depth</strong>: ${ro?"rețea → sisteme → identitate → date → detecție":"network → systems → identity → data → detection"}</li></ul>
+<h3>${ro?"Primele comenzi de știut (pe mașina ta)":"First commands to know (on your machine)"}</h3>
+<pre class="yaml">ip -br addr               <span class="c"># ${ro?"adresele tale":"your addresses"}</span>
+ss -tulpn                 <span class="c"># ${ro?"ce porturi ascultă":"which ports listen"}</span>
+sudo journalctl -p warning -b   <span class="c"># ${ro?"avertismente de la pornire":"warnings since boot"}</span>
+last -n 10                <span class="c"># ${ro?"ultimele login-uri":"recent logins"}</span></pre></section>
+<section class="card refcard"><h2>${ro?"Unde exersezi legal":"Where to practise legally"}</h2>
+<ul><li>${ro?"Laboratorul tău: VM-uri izolate (lecția Kali)":"Your own lab: isolated VMs (the Kali lesson)"}</li>
+<li>OverTheWire Bandit · picoCTF</li>
+<li>TryHackMe · Hack The Box</li>
+<li>Blue team: CyberDefenders · LetsDefend</li></ul>
+<h3>${ro?"Certificări de început (exemple)":"Entry certifications (examples)"}</h3>
+<ul><li>CompTIA Security+ · ISC2 Certified in Cybersecurity (CC)</li></ul>
+<h3>${ro?"Regula de aur":"The golden rule"}</h3>
+<p>${ro?"Niciun test fără acord scris. Scopul, perioada și tehnicile permise sunt scrise înainte.":"No test without written approval. Scope, period and allowed techniques are written down first."}</p></section></div>`;
+},
+
+gloss:[
+ ["CIA",null,{ro:"Confidențialitate, integritate, disponibilitate: cele trei lucruri pe care le protejează securitatea.",en:"Confidentiality, integrity, availability: the three things security protects."}],
+ [{ro:"Vulnerabilitate",en:"Vulnerability"},null,{ro:"O slăbiciune care poate fi folosită de un atacator.",en:"A weakness an attacker can use."}],
+ ["CVE",null,{ro:"Identificatorul public al unei vulnerabilități cunoscute, ex. CVE-2024-12345.",en:"The public identifier of a known vulnerability, e.g. CVE-2024-12345."}],
+ [{ro:"Amenințare",en:"Threat"},null,{ro:"Cine sau ce ar putea profita de o vulnerabilitate.",en:"Who or what could take advantage of a vulnerability."}],
+ [{ro:"Risc",en:"Risk"},null,{ro:"Probabilitatea unui incident × impactul lui.",en:"An incident's likelihood × its impact."}],
+ [{ro:"Suprafața de atac",en:"Attack surface"},null,{ro:"Tot ce poate fi atins de un atacator: porturi, aplicații, conturi, oameni.",en:"Everything an attacker can reach: ports, apps, accounts, people."}],
+ ["Defense in depth",null,{ro:"Mai multe straturi de apărare, ca unul singur să nu fie suficient pentru a cădea.",en:"Several layers of defense, so that one failing isn't enough."}],
+ ["SOC",null,{ro:"Security Operations Center: echipa care urmărește alertele și investighează.",en:"Security Operations Center: the team that watches alerts and investigates."}],
+ ["CTF",null,{ro:"Capture The Flag: concurs cu exerciții de securitate, legal și făcut pentru învățat.",en:"Capture The Flag: a contest of security challenges, legal and built for learning."}],
+ ["GRC",null,{ro:"Guvernanță, risc și conformitate: politici, evaluări de risc, standarde și legi.",en:"Governance, risk and compliance: policies, risk assessments, standards and laws."}]
+],
+glossEx:{
+ "CIA":{ro:"Un IBAN schimbat pe factură lovește integritatea.",en:"A swapped IBAN on an invoice hits integrity."},
+ "CTF":{ro:"picoCTF are exerciții pentru începători, disponibile tot anul.",en:"picoCTF has beginner challenges available all year."}
+},
+
+quiz:[
+ {"q":{"ro":"Un atacator schimbă IBAN-ul de pe facturile magazinului. Ce literă din CIA e lovită?","en":"An attacker changes the IBAN on the shop's invoices. Which CIA letter is hit?"},"o":[{"ro":"Confidențialitate","en":"Confidentiality"},{"ro":"Integritate","en":"Integrity"},{"ro":"Disponibilitate","en":"Availability"},{"ro":"Niciuna","en":"None"}],"a":1,"e":{"ro":"Datele au fost modificate pe ascuns.","en":"Data was secretly altered."}},
+ {"q":{"ro":"Care e diferența dintre vulnerabilitate și amenințare?","en":"What's the difference between a vulnerability and a threat?"},"o":[{"ro":"Sunt sinonime","en":"They're synonyms"},{"ro":"Amenințarea e slăbiciunea, vulnerabilitatea e atacatorul","en":"The threat is the weakness, the vulnerability is the attacker"},{"ro":"Vulnerabilitatea e slăbiciunea; amenințarea e cine sau ce ar putea profita de ea","en":"The vulnerability is the weakness; the threat is who or what could exploit it"},{"ro":"Vulnerabilitatea e doar în hardware","en":"Vulnerabilities are hardware only"}],"a":2,"e":{"ro":"Riscul le combină: probabilitate × impact.","en":"Risk combines them: likelihood × impact."}},
+ {"q":{"ro":"De unde începi apărarea unei firme?","en":"Where do you start defending a company?"},"o":[{"ro":"Cu inventarul: ce sisteme, conturi și date există","en":"With the inventory: which systems, accounts and data exist"},{"ro":"Cu un pentest pe tot internetul","en":"With a pentest of the whole internet"},{"ro":"Cumpărând cel mai scump firewall","en":"By buying the most expensive firewall"},{"ro":"Ștergând logurile vechi","en":"By deleting old logs"}],"a":0,"e":{"ro":"Nu poți apăra ce nu știi că ai.","en":"You can't defend what you don't know you have."}},
+ {"q":{"ro":"Ce înseamnă „apărare în straturi”?","en":"What does \"defense in depth\" mean?"},"o":[{"ro":"Un firewall foarte bun","en":"One very good firewall"},{"ro":"Mai multe controale succesive, ca un singur eșec să nu fie suficient","en":"Several successive controls, so a single failure isn't enough"},{"ro":"Parole schimbate zilnic","en":"Passwords changed daily"},{"ro":"Servere în subsol","en":"Servers in the basement"}],"a":1,"e":{"ro":"Ex.: parola furată e oprită de MFA.","en":"E.g. a stolen password is stopped by MFA."}},
+ {"q":{"ro":"Care e cea mai ieftină reducere a suprafeței de atac pentru SSH deschis spre internet?","en":"What's the cheapest way to shrink the attack surface of SSH open to the internet?"},"o":[{"ro":"Schimbi portul din 22 în 2222 și gata","en":"Move it from port 22 to 2222 and you're done"},{"ro":"Lași așa, e criptat","en":"Leave it, it's encrypted"},{"ro":"Îl faci accesibil doar din VPN sau dintr-o listă de adrese, cu chei în loc de parolă","en":"Make it reachable only over VPN or from an address list, with keys instead of passwords"},{"ro":"Oprești site-ul","en":"Turn off the site"}],"a":2,"e":{"ro":"Schimbarea portului doar reduce zgomotul din loguri.","en":"Changing the port only reduces log noise."}},
+ {"q":{"ro":"Un prieten îți cere să-i „testezi” site-ul firmei unde lucrează. Ce ai nevoie înainte?","en":"A friend asks you to \"test\" the site of the company they work for. What do you need first?"},"o":[{"ro":"Nimic, e prietenul tău","en":"Nothing, they're your friend"},{"ro":"Doar un VPN","en":"Just a VPN"},{"ro":"Un acord scris de la cine are dreptul să-l dea (firma), cu scop și reguli","en":"Written approval from whoever can give it (the company), with scope and rules"},{"ro":"Să o faci noaptea","en":"To do it at night"}],"a":2,"e":{"ro":"Fără acord e acces ilegal (în România, art. 360 Cod penal).","en":"Without approval it's illegal access (in Romania, Criminal Code art. 360)."}},
+ {"q":{"ro":"Ce rol e cel mai des punctul de intrare în securitate?","en":"Which role is most often the entry point into security?"},"o":[{"ro":"Analist SOC","en":"SOC analyst"},{"ro":"CISO","en":"CISO"},{"ro":"Red team lead","en":"Red team lead"},{"ro":"Criptograf","en":"Cryptographer"}],"a":0,"e":{"ro":"Mulți încep în SOC sau vin din IT.","en":"Many start in a SOC or come from IT."}},
+ {"q":{"ro":"Ce înveți înainte de uneltele de securitate?","en":"What do you learn before security tools?"},"o":[{"ro":"Nimic, uneltele fac totul","en":"Nothing, the tools do everything"},{"ro":"Rețele, Linux și un limbaj de scripting","en":"Networking, Linux and a scripting language"},{"ro":"Doar teorie juridică","en":"Only legal theory"},{"ro":"Design grafic","en":"Graphic design"}],"a":1,"e":{"ro":"Ca să recunoști anormalul, trebuie să știi normalul.","en":"To recognise abnormal, you need to know normal."}}
+]
+};
+})();
+</script>
+<script src="../assets/engine.js?v=4"></script>
+<script src="../assets/labs-data.js?v=11"></script>
+<script src="../assets/lab.js?v=2"></script>
+<script type="module" src="../assets/auth.js?v=19"></script>
+</body>
+</html>

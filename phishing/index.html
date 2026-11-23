@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Phishing sau nu?</title>
+<meta name="description" content="Mini-joc: zece e-mailuri și SMS-uri; decizi care sunt phishing și afli semnele. / Mini-game: ten e-mails and texts; decide which are phishing and learn the signs.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/theme.css">
+<link rel="stylesheet" href="../assets/casino.css?v=1">
+<style>
+.msg{border:2px solid var(--text);border-radius:14px;background:var(--bg);overflow:hidden}
+.msg .bar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface2);border-bottom:2px solid var(--text);font:700 .8rem var(--mono);text-transform:uppercase;letter-spacing:.04em}
+.msg .hd{padding:12px 14px 8px;border-bottom:1px solid var(--border);display:grid;gap:3px;font-size:.92rem;overflow-wrap:anywhere}
+.msg .hd b{font-weight:700}
+.msg .hd .k{color:var(--muted);display:inline-block;min-width:4.5em}
+.msg .hd .subj{font:700 1.05rem var(--head);margin-top:4px}
+.msg .bd{padding:12px 14px;font-size:.98rem;line-height:1.5;overflow-wrap:anywhere}
+.msg .bd p{margin:0 0 8px}
+.lnk{color:var(--link);text-decoration:underline;cursor:pointer;background:none;border:0;padding:0;font:inherit}
+.real{display:block;margin-top:6px;font:600 .85rem var(--mono);background:var(--surface2);border:1px dashed var(--text);border-radius:8px;padding:6px 8px;overflow-wrap:anywhere}
+.att{display:inline-flex;gap:6px;align-items:center;border:1px solid var(--border);border-radius:8px;padding:5px 9px;font:600 .85rem var(--mono);margin-top:4px}
+.sms{max-width:440px;margin:0 auto}
+.sms .bd{background:var(--surface2);margin:12px;border-radius:14px 14px 14px 4px;border:1px solid var(--border)}
+.qr{width:84px;height:84px;margin:6px 0;background:repeating-conic-gradient(#151515 0 25%,#fff 0 50%) 0 0/14px 14px;border:4px solid #fff;outline:2px solid #151515}
+.choice{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:14px}
+.choice .btn{justify-content:center}
+.btn.ph{background:#c0281b;color:#fff}
+.btn.ok{background:#1d8a4f;color:#fff}
+.fb{margin-top:14px;border:2px solid var(--text);border-radius:12px;padding:12px 14px;background:var(--surface2)}
+.fb h3{margin:0 0 6px;font:700 1.05rem var(--head)}
+.fb.good h3{color:var(--ok)}.fb.bad h3{color:var(--bad)}
+.fb ul{margin:6px 0 0;padding-left:20px}
+.prog{display:flex;gap:4px;margin:0 0 12px}
+.prog i{flex:1;height:8px;border-radius:4px;background:var(--border)}
+.prog i.g{background:var(--ok)}.prog i.b{background:var(--bad)}.prog i.c{background:var(--accent)}
+.end{text-align:center}
+.end .big{font:700 2.6rem var(--head);margin:6px 0}
+.review{text-align:left;margin-top:14px}
+.review li{margin-bottom:6px}
+</style>
+</head>
+<body>
+<header class="topbar" id="top"><div class="topbar-in">
+  <a class="brand" href="../index.html"><svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="var(--accent)"/><path d="M7 16h18M19 11l6 5-6 5" fill="none" stroke="var(--accent-text)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="16" r="2.6" fill="var(--accent-text)"/></svg><span data-t="brand"></span></a>
+  <nav class="nav"><a href="../index.html" data-t="home"></a><a href="../joc/index.html" data-t="games"></a></nav>
+  <div class="tools"><div class="seg" role="group" aria-label="Limba / Language"><button type="button" data-lang="ro">RO</button><button type="button" data-lang="en">EN</button></div><button type="button" class="icon-btn" id="theme">◐</button></div>
+</div></header>
+
+<main class="page">
+  <h1 data-t="title"></h1>
+  <p class="lead" data-t="lead"></p>
+
+  <section class="card" id="intro">
+    <p><b data-t="howT"></b></p>
+    <p data-t="how"></p>
+    <div class="row"><button type="button" class="btn big" id="start" data-t="start"></button><a class="btn sec" href="../cyber-conturi/index.html" data-t="lesson"></a></div>
+    <p class="note" data-t="note"></p>
+  </section>
+
+  <section class="card" id="game" hidden>
+    <div class="hud"><span><span data-t="msgL"></span> <b id="no">1/10</b></span><span><span data-t="scoreL"></span> <b id="sc">0</b></span></div>
+    <div class="prog" id="prog"></div>
+    <div id="box"></div>
+    <div class="choice" id="choice">
+      <button type="button" class="btn big ph" id="bPh" data-t="isPh"></button>
+      <button type="button" class="btn big ok" id="bOk" data-t="isOk"></button>
+    </div>
+    <div id="fb"></div>
+  </section>
+
+  <section class="card end" id="end" hidden>
+    <p data-t="endT"></p>
+    <p class="big" id="final"></p>
+    <p id="verdict"></p>
+    <div class="row" style="justify-content:center"><button type="button" class="btn" id="again" data-t="again"></button><a class="btn sec" href="../cyber-conturi/index.html" data-t="lesson"></a><a class="btn sec" href="../rezultate/index.html" data-t="results"></a></div>
+    <ol class="review" id="review"></ol>
+  </section>
+</main>
+
+<script type="module" src="../assets/auth.js?v=19"></script>
+<script>
+(function(){
+"use strict";
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+let lang=store.get("cadru-lang")==="en"?"en":"ro";
+const T=v=>v&&typeof v==="object"&&!Array.isArray(v)?v[lang]:Array.isArray(v)?v[lang==="en"?1:0]:v;
+const L=(ro,en)=>lang==="en"?en:ro;
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
+const UI={brand:["Rețea pas cu pas","Network step by step"],home:["← Lecții","← Lessons"],games:["🎮 Jocuri","🎮 Games"],
+  title:["🎣 Phishing sau nu?","🎣 Phishing or not?"],
+  lead:["Zece mesaje dintr-o săptămână obișnuită la birou. Unele sunt phishing, altele sunt perfect normale. Tu decizi.","Ten messages from an ordinary week at the office. Some are phishing, others are perfectly normal. You decide."],
+  howT:["Cum se joacă","How to play"],
+  how:["Citește expeditorul, subiectul și textul. Apasă pe link ca să vezi adresa reală (ca un hover cu mouse-ul). Apoi alege „Phishing” sau „Legitim”. După fiecare mesaj vezi semnele pe care trebuia să le observi.","Read the sender, the subject and the text. Tap the link to see its real address (like hovering with the mouse). Then choose \"Phishing\" or \"Legit\". After each message you see the signs you should have spotted."],
+  start:["▶ Începe","▶ Start"],lesson:["📖 Lecția despre phishing","📖 The phishing lesson"],
+  note:["Toate firmele, domeniile și persoanele sunt fictive (.example). Peste 8 din 10 și rezultatul tău se salvează.","All companies, domains and people are fictional (.example). Your result is saved; aim for over 8 out of 10."],
+  msgL:["Mesajul","Message"],scoreL:["Corecte","Correct"],isPh:["🎣 Phishing","🎣 Phishing"],isOk:["✅ Legitim","✅ Legit"],
+  endT:["Rezultatul tău","Your result"],again:["↻ Joacă din nou (alte mesaje)","↻ Play again (other messages)"],results:["★ Rezultate","★ Results"]};
+
+const M=[
+ {kind:"sms",from:"+40 7xx xxx 214",body:[{ro:"CurierRapid: Coletul tău e reținut în depozit. Plătește taxa de livrare de 2,99 lei în 24h:",en:"CurierRapid: Your parcel is held at the depot. Pay the 2.99 lei delivery fee within 24h:"}],link:{t:"curierrapid-taxa.example/p",u:"http://curierrapid-taxa.example/p?id=88"},ph:true,
+  why:[{ro:"Curierii nu cer taxe mici prin SMS cu link; suma mică te face să nu stai pe gânduri.",en:"Couriers don't ask for small fees by text with a link; the small amount stops you thinking twice."},{ro:"Domeniul nu e al curierului: curierrapid-taxa.example.",en:"The domain isn't the courier's: curierrapid-taxa.example."},{ro:"Termen scurt („24h”): urgență.",en:"A short deadline (\"24h\"): urgency."}]},
+ {kind:"mail",from:"CurierRapid <notificari@curierrapid.example>",to:"mihai@magazin.example",subj:{ro:"Coletul AWB 5512 0934 a fost livrat",en:"Parcel AWB 5512 0934 was delivered"},body:[{ro:"Bună ziua, coletul dumneavoastră a fost livrat azi la 11:42 și semnat de „Recepție”.",en:"Hello, your parcel was delivered today at 11:42 and signed for by \"Reception\"."},{ro:"Detalii despre livrare:",en:"Delivery details:"}],link:{t:"curierrapid.example/awb/55120934",u:"https://curierrapid.example/awb/55120934"},ph:false,
+  why:[{ro:"Domeniul e cel al curierului, iar linkul duce tot acolo.",en:"The domain is the courier's, and the link goes there too."},{ro:"Nu cere parole, plăți sau date; doar informează.",en:"It doesn't ask for passwords, payments or data; it just informs."},{ro:"Se potrivește cu ce așteptai (un colet comandat).",en:"It matches something you expected (a parcel you ordered)."}]},
+ {kind:"mail",from:"BancaMea Securitate <securitate@bancamea-suport.example>",to:"mihai@magazin.example",subj:{ro:"⚠ Contul dvs. a fost suspendat temporar",en:"⚠ Your account has been temporarily suspended"},body:[{ro:"Am detectat activitate neobișnuită. Pentru a evita închiderea definitivă a contului, confirmați-vă datele în 12 ore.",en:"We detected unusual activity. To avoid permanent closure of your account, confirm your details within 12 hours."}],link:{t:{ro:"Confirmă datele",en:"Confirm details"},u:"http://bancamea.example.verificare-cont.example/login"},ph:true,
+  why:[{ro:"Domeniul expeditorului e bancamea-suport.example, nu bancamea.example.",en:"The sender's domain is bancamea-suport.example, not bancamea.example."},{ro:"Linkul real duce la verificare-cont.example (citește de la dreapta).",en:"The real link goes to verificare-cont.example (read from the right)."},{ro:"Amenințare + termen: „închidere definitivă”, „12 ore”.",en:"A threat + a deadline: \"permanent closure\", \"12 hours\"."}]},
+ {kind:"mail",from:"BancaMea <extras@bancamea.example>",to:"mihai@magazin.example",subj:{ro:"Extrasul de cont pentru noiembrie",en:"Your November statement"},body:[{ro:"Extrasul pentru luna noiembrie este disponibil în aplicația BancaMea, la Conturi → Extrase.",en:"Your November statement is available in the BancaMea app, under Accounts → Statements."},{ro:"Din motive de securitate, nu vă trimitem niciodată linkuri de autentificare prin e-mail.",en:"For security reasons, we never send sign-in links by e-mail."}],ph:false,
+  why:[{ro:"Domeniul corect al băncii.",en:"The bank's correct domain."},{ro:"Niciun link și nicio cerere: te trimite în aplicația pe care o ai deja.",en:"No link and no request: it sends you to the app you already have."}]},
+ {kind:"mail",from:"Andrei Popescu <andrei.director@mail-personal.example>",to:"mihai@magazin.example",subj:{ro:"Rapid, te rog",en:"Quick, please"},body:[{ro:"Mihai, sunt într-o ședință și nu pot vorbi la telefon. Am nevoie urgent de 5 carduri cadou de 500 lei pentru un client. Cumpără-le și trimite-mi codurile aici. Îți dau banii mâine.",en:"Mihai, I'm in a meeting and can't talk on the phone. I urgently need 5 gift cards of 500 lei for a client. Buy them and send me the codes here. I'll pay you back tomorrow."}],ph:true,
+  why:[{ro:"Directorul scrie de pe o adresă personală necunoscută, nu de pe magazin.example.",en:"The director writes from an unknown personal address, not magazin.example."},{ro:"Carduri cadou + „nu pot vorbi” = escrocheria clasică „CEO fraud”.",en:"Gift cards + \"can't talk\" = the classic \"CEO fraud\" scam."},{ro:"Verifici pe alt canal: îl suni pe numărul pe care îl știi deja.",en:"Verify on another channel: call him on the number you already know."}]},
+ {kind:"mail",from:"IT <it@magazin.example>",to:"toti@magazin.example",subj:{ro:"Mentenanță programată sâmbătă, 22:00–23:00",en:"Planned maintenance Saturday, 22:00–23:00"},body:[{ro:"Sâmbătă seara actualizăm serverul de fișiere. Între 22:00 și 23:00 folderele partajate nu vor fi disponibile. Nu trebuie să faceți nimic.",en:"On Saturday evening we're updating the file server. Between 22:00 and 23:00 the shared folders won't be available. You don't need to do anything."}],ph:false,
+  why:[{ro:"Vine din domeniul firmei, de la echipa care chiar face mentenanța.",en:"It comes from the company domain, from the team that actually does maintenance."},{ro:"Nu cere nimic: nici click, nici parolă.",en:"It asks for nothing: no click, no password."}]},
+ {kind:"mail",from:"Administrator cont <admin@magazin-example.portal-login.example>",to:"mihai@magazin.example",subj:{ro:"Parola dvs. expiră astăzi",en:"Your password expires today"},body:[{ro:"Parola contului de e-mail expiră astăzi. Pentru a păstra parola actuală, autentificați-vă aici:",en:"Your e-mail account password expires today. To keep your current password, sign in here:"}],link:{t:{ro:"Păstrează parola actuală",en:"Keep current password"},u:"https://magazin-example.portal-login.example/owa"},ph:true,
+  why:[{ro:"„magazin-example” cu cratimă nu e magazin.example; domeniul real e portal-login.example.",en:"\"magazin-example\" with a hyphen isn't magazin.example; the real domain is portal-login.example."},{ro:"„Păstrează parola actuală” nu are sens: e doar un pretext să o introduci.",en:"\"Keep current password\" makes no sense: it's just a pretext for typing it in."},{ro:"HTTPS (lacătul) nu înseamnă că site-ul e al cui pretinde.",en:"HTTPS (the padlock) doesn't mean the site belongs to who it claims."}]},
+ {kind:"mail",from:"Contabilitate Furnizor <contabilitate@furnizor-ro.example>",to:"mihai@magazin.example",subj:{ro:"RE: Factura FV-2211 – IBAN nou",en:"RE: Invoice FV-2211 – new IBAN"},body:[{ro:"Bună ziua, vă informăm că am schimbat banca. Vă rugăm ca plata facturii FV-2211 să o faceți în noul cont: RO49 XXXX 0000 1111 2222 3333. Mulțumim!",en:"Hello, please note we've changed banks. Please pay invoice FV-2211 into the new account: RO49 XXXX 0000 1111 2222 3333. Thank you!"}],ph:true,
+  why:[{ro:"Furnizorul real e furnizor.example; aici e furnizor-ro.example.",en:"The real supplier is furnizor.example; this is furnizor-ro.example."},{ro:"Schimbarea IBAN-ului prin e-mail e tiparul fraudei BEC (Business Email Compromise).",en:"An IBAN change by e-mail is the BEC (Business Email Compromise) pattern."},{ro:"Confirmi orice IBAN nou telefonic, la un număr pe care îl aveai deja.",en:"Confirm any new IBAN by phone, on a number you already had."}]},
+ {kind:"mail",ctx:{ro:"Tocmai ai apăsat „Am uitat parola” pe magazin.example.",en:"You just clicked \"Forgot password\" on magazin.example."},from:"Magazin <no-reply@magazin.example>",to:"mihai@magazin.example",subj:{ro:"Resetarea parolei",en:"Password reset"},body:[{ro:"Ai cerut resetarea parolei. Linkul e valabil 30 de minute. Dacă nu ai cerut tu, ignoră acest mesaj.",en:"You requested a password reset. The link is valid for 30 minutes. If it wasn't you, ignore this message."}],link:{t:{ro:"Setează o parolă nouă",en:"Set a new password"},u:"https://magazin.example/reset?t=Qm9x…"},ph:false,
+  why:[{ro:"Ai cerut tu resetarea chiar acum: mesajul era așteptat.",en:"You requested the reset just now: the message was expected."},{ro:"Expeditorul și linkul sunt pe magazin.example.",en:"The sender and the link are on magazin.example."}]},
+ {kind:"mail",from:"Telefonie VoIP <voicemail@voip-notificari.example>",to:"mihai@magazin.example",subj:{ro:"Mesaj vocal nou (0:42) de la +40 21 xxx",en:"New voicemail (0:42) from +40 21 xxx"},body:[{ro:"Aveți un mesaj vocal nou. Deschideți atașamentul pentru a-l asculta.",en:"You have a new voicemail. Open the attachment to listen."}],att:"mesaj_vocal_042.html",ph:true,
+  why:[{ro:"Firma nu folosește acest serviciu de voicemail; domeniul e străin.",en:"The company doesn't use this voicemail service; the domain is foreign."},{ro:"Un atașament .html se deschide în browser și arată de obicei o pagină falsă de login.",en:"An .html attachment opens in the browser and usually shows a fake login page."}]},
+ {kind:"mail",from:"Videoteca <facturi@videoteca.example>",to:"mihai.personal@mail.example",subj:{ro:"Abonamentul tău a fost reînnoit",en:"Your subscription was renewed"},body:[{ro:"Abonamentul Standard a fost reînnoit pe 23 noiembrie: 39 lei, cu cardul care se termină în 4417. Poți vedea istoricul plăților în cont.",en:"Your Standard subscription was renewed on 23 November: 39 lei, on the card ending in 4417. You can see your payment history in your account."}],link:{t:"videoteca.example/cont",u:"https://videoteca.example/cont/plati"},ph:false,
+  why:[{ro:"Domeniul serviciului, suma și cardul se potrivesc cu abonamentul tău.",en:"The service's domain, the amount and the card match your subscription."},{ro:"Nu cere date de card sau parolă și nu amenință.",en:"It doesn't ask for card details or a password and doesn't threaten."}]},
+ {kind:"sms",from:"PREMII",body:[{ro:"FELICITĂRI! Ești vizitatorul cu nr. 1.000.000 și ai câștigat un telefon nou! Revendică premiul în 10 minute:",en:"CONGRATULATIONS! You're visitor no. 1,000,000 and you've won a new phone! Claim your prize within 10 minutes:"}],link:{t:"premiu-castigator.example",u:"http://premiu-castigator.example/claim"},ph:true,
+  why:[{ro:"Un premiu la un concurs la care nu te-ai înscris.",en:"A prize from a contest you never entered."},{ro:"Termen absurd de scurt (10 minute) și majuscule.",en:"An absurdly short deadline (10 minutes) and capitals."}]},
+ {kind:"mail",from:"Semnătură Online <docs@semnatura-online.example>",to:"mihai@magazin.example",subj:{ro:"Aveți un document de semnat: Contract_2026.pdf",en:"You have a document to sign: Contract_2026.pdf"},body:[{ro:"Scanați codul QR cu telefonul pentru a revizui și semna documentul.",en:"Scan the QR code with your phone to review and sign the document."}],qr:true,ph:true,
+  why:[{ro:"Un cod QR ascunde linkul: nu-l poți verifica cu mouse-ul (quishing).",en:"A QR code hides the link: you can't check it with the mouse (quishing)."},{ro:"Te mută pe telefon, unde filtrele de securitate ale firmei nu te protejează.",en:"It moves you to your phone, where the company's security filters don't protect you."},{ro:"Nu așteptai niciun contract de la acest serviciu.",en:"You weren't expecting any contract from this service."}]},
+ {kind:"mail",from:"Resurse Umane <hr@magazin.example>",to:"toti@magazin.example",subj:{ro:"Fluturașii de salariu pentru noiembrie",en:"Payslips for November"},body:[{ro:"Fluturașii de salariu pentru noiembrie sunt disponibili în portalul intern, la secțiunea Salarii.",en:"The November payslips are available in the internal portal, under Payroll."}],link:{t:"portal.magazin.example/salarii",u:"https://portal.magazin.example/salarii"},ph:false,
+  why:[{ro:"portal.magazin.example: citit de la dreapta, domeniul e magazin.example; „portal” e un subdomeniu al firmei.",en:"portal.magazin.example: read from the right, the domain is magazin.example; \"portal\" is a company subdomain."},{ro:"Vine de la HR, pe domeniul firmei, despre ceva lunar și așteptat.",en:"It comes from HR, on the company domain, about something monthly and expected."}]}
+];
+const N=10;
+let deck=[],i=0,score=0,res=[];
+
+function shuffle(a){a=a.slice();for(let k=a.length-1;k>0;k--){const r=new Uint32Array(1);crypto.getRandomValues(r);const j=r[0]%(k+1);[a[k],a[j]]=[a[j],a[k]]}return a}
+function pickDeck(){
+  // 10 of the 14, with at least 3 legit and 4 phishing
+  for(;;){const d=shuffle(M).slice(0,N);const p=d.filter(m=>m.ph).length;if(p>=4&&N-p>=3)return d}
+}
+function renderMsg(m){
+  const lk=m.link?`<p><button type="button" class="lnk" id="lnk">${esc(T(m.link.t))}</button><span class="real" id="real" hidden>🔗 ${esc(m.link.u)}</span></p>`:"";
+  const att=m.att?`<p><span class="att">📎 ${esc(m.att)}</span></p>`:"";
+  const qr=m.qr?`<div class="qr" role="img" aria-label="QR"></div>`:"";
+  const ctx=m.ctx?`<p class="note" style="margin:0 0 10px">ℹ ${esc(T(m.ctx))}</p>`:"";
+  if(m.kind==="sms")return ctx+`<div class="msg sms"><div class="bar">💬 SMS · ${esc(m.from)}</div><div class="bd">${m.body.map(p=>`<p>${esc(T(p))}</p>`).join("")}${lk}</div></div>`;
+  return ctx+`<div class="msg"><div class="bar">✉ ${L("E-mail","E-mail")}</div><div class="hd"><span><span class="k">${L("De la","From")}:</span> <b>${esc(m.from)}</b></span><span><span class="k">${L("Către","To")}:</span> ${esc(m.to)}</span><span class="subj">${esc(T(m.subj))}</span></div><div class="bd">${m.body.map(p=>`<p>${esc(T(p))}</p>`).join("")}${lk}${qr}${att}</div></div>`;
+}
+function show(){
+  const m=deck[i];
+  $("#no").textContent=(i+1)+"/"+N;$("#sc").textContent=score;
+  $("#prog").innerHTML=deck.map((_,k)=>`<i class="${k<res.length?(res[k]?"g":"b"):k===i?"c":""}"></i>`).join("");
+  $("#box").innerHTML=renderMsg(m);$("#fb").innerHTML="";$("#choice").hidden=false;
+  const l=$("#lnk");if(l)l.onclick=()=>{$("#real").hidden=false};
+}
+function answer(saysPh){
+  const m=deck[i],ok=saysPh===m.ph;if(ok)score++;res.push(ok);
+  const r=$("#real");if(r)r.hidden=false;
+  $("#choice").hidden=true;
+  $("#fb").innerHTML=`<div class="fb ${ok?"good":"bad"}" role="status"><h3>${ok?L("Corect!","Correct!"):L("Nu chiar.","Not quite.")} ${m.ph?L("E phishing.","It's phishing."):L("E un mesaj legitim.","It's a legit message.")}</h3><b>${m.ph?L("Semnele:","The signs:"):L("De ce e în regulă:","Why it's fine:")}</b><ul>${m.why.map(w=>`<li>${esc(T(w))}</li>`).join("")}</ul><div class="row"><button type="button" class="btn" id="next">${i+1<N?L("Următorul mesaj →","Next message →"):L("Vezi rezultatul →","See the result →")}</button></div></div>`;
+  $("#sc").textContent=score;
+  $("#prog").innerHTML=deck.map((_,k)=>`<i class="${k<res.length?(res[k]?"g":"b"):""}"></i>`).join("");
+  const nx=$("#next");nx.onclick=()=>{i++;if(i<N){show();$("#game").scrollIntoView({block:"start",behavior:"smooth"})}else finish()};nx.focus();
+}
+function finish(){
+  $("#game").hidden=true;$("#end").hidden=false;
+  $("#final").textContent=score+" / "+N;
+  $("#verdict").textContent=score>=9?L("Excelent: ai ochi de analist.","Excellent: you have an analyst's eye."):score>=7?L("Bine! Mai uită-te la mesajele greșite de mai jos.","Good! Have another look at the ones you missed below."):L("Phishing-ul e făcut să păcălească. Citește lecția și mai încearcă.","Phishing is built to fool. Read the lesson and try again.");
+  $("#review").innerHTML=deck.map((m,k)=>`<li>${res[k]?"✅":"❌"} ${esc(m.kind==="sms"?"SMS: "+T(m.body[0]).slice(0,60)+"…":T(m.subj))} — <b>${m.ph?"phishing":L("legitim","legit")}</b></li>`).join("");
+  window.dispatchEvent(new CustomEvent("quiz:complete",{detail:{lesson:"phishing",title:"Mini-joc: Phishing sau nu?",score,total:N,answers:res.map(x=>x?1:0)}}));
+  $("#end").scrollIntoView({block:"start",behavior:"smooth"});
+}
+function start(){deck=pickDeck();i=0;score=0;res=[];$("#intro").hidden=true;$("#end").hidden=true;$("#game").hidden=false;show()}
+
+let lastChoice=null;
+$("#bPh").onclick=()=>{lastChoice=true;answer(true)};$("#bOk").onclick=()=>{lastChoice=false;answer(false)};
+$("#start").onclick=start;$("#again").onclick=start;
+document.querySelectorAll("[data-lang]").forEach(b=>b.onclick=()=>{lang=b.dataset.lang;store.set("cadru-lang",lang);
+  // re-render without changing the score: redraw the current message and, if answered, its feedback
+  const answered=!$("#game").hidden&&res.length>i;
+  if(answered){const ok=res.pop();if(ok)score--;}
+  document.documentElement.lang=lang;document.title=L("Phishing sau nu?","Phishing or not?");
+  document.querySelectorAll("[data-t]").forEach(e=>{if(UI[e.dataset.t])e.textContent=T(UI[e.dataset.t])});
+  document.querySelectorAll("[data-lang]").forEach(x=>x.setAttribute("aria-pressed",x.dataset.lang===lang?"true":"false"));
+  if(!$("#game").hidden&&deck.length){show();if(answered)answer(lastChoice)}
+  if(!$("#end").hidden){$("#final").textContent=score+" / "+N;$("#review").innerHTML=deck.map((m,k)=>`<li>${res[k]?"✅":"❌"} ${esc(m.kind==="sms"?"SMS: "+T(m.body[0]).slice(0,60)+"…":T(m.subj))} — <b>${m.ph?"phishing":L("legitim","legit")}</b></li>`).join("")}
+});
+const saved=store.get("cadru-theme");if(saved==="light"||saved==="dark")document.documentElement.dataset.theme=saved;
+$("#theme").onclick=()=>{const r=document.documentElement,d=r.dataset.theme?r.dataset.theme==="dark":matchMedia("(prefers-color-scheme: dark)").matches;const nt=d?"light":"dark";r.dataset.theme=nt;store.set("cadru-theme",nt)};
+document.documentElement.lang=lang;
+document.querySelectorAll("[data-t]").forEach(e=>{if(UI[e.dataset.t])e.textContent=T(UI[e.dataset.t])});
+document.querySelectorAll("[data-lang]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.lang===lang?"true":"false"));
+document.title=L("Phishing sau nu?","Phishing or not?");
+})();
+</script>
+</body>
+</html>

@@ -30,7 +30,7 @@ export async function openWallet({ onChange = () => {}, onError = () => {} } = {
     import("./firebase.js?v=5"),
     import("https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js"),
     import("https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js"),
-    import("./points.js?v=12")
+    import("./points.js?v=13")
   ]);
   const user = await new Promise(res => { const off = onAuthStateChanged(auth, u => { if (u) { off(); res(u); } }); });
   const ref = fs.doc(db, "users", user.uid);
