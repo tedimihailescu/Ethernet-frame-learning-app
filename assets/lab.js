@@ -69,7 +69,7 @@
 .lab-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
 .lab-row input[type=text]{flex:1 1 200px;min-width:0;max-width:340px;font:600 .95rem var(--mono);padding:9px 11px;border:2px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text)}
 .lab-row input[type=text]:focus{border-color:var(--text);outline:none}
-.lab-btn{border:2px solid var(--text);background:var(--accent);color:var(--accent-text);border-radius:8px;padding:8px 14px;font:700 .9rem var(--sans);cursor:pointer}
+.lab-btn{border:1px solid var(--accent);background:var(--accent);color:var(--accent-text);border-radius:8px;padding:8px 14px;font:700 .9rem var(--sans);cursor:pointer}
 .lab-btn.sec{background:var(--surface);color:var(--text);border-color:var(--border)}
 .lab-btn:disabled{opacity:.5;cursor:default}
 .lab-fb{margin:10px 0 0;font-size:.92rem;overflow-wrap:anywhere}

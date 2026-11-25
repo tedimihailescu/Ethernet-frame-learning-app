@@ -15,7 +15,7 @@
 .page{max-width:900px;margin:0 auto;padding:24px max(16px,env(safe-area-inset-right,0px)) 40px max(16px,env(safe-area-inset-left,0px))}
 h1{font:700 clamp(1.6rem,4vw,2.4rem) var(--head);margin:0 0 6px}
 .lead{color:var(--muted);margin:0 0 16px}
-.streak{display:grid;grid-template-columns:auto minmax(0,1fr);gap:14px 20px;align-items:center;background:var(--surface);border:2px solid var(--text);border-radius:14px;padding:16px;margin-bottom:18px}
+.streak{display:grid;grid-template-columns:auto minmax(0,1fr);gap:14px 20px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:18px}
 .fire{font:700 2.6rem var(--head);line-height:1;text-align:center;min-width:3.2ch}
 .fire small{display:block;font:600 .75rem var(--mono);text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-top:4px}
 .sinfo b{font:700 1.1rem var(--head)}
@@ -27,7 +27,7 @@ h1{font:700 clamp(1.6rem,4vw,2.4rem) var(--head);margin:0 0 6px}
 .today{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;margin:0 0 8px}
 .today b{font:700 1rem var(--head)}
 .src{font-size:.85rem;color:var(--muted);margin:0 0 12px}
-.src a{color:var(--link)}
+.src a{color:var(--text);text-decoration-color:#e0b000;text-underline-offset:2px}
 #quiz{display:none}
 @media (max-width:460px){.cal{gap:2px}.cal span{font-size:.55rem;border-radius:4px}}
 </style>
@@ -55,7 +55,7 @@ h1{font:700 clamp(1.6rem,4vw,2.4rem) var(--head);margin:0 0 6px}
 </main>
 
 <script src="../assets/catalog.js?v=11"></script>
-<script src="../assets/menu.js?v=7"></script>
+<script src="../assets/menu.js?v=8"></script>
 <script src="../assets/labs-data.js?v=11"></script>
 <script>
 /* Build today's challenge before lab.js runs: 5 tasks (terminal, spot the bug, calculation,
@@ -85,7 +85,7 @@ LABS.provocare={title:{ro:"Provocarea zilei "+DAY,en:"Daily challenge "+DAY},tas
 try{if(localStorage.getItem("provocare-zi")!==DAY){localStorage.removeItem("lab-provocare");localStorage.setItem("provocare-zi",DAY)}}catch(e){}
 })();
 </script>
-<script src="../assets/lab.js?v=2"></script>
+<script src="../assets/lab.js?v=3"></script>
 <script>
 (function(){
 "use strict";

@@ -14,12 +14,12 @@
 .page{max-width:980px;margin:0 auto;padding-block:20px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 h1{font:700 clamp(1.5rem,4vw,2.2rem) var(--head);margin:0 0 6px}
 .lead{color:var(--muted);margin:0 0 16px}
-.card{background:var(--surface);border:2px solid var(--text);border-radius:14px;padding:16px;min-width:0;margin-bottom:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;min-width:0;margin-bottom:14px}
 .hud{display:flex;flex-wrap:wrap;gap:6px 18px;justify-content:space-between;font:600 .95rem var(--sans);margin:0 0 12px}
 .hud b{font:700 1.25rem var(--head);font-variant-numeric:tabular-nums}
 .croup{display:grid;grid-template-columns:52px minmax(0,1fr);gap:12px;align-items:center;margin-bottom:14px}
-.face{width:52px;height:52px;border-radius:50%;background:var(--accent);border:2px solid var(--text);display:grid;place-items:center;font-size:1.7rem}
-.bubble{position:relative;background:var(--surface2);border:2px solid var(--text);border-radius:12px;padding:9px 12px;font:500 .96rem var(--sans);margin:0;overflow-wrap:anywhere}
+.face{width:52px;height:52px;border-radius:50%;background:var(--accent);border:1px solid var(--line);display:grid;place-items:center;font-size:1.7rem}
+.bubble{position:relative;background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:9px 12px;font:500 .96rem var(--sans);margin:0;overflow-wrap:anywhere}
 .bubble .who{display:block;font:700 .72rem var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
 .layout{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:16px;align-items:start}
 .wheelBox{position:relative;max-width:340px;margin:0 auto;width:100%}
@@ -31,7 +31,7 @@ h1{font:700 clamp(1.5rem,4vw,2.2rem) var(--head);margin:0 0 6px}
 .hist{display:flex;flex-wrap:wrap;gap:4px;justify-content:center;margin-top:8px}
 .hist span{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font:700 .72rem var(--mono);color:#fff}
 .r{background:#c0281b}.k{background:#151515}.g{background:#1d8a4f}
-.board{display:grid;grid-template-columns:1.1fr 1.1fr repeat(3,minmax(0,1fr));gap:3px;background:#1d6b45;padding:6px;border-radius:12px;border:2px solid var(--text)}
+.board{display:grid;grid-template-columns:1.1fr 1.1fr repeat(3,minmax(0,1fr));gap:3px;background:#1d6b45;padding:6px;border-radius:12px;border:1px solid var(--line)}
 .cell{position:relative;border:1px solid rgba(255,255,255,.55);border-radius:5px;color:#fff;font:700 .9rem var(--head);min-height:32px;display:grid;place-items:center;cursor:pointer;background:transparent;padding:0;user-select:none;-webkit-tap-highlight-color:transparent}
 .cell.r{background:#c0281b}.cell.k{background:#151515}.cell.g{background:#1d8a4f}
 .cell.out{font-size:.74rem;line-height:1.1;text-align:center;padding:2px}
@@ -45,12 +45,12 @@ h1{font:700 clamp(1.5rem,4vw,2.2rem) var(--head);margin:0 0 6px}
 .chip[aria-pressed="true"]{outline:4px solid var(--accent);transform:scale(1.1)}
 .chip:disabled{opacity:.35;cursor:default}
 .c1{background:#6b6b6b}.c2{background:#c0281b}.c5{background:#2457c5}.c10{background:#1d6b45}.c25{background:#151515}
-.btn{border:2px solid var(--text);background:var(--accent);color:var(--accent-text);border-radius:10px;padding:11px 16px;font:700 1rem var(--sans);cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+.btn{border:1px solid var(--accent);background:var(--accent);color:var(--accent-text);border-radius:10px;padding:11px 16px;font:700 1rem var(--sans);cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
 .btn.sec{background:var(--surface);color:var(--text)}
 .btn:disabled{opacity:.45;cursor:default}
 .row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
 .note{font-size:.85rem;color:var(--muted);margin:10px 0 0}
-.empty{border:2px dashed var(--text);border-radius:12px;padding:12px;margin:0 0 14px;background:var(--surface2)}
+.empty{border:1px dashed var(--line);border-radius:12px;padding:12px;margin:0 0 14px;background:var(--surface2)}
 @media (max-width:760px){.layout{grid-template-columns:minmax(0,1fr)}.wheelBox{max-width:280px}}
 @media (prefers-reduced-motion:reduce){#rot{transition-duration:.01s}.cell.win{animation:none}}
 [hidden]{display:none!important}

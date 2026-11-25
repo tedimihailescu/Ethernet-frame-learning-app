@@ -14,15 +14,15 @@
 .page{max-width:900px;margin:0 auto;padding-block:20px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 h1{font:700 clamp(1.5rem,4vw,2.2rem) var(--head);margin:0 0 6px}
 .lead{color:var(--muted);margin:0 0 16px}
-.card{background:var(--surface);border:2px solid var(--text);border-radius:14px;padding:16px;min-width:0;margin-bottom:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;min-width:0;margin-bottom:14px}
 .dealer{display:grid;grid-template-columns:64px minmax(0,1fr);gap:12px;align-items:center}
-.face{width:64px;height:64px;border-radius:50%;background:var(--accent);border:2px solid var(--text);display:grid;place-items:center;font-size:2.1rem;line-height:1;transition:transform .2s}
+.face{width:64px;height:64px;border-radius:50%;background:var(--accent);border:1px solid var(--line);display:grid;place-items:center;font-size:2.1rem;line-height:1;transition:transform .2s}
 .face.bob{animation:bob .5s ease}
 @keyframes bob{30%{transform:rotate(-10deg) scale(1.08)}70%{transform:rotate(8deg)}}
-.bubble{position:relative;background:var(--surface2);border:2px solid var(--text);border-radius:12px;padding:10px 12px;font:500 .98rem var(--sans);min-height:2.8em;overflow-wrap:anywhere}
+.bubble{position:relative;background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font:500 .98rem var(--sans);min-height:2.8em;overflow-wrap:anywhere}
 .bubble::before{content:"";position:absolute;left:-9px;top:50%;width:14px;height:14px;background:inherit;border-left:2px solid var(--text);border-bottom:2px solid var(--text);transform:translateY(-50%) rotate(45deg)}
 .bubble .who{display:block;font:700 .75rem var(--mono);color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:.04em}
-.table{background:#1d6b45;border:2px solid var(--text);border-radius:16px;padding:14px;color:#fff;min-width:0}
+.table{background:#1d6b45;border:1px solid var(--line);border-radius:16px;padding:14px;color:#fff;min-width:0}
 .lane{min-height:132px;margin:2px 0 8px}
 .lane h2{display:flex;justify-content:space-between;gap:8px;font:700 .9rem var(--mono);margin:0 0 8px;color:#e8f5ec;letter-spacing:.03em}
 .lane h2 b{background:rgba(0,0,0,.3);border-radius:999px;padding:1px 10px;font-variant-numeric:tabular-nums}
@@ -38,7 +38,7 @@ h1{font:700 clamp(1.5rem,4vw,2.2rem) var(--head);margin:0 0 6px}
 .mid-msg{text-align:center;font:700 1.1rem var(--head);min-height:1.5em;margin:4px 0;color:#ffe766}
 .hud{display:flex;flex-wrap:wrap;gap:6px 18px;justify-content:space-between;font:600 .95rem var(--sans);margin:0 0 12px}
 .hud b{font:700 1.2rem var(--head);font-variant-numeric:tabular-nums}
-.btn{border:2px solid var(--text);background:var(--accent);color:var(--accent-text);border-radius:10px;padding:11px 16px;font:700 1rem var(--sans);cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+.btn{border:1px solid var(--accent);background:var(--accent);color:var(--accent-text);border-radius:10px;padding:11px 16px;font:700 1rem var(--sans);cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
 .btn.sec{background:var(--surface);color:var(--text)}
 .btn:disabled{opacity:.45;cursor:default}
 .row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
