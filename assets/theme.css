@@ -126,3 +126,25 @@ input,select,textarea{accent-color:var(--text)}
   html{scroll-padding-top:16px}
 }
 @media (max-width:400px){.user-menu{gap:4px}.um-link{padding:0 8px}.user-menu .um-user{max-width:5.5em}}
+
+/* signed-in desktop bar: never let the account buttons slide over the menu */
+@media (min-width:641px){.topbar nav[data-menu]{flex:none}}
+.brand{min-width:0}
+.brand span{overflow:hidden;text-overflow:ellipsis}
+.topbar-in:has(.user-menu){max-width:1440px}
+.user-menu .um-admin .um-name{display:none}
+.user-menu .um-user{display:inline-block;max-width:9em;vertical-align:bottom}
+@media (max-width:1360px){.topbar-in:has(.user-menu) .dd-t{display:none}.topbar-in:has(.user-menu) .dd>button::after{display:none}}
+@media (max-width:1000px){.topbar-in:has(.user-menu) .brand span{display:none}}
+@media (min-width:641px) and (max-width:860px){.user-menu .um-user{display:none}}
+@media (max-width:400px){.user-menu .um-user{max-width:5.5em}}
+@media (max-width:1360px){.topbar-in:has(.user-menu) .brand span{display:none}.user-menu .um-user{max-width:7em}}
+/* lesson pages (section links instead of the drop-down menu): account buttons get a second row when space runs out */
+@media (min-width:641px) and (max-width:1240px){
+  .topbar-in:has(.user-menu):not(:has(nav[data-menu])){flex-wrap:wrap;row-gap:8px}
+  .topbar-in:has(.user-menu):not(:has(nav[data-menu])) .tools{display:contents}
+  .topbar-in:has(.user-menu):not(:has(nav[data-menu])) .user-menu{order:10;flex:1 1 100%;justify-content:flex-end;padding-top:8px;border-top:1px solid var(--bar-line)}
+  .topbar-in:has(.user-menu):not(:has(nav[data-menu])) .user-menu .um-user{display:inline-block}
+  .topbar-in:has(.user-menu):not(:has(nav[data-menu])) .nav{flex:1 1 auto}
+}
+@media (max-width:420px){.user-menu .um-user{display:none}.user-menu{gap:4px}.um-link{padding:0 8px}}
